@@ -54,6 +54,18 @@ async function saveFailure<S extends z.ZodType>(
   return { error: friendlyError(error) };
 }
 
+async function failReservation(
+  supabase: SupabaseClient<Database>,
+  id: string,
+  error: unknown,
+) {
+  const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
+  console.error("AI suggestion failed:", error);
+  const { error: updateError } = await supabase.from("ai_suggestions").update({ error: message }).eq("id", id);
+  if (updateError) console.error("Could not update failed AI suggestion:", updateError);
+  return { error: friendlyError(error) };
+}
+
 export async function runSuggestionWithClient<S extends z.ZodType>(
   supabase: SupabaseClient<Database>,
   opts: SuggestionOptions<S>,
@@ -75,6 +87,32 @@ export async function runSuggestionWithClient<S extends z.ZodType>(
     model = openai(process.env.OPENAI_MODEL ?? "gpt-5.4-mini");
   }
 
+  const { data: reservation, error: reservationError } = await supabase
+    .from("ai_suggestions")
+    .insert({
+      suggestion_type: opts.type,
+      athlete_id: opts.athleteId,
+      input: opts.input as NonNullable<Json>,
+      model: modelId(model),
+      status: "failed",
+      error: "in_progress",
+    })
+    .select("id")
+    .single();
+  if (reservationError || !reservation)
+    return saveFailure(supabase, opts, reservationError ?? new Error("The suggestion could not be reserved."), model);
+
+  const { count: reservedCount, error: reservationCountError } = await supabase
+    .from("ai_suggestions")
+    .select("id", { count: "exact", head: true })
+    .gte("created_at", startOfToday);
+  if (reservationCountError) return failReservation(supabase, reservation.id, reservationCountError);
+  if ((reservedCount ?? 0) > limit) {
+    const { error } = await supabase.from("ai_suggestions").update({ error: "daily_limit" }).eq("id", reservation.id);
+    if (error) console.error("Could not update daily-limited AI suggestion:", error);
+    return { error: `You've used today's ${limit} AI suggestions. You can ask for more tomorrow.` };
+  }
+
   try {
     const { output } = await generateText({
       model,
@@ -86,21 +124,17 @@ export async function runSuggestionWithClient<S extends z.ZodType>(
       providerOptions: { openai: { reasoningEffort: "low" } },
     });
     const proposal = opts.schema.parse(output);
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("ai_suggestions")
-      .insert({
-        suggestion_type: opts.type,
-        athlete_id: opts.athleteId,
-        input: opts.input as NonNullable<Json>,
+      .update({
         proposal: proposal as Json,
-        model: modelId(model),
         status: "pending",
+        error: null,
       })
-      .select("id")
-      .single();
-    if (error || !data) throw error ?? new Error("The suggestion could not be saved.");
-    return { id: data.id };
+      .eq("id", reservation.id);
+    if (error) throw error;
+    return { id: reservation.id };
   } catch (error) {
-    return saveFailure(supabase, opts, error, model);
+    return failReservation(supabase, reservation.id, error);
   }
 }
