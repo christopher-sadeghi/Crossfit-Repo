@@ -1,11 +1,11 @@
 import { AuthForm } from "@/components/auth/auth-form";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-import { updatePassword } from "../../(auth)/actions";
+import { updatePassword } from "../actions";
 
 export default function ResetPasswordPage() {
   return (
-    <Card className="max-w-md">
+    <Card>
       <CardHeader>
         <CardTitle>Choose a new password</CardTitle>
         <CardDescription>You&apos;ll stay logged in after saving.</CardDescription>
