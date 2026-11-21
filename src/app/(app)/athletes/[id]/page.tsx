@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCoach } from "@/lib/coach";
 import { programDate, today } from "@/lib/program-dates";
+import { personalRecords } from "@/lib/results";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatScore, formatWeight, type Units } from "@/lib/units";
 
@@ -38,10 +39,10 @@ export default async function AthletePage({ params, searchParams }: Props) {
     supabase.from("body_metrics").select("measured_on, weight_kg").eq("athlete_id", id).order("measured_on", { ascending: false }).limit(8),
     supabase
       .from("workout_results")
-      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, workouts(title, workout_type)")
+      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, workout_id, workouts(title, workout_type)")
       .eq("athlete_id", id)
       .order("performed_on", { ascending: false })
-      .limit(25),
+      .order("created_at", { ascending: false }),
     supabase.from("nutrition_targets").select("*").eq("athlete_id", id).is("end_date", null).maybeSingle(),
     supabase.from("food_logs").select("logged_on, calories, protein_g, carbs_g, fat_g").eq("athlete_id", id).gte("logged_on", since),
     supabase.from("goals").select("id, title, goal_type, metric, unit, start_value, target_value, target_date, status").eq("athlete_id", id).order("status").order("target_date"),
@@ -56,6 +57,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
   if (!athlete) notFound();
   const metrics = metricsRes.data ?? [];
   const results = resultsRes.data ?? [];
+  const prs = personalRecords(results);
   const target = targetRes.data;
   const goals = goalsRes.data ?? [];
   const suggestions = aiRes.data ?? [];
@@ -120,7 +122,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
         <TabsContent value="overview" className="grid gap-4 md:grid-cols-3">
           <Stat label="Current weight" value={formatWeight(metrics[0]?.weight_kg, units)} hint={metrics[0] && `as of ${formatDate(metrics[0].measured_on)}`} />
           <Stat label="Daily calories target" value={target ? `${target.calories} kcal` : "—"} hint={target ? `P ${target.protein_g}g · C ${target.carbs_g}g · F ${target.fat_g}g` : "No target set"} />
-          <Stat label="Active goals" value={String(goals.filter((g) => g.status === "active").length)} hint={`${results.length ? `${results.length}+` : "0"} logged results`} />
+          <Stat label="Active goals" value={String(goals.filter((g) => g.status === "active").length)} hint={`${results.length} logged results · ${prs.length} PRs`} />
           <Card className="md:col-span-3">
             <CardHeader>
               <CardTitle>Injuries / limitations</CardTitle>
@@ -168,7 +170,33 @@ export default async function AthletePage({ params, searchParams }: Props) {
               </TableBody>
             </Table>
           </ListCard>
-          <ListCard title="Results" empty="No results logged yet." show={results.length > 0}>
+          <ListCard title="Personal records" empty="No results logged yet." show={prs.length > 0}>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="pl-4">Workout</TableHead>
+                  <TableHead>Best</TableHead>
+                  <TableHead>Rx / Scaled</TableHead>
+                  <TableHead>Set on</TableHead>
+                  <TableHead>Attempts</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {prs.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="pl-4 font-medium">{r.workouts?.title}</TableCell>
+                    <TableCell className="font-medium">{formatScore(r, units)}</TableCell>
+                    <TableCell>
+                      <Badge variant={r.is_rx ? "default" : "outline"}>{r.is_rx ? "Rx" : "Scaled"}</Badge>
+                    </TableCell>
+                    <TableCell>{formatDate(r.performed_on)}</TableCell>
+                    <TableCell className="text-muted-foreground">{r.attempts}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ListCard>
+          <ListCard title="Result history" empty="No results logged yet." show={results.length > 0}>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -183,7 +211,11 @@ export default async function AthletePage({ params, searchParams }: Props) {
                 {results.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell className="pl-4">{formatDate(r.performed_on)}</TableCell>
-                    <TableCell className="font-medium">{r.workouts?.title}</TableCell>
+                    <TableCell className="font-medium">
+                      <Link href={`/programs/workouts/${r.workout_id}`} className="hover:underline">
+                        {r.workouts?.title}
+                      </Link>
+                    </TableCell>
                     <TableCell>{formatScore(r, units)}</TableCell>
                     <TableCell>
                       <Badge variant={r.is_rx ? "default" : "outline"}>{r.is_rx ? "Rx" : "Scaled"}</Badge>

@@ -4,18 +4,23 @@ import { ArrowLeft, Pencil } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getCoach } from "@/lib/coach";
 import { createClient } from "@/lib/supabase/server";
-import { formatDate } from "@/lib/units";
+import { today } from "@/lib/program-dates";
+import { compareScores } from "@/lib/results";
+import { formatDate, formatScore } from "@/lib/units";
 
 import { WORKOUT_TYPE_LABELS } from "../../options";
+import { DeleteResultButton, LogResultForm } from "../log-result-form";
 import { Whiteboard } from "../whiteboard";
 import { WorkoutButtons } from "../workout-buttons";
 
 export default async function WorkoutPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-  const [coach, { data: workout }, { count: resultCount }] = await Promise.all([
+  const [coach, { data: workout }, { data: resultRows }, { data: athletes }] = await Promise.all([
     getCoach(),
     supabase
       .from("workouts")
@@ -23,9 +28,17 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
       .eq("id", id)
       .order("position", { referencedTable: "workout_movements" })
       .maybeSingle(),
-    supabase.from("workout_results").select("id", { count: "exact", head: true }).eq("workout_id", id),
+    supabase
+      .from("workout_results")
+      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, athletes(id, first_name, last_name)")
+      .eq("workout_id", id),
+    supabase.from("athletes").select("id, first_name, last_name").eq("status", "active").order("first_name").order("last_name"),
   ]);
   if (!workout) notFound();
+
+  const units = coach?.units ?? "lb";
+  const results = (resultRows ?? []).sort(compareScores(workout.workout_type));
+  const resultCount = results.length;
 
   const movements = workout.workout_movements.map(({ movements: mv, ...m }) => ({ ...m, name: mv?.name ?? "" }));
 
@@ -46,7 +59,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
               </Link>
             )}
             {workout.scheduled_on && <span>· {formatDate(workout.scheduled_on)}</span>}
-            <span>· {resultCount ?? 0} results logged</span>
+            <span>· {resultCount} results logged</span>
           </p>
         </div>
         <div className="flex gap-2">
@@ -55,12 +68,79 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
               <Pencil /> Edit
             </Link>
           </Button>
-          <WorkoutButtons id={workout.id} resultCount={resultCount ?? 0} />
+          <WorkoutButtons id={workout.id} resultCount={resultCount} />
         </div>
       </div>
-      <div className="max-w-2xl">
-        <Whiteboard workout={workout} movements={movements} units={coach?.units ?? "lb"} />
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,42rem)_1fr]">
+        <Whiteboard workout={workout} movements={movements} units={units} />
+        <Card className="content-start">
+          <CardHeader>
+            <CardTitle>Log a result</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <LogResultForm
+              workoutId={workout.id}
+              workoutType={workout.workout_type}
+              units={units}
+              today={today()}
+              athletes={(athletes ?? []).map((a) => ({ id: a.id, name: `${a.first_name} ${a.last_name}` }))}
+            />
+          </CardContent>
+        </Card>
       </div>
+      <Card className="mt-6 pb-0">
+        <CardHeader>
+          <CardTitle>Leaderboard</CardTitle>
+          <p className="text-sm text-muted-foreground">Rx results rank ahead of scaled ones.</p>
+        </CardHeader>
+        <CardContent className="p-0">
+          {results.length ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12 pl-4">#</TableHead>
+                  <TableHead>Athlete</TableHead>
+                  <TableHead>Score</TableHead>
+                  <TableHead>Rx / Scaled</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Notes</TableHead>
+                  <TableHead className="w-12" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {results.map((r, i) => {
+                  const name = r.athletes ? `${r.athletes.first_name} ${r.athletes.last_name}` : "Athlete";
+                  return (
+                    <TableRow key={r.id}>
+                      <TableCell className="pl-4 font-medium">{i + 1}</TableCell>
+                      <TableCell className="font-medium">
+                        {r.athletes ? (
+                          <Link href={`/athletes/${r.athletes.id}?tab=workouts`} className="hover:underline">
+                            {name}
+                          </Link>
+                        ) : (
+                          name
+                        )}
+                      </TableCell>
+                      <TableCell>{formatScore(r, units)}</TableCell>
+                      <TableCell>
+                        <Badge variant={r.is_rx ? "default" : "outline"}>{r.is_rx ? "Rx" : "Scaled"}</Badge>
+                      </TableCell>
+                      <TableCell>{formatDate(r.performed_on)}</TableCell>
+                      <TableCell className="max-w-xs truncate text-muted-foreground">{r.notes ?? ""}</TableCell>
+                      <TableCell>
+                        <DeleteResultButton id={r.id} label={`${name}'s result`} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="p-8 text-center text-muted-foreground">No results logged yet.</p>
+          )}
+        </CardContent>
+      </Card>
     </>
   );
 }
