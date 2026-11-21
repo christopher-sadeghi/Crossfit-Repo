@@ -39,7 +39,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
   const starts = new Set(assignments.map((a) => a.start_date));
   // Show real dates on the calendar only when every athlete starts on the same day.
   const sharedStart = starts.size === 1 ? [...starts][0] : null;
-  const unscheduled = program.workouts.filter((w) => !w.week_number || !w.day_number);
+  const unscheduled = program.workouts.filter((w) => !w.week_number || !w.day_number || w.week_number > program.weeks);
 
   return (
     <>
