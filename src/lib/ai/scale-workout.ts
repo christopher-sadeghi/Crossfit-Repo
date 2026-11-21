@@ -109,6 +109,7 @@ Rules:
 - Keep the WOD's stimulus and format.
 - Return exactly one change for each original movement, in the same order. Copy its original_movement_id exactly.
 - Use only movement IDs from the provided library. Keep the original movement by using the same movement_id; substitute only with a library movement.
+- Never make the workout harder than the original. When keeping a movement, its load, reps, distance, calories, and duration must be no greater than the original. Substitutions must be easier or equal in demand.
 - Scale loads and reps realistically for the athlete's experience level and recent RPE.
 - Never program into a reported injury or recent pain; substitute instead. If pain is recent, include the exact phrase "check with your coach" in the athlete-facing summary.
 - Give each change one short reason sentence.
@@ -220,9 +221,18 @@ export function validateScaleProposal(proposal: unknown, input: Json) {
 
   const allowedMovementIds = new Set(parsedInput.library.map(({ id }) => id));
   parsedProposal.changes.forEach((change, index) => {
-    if (change.original_movement_id !== originalMovements[index]?.movement_id)
+    const original = originalMovements[index];
+    if (!original || change.original_movement_id !== original.movement_id)
       throw new Error("original movement id mismatch");
     if (!allowedMovementIds.has(change.movement_id)) throw new Error("unknown movement id");
+    if (change.movement_id !== original.movement_id) return;
+
+    if (original.load != null && change.load != null && change.load > original.load + 0.5)
+      throw new Error("scaled movement load exceeds original");
+    for (const field of ["reps", "distance_m", "calories", "duration_seconds"] as const) {
+      if (original[field] != null && change[field] != null && change[field]! > original[field]!)
+        throw new Error(`scaled movement ${field} exceeds original`);
+    }
   });
 }
 
