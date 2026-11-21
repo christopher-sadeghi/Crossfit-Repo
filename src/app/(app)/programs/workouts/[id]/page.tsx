@@ -6,7 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RequestWorkoutSuggestionForm } from "@/components/suggestions/suggestion-forms";
+import { RemoveWorkoutScalingForm, ScaleWorkoutRequestForm } from "@/components/suggestions/scale-workout-controls";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { scaleWorkoutDetailsSchema } from "@/lib/ai/scale-workout";
 import { getCoach } from "@/lib/coach";
 import { createClient } from "@/lib/supabase/server";
 import { today } from "@/lib/program-dates";
@@ -21,7 +23,7 @@ import { WorkoutButtons } from "../workout-buttons";
 export default async function WorkoutPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-  const [coach, { data: workout }, { data: resultRows }, { data: athletes }] = await Promise.all([
+  const [coach, { data: workout }, { data: resultRows }, { data: athletes }, { data: scalingRows }] = await Promise.all([
     getCoach(),
     supabase
       .from("workouts")
@@ -34,6 +36,11 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
       .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, logged_by, athletes(id, first_name, last_name)")
       .eq("workout_id", id),
     supabase.from("athletes").select("id, first_name, last_name").eq("status", "active").order("first_name").order("last_name"),
+    supabase
+      .from("athlete_workout_scalings")
+      .select("id, athlete_id, modifications, details")
+      .eq("workout_id", id)
+      .order("updated_at", { ascending: false }),
   ]);
   if (!workout) notFound();
 
@@ -42,6 +49,13 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
   const resultCount = results.length;
 
   const movements = workout.workout_movements.map(({ movements: mv, ...m }) => ({ ...m, name: mv?.name ?? "" }));
+  const scalingAthleteIds = [...new Set((scalingRows ?? []).map((row) => row.athlete_id))];
+  const { data: scalingAthletes } = scalingAthleteIds.length
+    ? await supabase.from("athletes").select("id, first_name, last_name").in("id", scalingAthleteIds)
+    : { data: [] };
+  const scalingAthleteNames = new Map(
+    (scalingAthletes ?? []).map((athlete) => [athlete.id, `${athlete.first_name} ${athlete.last_name}`]),
+  );
 
   return (
     <>
@@ -91,6 +105,23 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
         </CardHeader>
         <CardContent>
           <RequestWorkoutSuggestionForm workoutId={workout.id} />
+        </CardContent>
+      </Card>
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Scale for athlete…</CardTitle>
+          <p className="text-sm text-muted-foreground">Review the athlete-specific proposal before saving it.</p>
+        </CardHeader>
+        <CardContent>
+          <ScaleWorkoutRequestForm
+            workoutId={workout.id}
+            athletes={(athletes ?? []).map((athlete) => ({ id: athlete.id, name: `${athlete.first_name} ${athlete.last_name}` }))}
+            lockedAthlete={
+              workout.athlete_id
+                ? { id: workout.athlete_id, name: workout.athletes ? `${workout.athletes.first_name} ${workout.athletes.last_name}` : "Assigned athlete" }
+                : null
+            }
+          />
         </CardContent>
       </Card>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,42rem)_1fr]">
@@ -164,6 +195,26 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
           ) : (
             <p className="p-8 text-center text-muted-foreground">No results logged yet.</p>
           )}
+        </CardContent>
+      </Card>
+      <Card className="mt-6">
+        <CardHeader><CardTitle>Scaled versions</CardTitle></CardHeader>
+        <CardContent className="grid gap-4">
+          {(scalingRows ?? []).length ? (scalingRows ?? []).map((scaling) => {
+            const details = scaleWorkoutDetailsSchema.safeParse(scaling.details);
+            const suggestionId = details.success ? details.data.suggestion_id : null;
+            const athleteName = scalingAthleteNames.get(scaling.athlete_id) ?? "Athlete";
+            return (
+              <div key={scaling.id} className="flex flex-wrap items-start justify-between gap-4 border-b pb-4 last:border-0 last:pb-0">
+                <div className="grid gap-1">
+                  <Link href={`/athletes/${scaling.athlete_id}`} className="font-medium hover:underline">{athleteName}</Link>
+                  <p className="whitespace-pre-line text-sm text-muted-foreground">{scaling.modifications}</p>
+                  {suggestionId && <Link href={`/suggestions/${suggestionId}`} className="text-sm underline">View AI suggestion</Link>}
+                </div>
+                <RemoveWorkoutScalingForm id={scaling.id} />
+              </div>
+            );
+          }) : <p className="text-sm text-muted-foreground">No scaled versions yet.</p>}
         </CardContent>
       </Card>
     </>

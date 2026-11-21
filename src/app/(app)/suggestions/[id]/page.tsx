@@ -21,6 +21,8 @@ import { today } from "@/lib/program-dates";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, toKg, type Units } from "@/lib/units";
 import { Whiteboard } from "@/app/(app)/programs/workouts/whiteboard";
+import { ScaleWorkoutReview } from "@/components/suggestions/scale-workout-review";
+import { scaleWorkoutInputSchema, scaleWorkoutSchema } from "@/lib/ai/scale-workout";
 
 type Props = { params: Promise<{ id: string }> };
 type MacroKey = "calories" | "protein_g" | "carbs_g" | "fat_g";
@@ -39,6 +41,7 @@ export default async function SuggestionPage({ params }: Props) {
 
   const macrosType = suggestion.suggestion_type === "adjust_macros";
   const workoutType = suggestion.suggestion_type === "write_workout";
+  const scaleType = suggestion.suggestion_type === "scale_workout";
   const proposal = macrosType ? adjustMacrosSchema.safeParse(suggestion.proposal) : null;
   const final = macrosType ? adjustMacrosSchema.safeParse(suggestion.final) : null;
   const shown = suggestion.status === "approved" || suggestion.status === "edited" ? (final?.success ? final.data : null) : proposal?.success ? proposal.data : null;
@@ -57,6 +60,15 @@ export default async function SuggestionPage({ params }: Props) {
         : null;
   const workoutInput = workoutType ? writeWorkoutInputSchema.safeParse(suggestion.input) : null;
   const workoutContext = workoutInput?.success ? workoutInput.data : null;
+  const scaleProposal = scaleType ? scaleWorkoutSchema.safeParse(suggestion.proposal) : null;
+  const scaleFinal = scaleType ? scaleWorkoutSchema.safeParse(suggestion.final) : null;
+  const shownScale =
+    suggestion.status === "approved" || suggestion.status === "edited"
+      ? scaleFinal?.success ? scaleFinal.data : null
+      : scaleProposal?.success ? scaleProposal.data : null;
+  const scaleInput = scaleType ? scaleWorkoutInputSchema.safeParse(suggestion.input) : null;
+  const scaleContext = scaleInput?.success ? scaleInput.data : null;
+  const scaleUnits: Units = scaleContext?.units ?? "lb";
   const entry =
     workoutType && workoutContext?.mode === "adjust"
       ? "Adjust workout"
@@ -78,9 +90,9 @@ export default async function SuggestionPage({ params }: Props) {
   const todayValue = today();
   const [athleteResult, targetResult] = await Promise.all([
     suggestion.athlete_id
-      ? supabase.from("athletes").select("id, first_name, last_name").eq("id", suggestion.athlete_id).maybeSingle()
+      ? supabase.from("athletes").select("id, first_name, last_name, injuries").eq("id", suggestion.athlete_id).maybeSingle()
       : Promise.resolve({ data: null }),
-    suggestion.athlete_id
+    macrosType && suggestion.athlete_id
       ? supabase
           .from("nutrition_targets")
           .select("calories, protein_g, carbs_g, fat_g")
@@ -94,6 +106,45 @@ export default async function SuggestionPage({ params }: Props) {
   ]);
   const athlete = athleteResult.data;
   const current = targetResult.data;
+  const { data: existingScaling } =
+    scaleContext && suggestion.athlete_id
+      ? await supabase
+          .from("athlete_workout_scalings")
+          .select("id")
+          .eq("workout_id", scaleContext.workout_id)
+          .eq("athlete_id", suggestion.athlete_id)
+          .maybeSingle()
+      : { data: null };
+  const scaleNames = new Map((scaleContext?.library ?? []).map(({ id, name }) => [id, name]));
+  const reviewedMovements = shownScale?.changes.map((change, index) => {
+    const original = scaleContext?.workout.movements[index];
+    const toWhiteboardMovement = (movement: typeof change, name: string) => ({
+      name,
+      sets: movement.sets,
+      reps: movement.reps,
+      load_kg: movement.load == null ? null : toKg(movement.load, scaleUnits),
+      distance_m: movement.distance_m,
+      calories: movement.calories,
+      duration_seconds: movement.duration_seconds,
+      notes: null,
+    });
+    return {
+      original: original
+        ? {
+            name: original.name,
+            sets: original.sets,
+            reps: original.reps,
+            load_kg: original.load == null ? null : toKg(original.load, scaleUnits),
+            distance_m: original.distance_m,
+            calories: original.calories,
+            duration_seconds: original.duration_seconds,
+            notes: original.notes,
+          }
+        : toWhiteboardMovement(change, "Original movement"),
+      scaled: toWhiteboardMovement(change, scaleNames.get(change.movement_id) ?? "Unknown movement"),
+      reason: change.reason,
+    };
+  }) ?? [];
   const resultCount =
     workoutContext?.mode === "adjust" && workoutContext.workout_id
       ? ((await supabase
@@ -216,6 +267,27 @@ export default async function SuggestionPage({ params }: Props) {
         </Card>
       )}
 
+      {scaleType && scaleContext && shownScale && (
+        <div className="mb-6 grid gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>{athlete ? `${athlete.first_name} ${athlete.last_name}` : "Athlete"}</CardTitle>
+              <p className="text-sm text-muted-foreground">Injuries: {athlete?.injuries || "None recorded"}</p>
+            </CardHeader>
+            {scaleContext.note && <CardContent className="text-sm">Coach note: {scaleContext.note}</CardContent>}
+          </Card>
+          <ScaleWorkoutReview
+            id={suggestion.id}
+            summary={shownScale.summary}
+            rationale={shownScale.rationale}
+            movements={reviewedMovements}
+            units={scaleUnits}
+            editable={suggestion.status === "pending"}
+            hasExistingScaling={Boolean(existingScaling)}
+          />
+        </div>
+      )}
+
       {suggestion.status === "failed" && (
         <Card className="mb-6">
           <CardHeader><CardTitle>Suggestion unavailable</CardTitle></CardHeader>
@@ -287,7 +359,7 @@ export default async function SuggestionPage({ params }: Props) {
         </Card>
       )}
 
-      {!macrosType && !workoutType && <p className="text-sm text-muted-foreground">This suggestion type isn&apos;t ready yet.</p>}
+      {!macrosType && !workoutType && !scaleType && <p className="text-sm text-muted-foreground">This suggestion type isn&apos;t ready yet.</p>}
     </>
   );
 }
