@@ -78,6 +78,10 @@ export default async function AthleteLogResultPage({ params, searchParams }: Pro
   const minDate = new Date(`${todayIso}T00:00:00Z`);
   minDate.setUTCDate(minDate.getUTCDate() - 14);
   const minDateIso = minDate.toISOString().slice(0, 10);
+  const minDateForInput =
+    existingResult && existingResult.performed_on < minDateIso
+      ? existingResult.performed_on
+      : minDateIso;
   const requestedDateValue =
     typeof requestedDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)
       ? new Date(`${requestedDate}T00:00:00Z`)
@@ -107,7 +111,7 @@ export default async function AthleteLogResultPage({ params, searchParams }: Pro
         workoutId={workout.id}
         workoutType={workout.workout_type}
         today={todayIso}
-        minDate={minDate.toISOString().slice(0, 10)}
+        minDate={minDateForInput}
         defaultDate={defaultDate}
         units={viewer.units}
         existingResult={existingResult}
