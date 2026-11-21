@@ -17,6 +17,7 @@ const resultSchema = z.object({
   is_rx: z.enum(["rx", "scaled"], { message: "Choose Rx or Scaled." }),
   notes: z.string().trim().max(500).transform((v) => v || null),
   ...feedbackFields,
+  return_to: z.enum(["/athlete", "/athlete/history"]).catch("/athlete/history"),
 });
 
 const uuidSchema = z.string().uuid();
@@ -95,7 +96,7 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
     revalidateResultPaths(data.workout_id, data.athlete_id);
   }
 
-  redirect("/athlete/history");
+  redirect(r.return_to);
 }
 
 export async function deleteAthleteResult(id: string): Promise<FormState> {

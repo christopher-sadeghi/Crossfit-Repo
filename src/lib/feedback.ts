@@ -36,7 +36,7 @@ export function feedbackSummary(result: {
   soreness: number | null;
 }) {
   return [
-    result.rpe != null && `RPE ${result.rpe}`,
+    result.rpe != null && `RPE ${result.rpe}/10`,
     result.energy != null && `Energy ${result.energy}/5`,
     result.sleep_hours != null && `Sleep ${result.sleep_hours}h`,
     result.soreness != null && `Soreness ${result.soreness}/5`,

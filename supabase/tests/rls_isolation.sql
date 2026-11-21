@@ -85,6 +85,76 @@ begin
   select '00000000-0000-0000-0000-0000000000b2', id from public.movements where coach_id is null limit 1;
 end $$;
 
+-- Athlete self-logging: an athlete can log their own results, not another athlete's.
+select set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-00000000000a", "role": "authenticated"}', true);
+
+insert into public.programs (id, name)
+values ('00000000-0000-0000-0000-0000000000a4', 'Coach A Program');
+insert into public.workouts (id, title, workout_type, program_id, week_number, day_number)
+values ('00000000-0000-0000-0000-0000000000a5', 'Assigned WOD', 'for_time', '00000000-0000-0000-0000-0000000000a4', 1, 1);
+insert into public.athletes (id, first_name, last_name)
+values ('00000000-0000-0000-0000-0000000000a6', 'Other', 'Athlete');
+insert into public.program_assignments (program_id, athlete_id, start_date)
+values ('00000000-0000-0000-0000-0000000000a4', '00000000-0000-0000-0000-0000000000a1', current_date);
+insert into public.workout_results (id, workout_id, athlete_id, time_seconds)
+values ('00000000-0000-0000-0000-0000000000a7', '00000000-0000-0000-0000-0000000000a5', '00000000-0000-0000-0000-0000000000a6', 300);
+
+-- Link athlete A1 to a login, as the invite flow does.
+reset role;
+select set_config('request.jwt.claims', '', true);
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('00000000-0000-0000-0000-00000000000c', 'athlete-a1@test.local', '{"full_name": "Alex Athlete"}');
+update public.athletes set user_id = '00000000-0000-0000-0000-00000000000c'
+where id = '00000000-0000-0000-0000-0000000000a1';
+
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-00000000000c", "role": "authenticated"}', true);
+
+do $$
+declare
+  n integer;
+  own_id uuid;
+begin
+  insert into public.workout_results (workout_id, athlete_id, coach_id, time_seconds, rpe)
+  values ('00000000-0000-0000-0000-0000000000a5', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-00000000000a', 240, 8)
+  returning id into own_id;
+  assert (select logged_by from public.workout_results where id = own_id) = '00000000-0000-0000-0000-00000000000c',
+    'athlete result should record the athlete as logged_by';
+
+  update public.workout_results set rpe = 9 where id = own_id;
+  get diagnostics n = row_count;
+  assert n = 1, 'athlete should be able to update their own result';
+
+  begin
+    insert into public.workout_results (workout_id, athlete_id, coach_id, time_seconds)
+    values ('00000000-0000-0000-0000-0000000000a5', '00000000-0000-0000-0000-0000000000a6', '00000000-0000-0000-0000-00000000000a', 240);
+    raise exception 'athlete logged a result for another athlete';
+  exception when insufficient_privilege then null;
+  end;
+
+  begin
+    insert into public.workout_results (workout_id, athlete_id, coach_id, time_seconds)
+    values ('00000000-0000-0000-0000-0000000000a2', '00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-00000000000a', 240);
+    raise exception 'athlete logged a result for a WOD outside their programs';
+  exception when insufficient_privilege then null;
+  end;
+
+  assert (select count(*) from public.workout_results where athlete_id = '00000000-0000-0000-0000-0000000000a6') = 0,
+    'athlete must not see another athlete''s results';
+
+  update public.workout_results set notes = 'hacked' where id = '00000000-0000-0000-0000-0000000000a7';
+  get diagnostics n = row_count;
+  assert n = 0, 'athlete must not update another athlete''s result';
+
+  delete from public.workout_results where id = '00000000-0000-0000-0000-0000000000a7';
+  get diagnostics n = row_count;
+  assert n = 0, 'athlete must not delete another athlete''s result';
+
+  delete from public.workout_results where id = own_id;
+  get diagnostics n = row_count;
+  assert n = 1, 'athlete should be able to delete their own result';
+end $$;
+
 select 'rls_isolation: all checks passed' as result;
 
 rollback;

@@ -263,7 +263,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
                         <Link href={`/programs/workouts/${r.workout_id}`} className="hover:underline">
                           {r.workouts?.title}
                         </Link>
-                        {r.logged_by !== coach?.id && <Badge variant="secondary">Athlete-logged</Badge>}
+                        {r.logged_by != null && r.logged_by === athlete.user_id && <Badge variant="secondary">Logged by athlete</Badge>}
                       </div>
                     </TableCell>
                     <TableCell>{formatScore(r, units)}</TableCell>
