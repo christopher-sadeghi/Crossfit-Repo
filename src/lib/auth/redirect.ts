@@ -2,9 +2,12 @@ import { headers } from "next/headers";
 
 /** Only allow same-site relative paths, to avoid open redirects. */
 export function safeNextPath(next: unknown, fallback = "/") {
-  return typeof next === "string" && next.startsWith("/") && !next.startsWith("//")
-    ? next
-    : fallback;
+  if (typeof next !== "string" || !next.startsWith("/") || next.includes("\\")) {
+    return fallback;
+  }
+  const base = "http://localhost";
+  const url = new URL(next, base);
+  return url.origin === base ? `${url.pathname}${url.search}${url.hash}` : fallback;
 }
 
 export async function getOrigin() {

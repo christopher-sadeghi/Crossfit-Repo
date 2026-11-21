@@ -40,7 +40,7 @@ Coaches sign up and log in with email and password (Supabase Auth). Logged-out v
 Emails for confirming sign-up and resetting a password link to `/auth/callback`. In Supabase, open **Authentication > URL Configuration** and add these redirect URLs:
 
 - `http://localhost:3000/**` for local development.
-- Your Vercel domains, for example `https://*.vercel.app/**`, once deploys are set up.
+- Your production domain and this project's own preview pattern, for example `https://fitcoach-*-<your-vercel-team>.vercel.app/**`, once deploys are set up. Never allow all of `https://*.vercel.app/**`: anyone can deploy there, so reset links could be sent to someone else's site.
 
 ## Demo data
 

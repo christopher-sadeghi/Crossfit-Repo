@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import type { FormState } from "@/lib/auth/form-state";
+import { failure, type FormState } from "@/lib/auth/form-state";
 import { getOrigin, safeNextPath } from "@/lib/auth/redirect";
 import { createClient } from "@/lib/supabase/server";
 
@@ -18,11 +18,11 @@ export async function login(_: FormState, formData: FormData): Promise<FormState
   const parsed = z
     .object({ email, password: z.string().min(1, "Enter your password.") })
     .safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { error: firstError(parsed.error) };
+  if (!parsed.success) return failure(formData, firstError(parsed.error));
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
-  if (error) return { error: error.message };
+  if (error) return failure(formData, error.message);
 
   redirect(safeNextPath(formData.get("next")));
 }
@@ -35,7 +35,7 @@ export async function signup(_: FormState, formData: FormData): Promise<FormStat
       password,
     })
     .safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { error: firstError(parsed.error) };
+  if (!parsed.success) return failure(formData, firstError(parsed.error));
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
@@ -46,7 +46,7 @@ export async function signup(_: FormState, formData: FormData): Promise<FormStat
       emailRedirectTo: `${await getOrigin()}/auth/callback`,
     },
   });
-  if (error) return { error: error.message };
+  if (error) return failure(formData, error.message);
 
   if (data.session) redirect("/");
   return { message: "Check your email for a link to confirm your account." };
@@ -57,13 +57,13 @@ export async function requestPasswordReset(
   formData: FormData,
 ): Promise<FormState> {
   const parsed = z.object({ email }).safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { error: firstError(parsed.error) };
+  if (!parsed.success) return failure(formData, firstError(parsed.error));
 
   const supabase = await createClient();
   const { error } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
     redirectTo: `${await getOrigin()}/auth/callback?next=/reset-password`,
   });
-  if (error) return { error: error.message };
+  if (error) return failure(formData, error.message);
 
   return { message: "If that email has an account, a reset link is on its way." };
 }
@@ -76,11 +76,11 @@ export async function updatePassword(
     .object({ password, confirm: z.string() })
     .refine((v) => v.password === v.confirm, { message: "Passwords don't match." })
     .safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { error: firstError(parsed.error) };
+  if (!parsed.success) return failure(formData, firstError(parsed.error));
 
   const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
-  if (error) return { error: error.message };
+  if (error) return failure(formData, error.message);
 
   redirect("/");
 }

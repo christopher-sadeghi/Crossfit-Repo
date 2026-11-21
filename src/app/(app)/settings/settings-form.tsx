@@ -21,16 +21,17 @@ const UNIT_OPTIONS = [
 
 export function SettingsForm({ fullName, gymName, units }: Props) {
   const [state, formAction, pending] = useActionState(updateProfile, {});
+  const values = state.values;
 
   return (
     <form action={formAction} className="grid max-w-md gap-5">
       <div className="grid gap-2">
         <Label htmlFor="full_name">Your name</Label>
-        <Input id="full_name" name="full_name" defaultValue={fullName} required />
+        <Input id="full_name" name="full_name" defaultValue={values?.full_name ?? fullName} required />
       </div>
       <div className="grid gap-2">
         <Label htmlFor="gym_name">Gym name</Label>
-        <Input id="gym_name" name="gym_name" defaultValue={gymName} placeholder="e.g. CrossFit Riverside" />
+        <Input id="gym_name" name="gym_name" defaultValue={values?.gym_name ?? gymName} placeholder="e.g. CrossFit Riverside" />
       </div>
       <fieldset className="grid gap-2">
         <legend className="mb-2 text-sm font-medium">Weight units</legend>
@@ -40,7 +41,7 @@ export function SettingsForm({ fullName, gymName, units }: Props) {
               key={o.value}
               className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5"
             >
-              <input type="radio" name="units" value={o.value} defaultChecked={units === o.value} className="accent-primary" />
+              <input type="radio" name="units" value={o.value} defaultChecked={(values?.units ?? units) === o.value} className="accent-primary" />
               {o.label}
             </label>
           ))}
