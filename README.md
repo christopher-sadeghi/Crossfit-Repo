@@ -31,3 +31,19 @@ TypeScript types for the tables are in `src/lib/supabase/database.types.ts`. Reg
 ```bash
 npx supabase gen types typescript --project-id <project-ref> --schema public > src/lib/supabase/database.types.ts
 ```
+
+## Authentication
+
+Coaches sign up and log in with email and password (Supabase Auth). Logged-out visitors are redirected to `/login` by `src/middleware.ts`.
+
+Emails for confirming sign-up and resetting a password link to `/auth/callback`. In Supabase, open **Authentication > URL Configuration** and add these redirect URLs:
+
+- `http://localhost:3000/**` for local development.
+- Your production domain and this project's own preview pattern, for example `https://fitcoach-*-<your-vercel-team>.vercel.app/**`, once deploys are set up. Never allow all of `https://*.vercel.app/**`: anyone can deploy there, so reset links could be sent to someone else's site.
+
+Before launch, set up custom SMTP (for example Resend) under **Authentication > Emails**: Supabase's built-in sender only emails your Supabase team members, a few per hour, and templates can't be edited without custom SMTP. Then make the links verify on our server instead of relying on a cookie from the browser that requested them (otherwise a reset link opened on another device or browser fails). Replace the link in these two templates:
+
+- **Confirm signup**: `<a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email">Confirm your email</a>`
+- **Reset Password**: `<a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=recovery">Reset your password</a>`
+
+`{{ .RedirectTo }}` is the `/auth/callback?next=...` URL the app sends, so it must be in the redirect list above.
