@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
-import { useActionState, useState } from "react";
+import { startTransition, useActionState, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -106,7 +106,15 @@ export function WodBuilder({
 
   return (
     <div className="grid gap-8 xl:grid-cols-[1fr_24rem]">
-      <form action={formAction} className="grid content-start gap-5">
+      <form
+        // Submit manually: React's automatic reset after a form action would visually clear the dropdowns.
+        onSubmit={(e) => {
+          e.preventDefault();
+          const data = new FormData(e.currentTarget);
+          startTransition(() => formAction(data));
+        }}
+        className="grid content-start gap-5"
+      >
         {workout && <input type="hidden" name="id" value={workout.id} />}
         <input type="hidden" name="movements" value={JSON.stringify(movements)} />
         <div className="grid gap-5 sm:grid-cols-[2fr_1fr_1fr_1fr]">
@@ -129,7 +137,7 @@ export function WodBuilder({
             </select>
           </Field>
           <Field label={type === "amrap" || type === "emom" ? "Length (min)" : "Time cap (min)"} id="time_cap_minutes">
-            <Input id="time_cap_minutes" name="time_cap_minutes" type="number" min="0.5" step="0.5" value={cap} onChange={(e) => setCap(e.target.value)} />
+            <Input id="time_cap_minutes" name="time_cap_minutes" type="number" min="1" max="180" step="0.5" value={cap} onChange={(e) => setCap(e.target.value)} />
           </Field>
           <Field label="Rounds" id="rounds">
             <Input id="rounds" name="rounds" type="number" min="1" step="1" value={rounds} onChange={(e) => setRounds(e.target.value)} />

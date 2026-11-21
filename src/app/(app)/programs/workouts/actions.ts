@@ -27,7 +27,7 @@ const optionalNumber = z.preprocess((v) => (v === "" || v == null ? null : Numbe
 const workoutSchema = z.object({
   title: z.string().trim().min(1, "Give the WOD a name.").max(80),
   workout_type: z.enum(WORKOUT_TYPES, { message: "Choose a WOD type." }),
-  time_cap_minutes: optionalNumber.refine((v) => v == null || (v > 0 && v <= 180), "Time cap must be 1–180 minutes."),
+  time_cap_minutes: optionalNumber.refine((v) => v == null || (v >= 1 && v <= 180), "Time cap must be 1–180 minutes."),
   rounds: optionalNumber.refine((v) => v == null || (Number.isInteger(v) && v > 0 && v <= 100), "Rounds must be 1–100."),
   description: z.string().trim().max(1000).transform((v) => v || null),
   notes: z.string().trim().max(1000).transform((v) => v || null),
