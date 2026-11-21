@@ -16,7 +16,7 @@ import { deleteResult, logResult } from "./result-actions";
 
 type Tracked = FormState & { successes?: number };
 
-const FIELDS: Record<Enums<"workout_type">, ("time" | "rounds" | "reps" | "load")[]> = {
+export const FIELDS: Record<Enums<"workout_type">, ("time" | "rounds" | "reps" | "load")[]> = {
   for_time: ["time", "reps"],
   amrap: ["rounds", "reps"],
   emom: ["rounds", "reps"],

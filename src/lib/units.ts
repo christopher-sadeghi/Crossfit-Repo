@@ -41,3 +41,7 @@ export function formatDate(date: string) {
 export function fromKg(kg: number, units: Units) {
   return Math.round((units === "lb" ? kg * LB_PER_KG : kg) * 10) / 10;
 }
+
+export function fromKgPrecise(kg: number, units: Units) {
+  return Math.round((units === "lb" ? kg * LB_PER_KG : kg) * 100) / 100;
+}
