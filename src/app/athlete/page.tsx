@@ -5,15 +5,34 @@ import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { programDate, today } from "@/lib/program-dates";
+import { SCHEDULE_LABEL, loadAthleteSchedule } from "@/lib/athlete-schedule";
+import { today } from "@/lib/program-dates";
 import { createClient } from "@/lib/supabase/server";
 import { feedbackSummary } from "@/lib/feedback";
 import { formatDate, formatScore } from "@/lib/units";
 import { getViewer } from "@/lib/viewer";
 
-import { formatHeadline, Whiteboard } from "../(app)/programs/workouts/whiteboard";
+import { formatHeadline, Whiteboard, type WhiteboardWorkout } from "../(app)/programs/workouts/whiteboard";
 import { AthleteResultForm } from "./log/[workoutId]/result-form";
 import { ScrollIntoView } from "./scroll-into-view";
+
+type TodayWorkout = WhiteboardWorkout & {
+  id: string;
+  source_workout_id: string | null;
+  week_number: number | null;
+  day_number: number | null;
+  workout_movements: {
+    position: number;
+    sets: number | null;
+    reps: number | null;
+    load_kg: number | null;
+    distance_m: number | null;
+    calories: number | null;
+    duration_seconds: number | null;
+    notes: string | null;
+    movements: { name: string } | null;
+  }[];
+};
 
 export default async function AthleteTodayPage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
   const { saved } = await searchParams;
@@ -23,42 +42,34 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
   if (viewer.kind === "none") redirect("/no-access");
 
   const supabase = await createClient();
-  const { data: assignments } = await supabase
-    .from("program_assignments")
-    .select(
-      "start_date, programs(id, name, workouts(id, title, workout_type, time_cap_seconds, rounds, description, notes, week_number, day_number, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(name))))",
-    )
-    .eq("athlete_id", viewer.athleteId);
-
   const currentDate = today();
-  const scheduled = (assignments ?? []).flatMap((assignment) => {
-    const program = assignment.programs;
-    if (!program) return [];
-
-    return program.workouts
-      .filter((workout) => workout.week_number != null && workout.day_number != null)
-      .map((workout) => ({
-        ...workout,
-        programName: program.name,
-        date: programDate(assignment.start_date, workout.week_number!, workout.day_number!),
-      }));
-  });
-
-  const todayWods = scheduled
-    .filter((workout) => workout.date === currentDate)
-    .sort((a, b) => a.title.localeCompare(b.title));
   const recentStart = new Date(`${currentDate}T00:00:00Z`);
   recentStart.setUTCDate(recentStart.getUTCDate() - 7);
   const recentStartIso = recentStart.toISOString().slice(0, 10);
+  const scheduled = await loadAthleteSchedule<TodayWorkout>(
+    supabase,
+    viewer.athleteId,
+    { from: recentStartIso, to: "9999-12-31" },
+    "id, source_workout_id, title, workout_type, time_cap_seconds, rounds, description, notes, week_number, day_number, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(name))",
+  );
+
+  const todayWods = scheduled
+    .filter((item) => item.date === currentDate)
+    .sort((a, b) => a.workout.title.localeCompare(b.workout.title));
   const recentWods = scheduled
-    .filter((workout) => workout.date >= recentStartIso && workout.date < currentDate)
-    .sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title));
+    .filter((item) => item.date >= recentStartIso && item.date < currentDate)
+    .sort((a, b) => b.date.localeCompare(a.date) || a.workout.title.localeCompare(b.workout.title));
   const upcoming = scheduled
-    .filter((workout) => workout.date > currentDate)
-    .sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title))
+    .filter((item) => item.date > currentDate)
     .slice(0, 5);
-  const todayWorkoutIds = todayWods.map((workout) => workout.id);
-  const workoutIds = [...new Set([...todayWods, ...recentWods].map((workout) => workout.id))];
+  const todayWorkoutIds = todayWods.map((item) => item.workout.id);
+  const workoutIds = [
+    ...new Set(
+      [...todayWods, ...recentWods].flatMap((item) =>
+        [item.workout.id, item.workout.source_workout_id].filter((id): id is string => Boolean(id)),
+      ),
+    ),
+  ];
   const [{ data: claims }, { data: athleteResults }] = workoutIds.length
     ? await Promise.all([
         supabase.auth.getClaims(),
@@ -85,7 +96,13 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
       todayResultByWorkout.set(result.workout_id, result);
     }
   }
-  const recentWithoutResults = recentWods.filter((workout) => !resultByWorkout.has(workout.id));
+  const resultForWorkout = (workout: TodayWorkout) =>
+    resultByWorkout.get(workout.id) ??
+    (workout.source_workout_id ? resultByWorkout.get(workout.source_workout_id) : undefined);
+  const todayResultForWorkout = (workout: TodayWorkout) =>
+    todayResultByWorkout.get(workout.id) ??
+    (workout.source_workout_id ? todayResultByWorkout.get(workout.source_workout_id) : undefined);
+  const recentWithoutResults = recentWods.filter((item) => !resultForWorkout(item.workout));
   const { data: scalings } = todayWorkoutIds.length
     ? await supabase
         .from("athlete_workout_scalings")
@@ -108,7 +125,8 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
       <section className="grid gap-3">
         <h1 className="text-xl font-semibold tracking-tight">Today&apos;s WOD</h1>
         {todayWods.length ? (
-          todayWods.map((workout) => {
+          todayWods.map((item) => {
+            const workout = item.workout;
             const movements = [...(workout.workout_movements ?? [])]
               .sort((a, b) => a.position - b.position)
               .map(({ movements: movement, ...item }) => ({
@@ -116,11 +134,11 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                 name: movement?.name ?? "",
               }));
             const scaling = scalingByWorkout.get(workout.id);
-            const todayResult = todayResultByWorkout.get(workout.id);
+            const todayResult = todayResultForWorkout(workout);
 
             return (
               <div key={workout.id} className="grid gap-3">
-                <p className="text-sm text-muted-foreground">{workout.programName}</p>
+                <p className="text-sm text-muted-foreground">{SCHEDULE_LABEL(item)}</p>
                 <Whiteboard workout={workout} movements={movements} units={viewer.units} />
                 {scaling && (
                   <Card>
@@ -136,7 +154,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                     <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
                       <CardTitle className="text-sm">Your result</CardTitle>
                       <Button asChild size="sm" variant="outline">
-                        <Link href={`/athlete/log/${workout.id}?result=${todayResult.id}`}>Edit result</Link>
+                        <Link href={`/athlete/log/${todayResult.workout_id}?result=${todayResult.id}`}>Edit result</Link>
                       </Button>
                     </CardHeader>
                     <CardContent className="grid gap-1 text-sm">
@@ -200,19 +218,19 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
       {recentWithoutResults.length > 0 && (
         <section className="grid gap-3">
           <h2 className="text-lg font-semibold">Recent</h2>
-          {recentWithoutResults.map((workout) => (
-            <Card key={`${workout.programName}-${workout.id}`}>
+          {recentWithoutResults.map((item) => (
+            <Card key={`${item.programId ?? item.source}-${item.workout.id}`}>
               <CardContent className="flex items-start justify-between gap-3 py-4">
                 <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground">{formatDate(workout.date)}</p>
-                  <p className="font-medium">{workout.title}</p>
+                  <p className="text-xs text-muted-foreground">{formatDate(item.date)}</p>
+                  <p className="font-medium">{item.workout.title}</p>
                   <p className="text-xs text-muted-foreground">
-                    {workout.programName}
-                    {formatHeadline(workout) ? ` · ${formatHeadline(workout)}` : ""}
+                    {SCHEDULE_LABEL(item)}
+                    {formatHeadline(item.workout) ? ` · ${formatHeadline(item.workout)}` : ""}
                   </p>
                 </div>
                 <Button asChild size="sm">
-                  <Link href={`/athlete/log/${workout.id}?date=${workout.date}`}>Log result</Link>
+                  <Link href={`/athlete/log/${item.workout.id}?date=${item.date}`}>Log result</Link>
                 </Button>
               </CardContent>
             </Card>
@@ -223,16 +241,16 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
       {upcoming.length > 0 && (
         <section className="grid gap-3">
           <h2 className="text-lg font-semibold">Coming up</h2>
-          {upcoming.map((workout) => (
-            <Card key={workout.id}>
+          {upcoming.map((item) => (
+            <Card key={`${item.programId ?? item.source}-${item.workout.id}`}>
               <CardContent className="flex items-start gap-3 py-4">
                 <CalendarDays className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground">{formatDate(workout.date)}</p>
-                  <p className="font-medium">{workout.title}</p>
+                  <p className="text-xs text-muted-foreground">{formatDate(item.date)}</p>
+                  <p className="font-medium">{item.workout.title}</p>
                   <p className="text-xs text-muted-foreground">
-                    {workout.programName}
-                    {formatHeadline(workout) ? ` · ${formatHeadline(workout)}` : ""}
+                    {SCHEDULE_LABEL(item)}
+                    {formatHeadline(item.workout) ? ` · ${formatHeadline(item.workout)}` : ""}
                   </p>
                 </div>
               </CardContent>
