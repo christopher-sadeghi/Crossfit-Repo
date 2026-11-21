@@ -70,7 +70,7 @@ export function TargetForm({
   today,
 }: {
   athleteId: string;
-  current: { calories: number; protein_g: number; carbs_g: number; fat_g: number } | null;
+  current: { calories: number; protein_g: number; carbs_g: number; fat_g: number; notes: string | null; start_date: string } | null;
   today: string;
 }) {
   const { state, pending, values: v, formProps } = useForm(saveTarget);
@@ -89,7 +89,7 @@ export function TargetForm({
       </div>
       <div className="grid gap-1.5">
         <Label htmlFor="target_notes">Notes</Label>
-        <Textarea id="target_notes" name="notes" rows={2} maxLength={500} placeholder="e.g. Cut 200 kcal for competition prep" defaultValue={v.notes} />
+        <Textarea id="target_notes" name="notes" rows={2} maxLength={500} placeholder="e.g. Cut 200 kcal for competition prep" defaultValue={v.notes ?? (current?.start_date === today ? (current.notes ?? undefined) : undefined)} />
       </div>
       <Status state={state} />
       <Button type="submit" disabled={pending} className="justify-self-start">
