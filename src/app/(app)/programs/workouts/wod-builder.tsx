@@ -186,7 +186,7 @@ export function WodBuilder({
                   [
                     ["sets", "Sets", "1"],
                     ["reps", "Reps", "1"],
-                    ["load", `Load (${units})`, "0.5"],
+                    ["load", `Load (${units})`, "any"],
                     ["distance_m", "Distance (m)", "1"],
                     ["calories", "Calories", "1"],
                     ["duration_seconds", "Time (sec)", "1"],
