@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { failure, type FormState } from "@/lib/auth/form-state";
-import { addDays, MEALS } from "@/lib/nutrition";
+import { MEALS } from "@/lib/nutrition";
+import { applyTarget } from "@/lib/nutrition-targets";
 import { createClient } from "@/lib/supabase/server";
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a date.");
@@ -33,35 +34,8 @@ export async function saveTarget(_: FormState, formData: FormData): Promise<Form
   if (!parsed.success) return failure(formData, parsed.error.issues[0]?.message ?? "Please check the form.");
   const t = parsed.data;
   const supabase = await createClient();
-
-  const { data: current } = await supabase
-    .from("nutrition_targets")
-    .select("id, start_date")
-    .eq("athlete_id", t.athlete_id)
-    .is("end_date", null)
-    .maybeSingle();
-
-  if (current && t.start_date < current.start_date)
-    return failure(formData, `The new target must start on or after the current one (${current.start_date}).`);
-
-  if (current && t.start_date === current.start_date) {
-    const { calories, protein_g, carbs_g, fat_g, notes } = t;
-    const { error } = await supabase
-      .from("nutrition_targets")
-      .update({ calories, protein_g, carbs_g, fat_g, notes })
-      .eq("id", current.id);
-    if (error) return failure(formData, "Couldn't save the target. Please try again.");
-  } else {
-    if (current) {
-      const { error } = await supabase.from("nutrition_targets").update({ end_date: addDays(t.start_date, -1) }).eq("id", current.id);
-      if (error) return failure(formData, "Couldn't save the target. Please try again.");
-    }
-    const { error } = await supabase.from("nutrition_targets").insert(t);
-    if (error) {
-      if (current) await supabase.from("nutrition_targets").update({ end_date: null }).eq("id", current.id);
-      return failure(formData, "Couldn't save the target. Please try again.");
-    }
-  }
+  const result = await applyTarget(supabase, t);
+  if ("error" in result) return failure(formData, result.error);
 
   revalidateAthlete(t.athlete_id);
   return { message: "Target saved." };

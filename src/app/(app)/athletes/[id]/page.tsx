@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { SUGGESTION_LABELS } from "@/lib/ai/suggestions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCoach } from "@/lib/coach";
 import { programDate, today } from "@/lib/program-dates";
@@ -20,12 +21,6 @@ import { formatHeadline } from "../../programs/workouts/whiteboard";
 import { LEVEL_LABELS } from "../options";
 
 const TABS = ["overview", "workouts", "nutrition", "goals", "ai"] as const;
-const SUGGESTION_LABELS = {
-  write_workout: "Write workout",
-  scale_workout: "Scale workout",
-  adjust_macros: "Adjust macros",
-  progress_summary: "Progress summary",
-};
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> };
 
@@ -322,7 +317,9 @@ export default async function AthletePage({ params, searchParams }: Props) {
               <TableBody>
                 {suggestions.map((s) => (
                   <TableRow key={s.id}>
-                    <TableCell className="pl-4">{formatDate(s.created_at)}</TableCell>
+                    <TableCell className="pl-4">
+                      <Link href={`/suggestions/${s.id}`} className="hover:underline">{formatDate(s.created_at)}</Link>
+                    </TableCell>
                     <TableCell>{SUGGESTION_LABELS[s.suggestion_type]}</TableCell>
                     <TableCell className="capitalize">{s.status}</TableCell>
                     <TableCell>{s.decided_at ? formatDate(s.decided_at) : "—"}</TableCell>
