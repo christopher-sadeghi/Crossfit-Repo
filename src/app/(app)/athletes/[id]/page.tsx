@@ -42,8 +42,10 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const coach = await getCoach();
   const units: Units = coach?.units ?? "lb";
 
-  const since = new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
   const now = await getToday();
+  const sinceDate = new Date(`${now}T00:00:00Z`);
+  sinceDate.setUTCDate(sinceDate.getUTCDate() - 6);
+  const since = sinceDate.toISOString().slice(0, 10);
   const scheduleFromDate = new Date(`${now}T00:00:00Z`);
   scheduleFromDate.setUTCDate(scheduleFromDate.getUTCDate() - 7);
   const scheduleToDate = new Date(`${now}T00:00:00Z`);
