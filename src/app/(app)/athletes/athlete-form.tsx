@@ -21,7 +21,8 @@ export function AthleteForm({ athlete }: { athlete?: Tables<"athletes"> }) {
     state.values?.[name] ?? (athlete?.[name] == null ? "" : String(athlete[name]));
 
   return (
-    <form action={formAction} className="grid max-w-2xl gap-5">
+    // Remount on each failed submit: React won't update a focused number input's value from new defaultValues.
+    <form key={JSON.stringify(state.values ?? {})} action={formAction} className="grid max-w-2xl gap-5">
       {athlete && <input type="hidden" name="id" value={athlete.id} />}
       <div className="grid gap-5 sm:grid-cols-2">
         <Field label="First name *" name="first_name">
