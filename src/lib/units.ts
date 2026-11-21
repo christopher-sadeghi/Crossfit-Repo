@@ -42,6 +42,7 @@ export function fromKg(kg: number, units: Units) {
   return Math.round((units === "lb" ? kg * LB_PER_KG : kg) * 10) / 10;
 }
 
+/** For editing a stored load: 0.1 lb undoes the kg rounding (193 lb stays 193), kg keeps 0.01. */
 export function fromKgPrecise(kg: number, units: Units) {
-  return Math.round((units === "lb" ? kg * LB_PER_KG : kg) * 100) / 100;
+  return units === "lb" ? Math.round(kg * LB_PER_KG * 10) / 10 : Math.round(kg * 100) / 100;
 }
