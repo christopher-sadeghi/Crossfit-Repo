@@ -7,6 +7,7 @@ create table public.ai_chat_messages (
   content text not null check (char_length(content) between 1 and 8000),
   suggestion_ids uuid[] not null default '{}',
   context jsonb,
+  cleared boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -17,7 +18,9 @@ create policy "Coaches manage their own rows" on public.ai_chat_messages
   for all to authenticated
   using (coach_id = (select auth.uid())) with check (coach_id = (select auth.uid()));
 
-grant select, insert, delete on public.ai_chat_messages to authenticated;
+-- Clearing only hides messages so they still count toward the daily AI cap.
+grant select, insert on public.ai_chat_messages to authenticated;
+grant update (cleared) on public.ai_chat_messages to authenticated;
 grant all on public.ai_chat_messages to service_role;
 
 -- AI-written WODs can be saved as a one-off for one athlete on a date (individual programming).

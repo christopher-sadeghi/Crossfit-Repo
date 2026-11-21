@@ -11,6 +11,7 @@ export type Database = {
     Tables: {
       ai_chat_messages: {
         Row: {
+          cleared: boolean;
           coach_id: string;
           content: string;
           context: Json | null;
@@ -21,6 +22,7 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          cleared?: boolean;
           coach_id?: string;
           content: string;
           context?: Json | null;
@@ -30,6 +32,7 @@ export type Database = {
           suggestion_ids?: string[];
         };
         Update: {
+          cleared?: boolean;
           coach_id?: string;
           content?: string;
           context?: Json | null;

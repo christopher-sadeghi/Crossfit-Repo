@@ -46,6 +46,7 @@ export async function loadChat(): Promise<ChatMessage[]> {
   const { data, error } = await supabase
     .from("ai_chat_messages")
     .select("id, role, content, suggestion_ids")
+    .eq("cleared", false)
     .order("created_at", { ascending: false })
     .limit(50);
   if (error) throw new Error("Could not load chat history.");
@@ -93,6 +94,6 @@ export async function sendChatMessage(
 
 export async function clearChat(): Promise<{ error?: string }> {
   const supabase = await createClient();
-  const { error } = await supabase.from("ai_chat_messages").delete().not("id", "is", null);
+  const { error } = await supabase.from("ai_chat_messages").update({ cleared: true }).eq("cleared", false);
   return error ? { error: "Could not clear the chat." } : {};
 }
