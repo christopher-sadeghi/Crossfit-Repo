@@ -70,7 +70,7 @@ async function listAthletes(supabase: Supabase, today: string) {
         .select("athlete_id, performed_on, rpe, energy, sleep_hours, soreness, pain_notes")
         .gte("performed_on", since)
         .lte("performed_on", today),
-      supabase.from("athlete_journal_entries").select("athlete_id, sleep_hours, high_stress").gte("entry_on", since),
+      supabase.from("athlete_journal_entries").select("athlete_id, entry_on, sleep_hours, high_stress").gte("entry_on", since),
     ]);
   if (error) throw error;
   if (resultsError) throw resultsError;
@@ -78,6 +78,10 @@ async function listAthletes(supabase: Supabase, today: string) {
   return (athletes ?? []).map((athlete) => {
     const week = (results ?? []).filter((r) => r.athlete_id === athlete.id);
     const days = (journal ?? []).filter((j) => j.athlete_id === athlete.id);
+    // One sleep value per night: the journal entry if there is one, otherwise the first result that day.
+    const sleepByNight = new Map<string, number | null>();
+    for (const j of days) if (j.sleep_hours != null) sleepByNight.set(j.entry_on, j.sleep_hours);
+    for (const r of week) if (r.sleep_hours != null && !sleepByNight.has(r.performed_on)) sleepByNight.set(r.performed_on, r.sleep_hours);
     return {
       athlete_id: athlete.id,
       name: `${athlete.first_name} ${athlete.last_name}`,
@@ -90,7 +94,7 @@ async function listAthletes(supabase: Supabase, today: string) {
         average_rpe: average(week.map((r) => r.rpe)),
         max_rpe: week.length ? Math.max(...week.map((r) => r.rpe ?? 0)) || null : null,
         average_energy: average(week.map((r) => r.energy)),
-        average_sleep_hours: average([...week.map((r) => r.sleep_hours), ...days.map((j) => j.sleep_hours)]),
+        average_sleep_hours: average([...sleepByNight.values()]),
         max_soreness: week.length ? Math.max(...week.map((r) => r.soreness ?? 0)) || null : null,
         pain_notes: week.filter((r) => r.pain_notes).map((r) => `${r.performed_on}: ${r.pain_notes}`),
         high_stress_days: days.filter((j) => j.high_stress).length,
@@ -128,8 +132,7 @@ async function getAthlete(supabase: Supabase, athleteId: string, today: string, 
         "performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, rpe, energy, sleep_hours, soreness, pain_notes, workouts(title, workout_type, workout_movements(movement_id))",
       )
       .eq("athlete_id", athleteId)
-      .order("performed_on", { ascending: false })
-      .limit(100),
+      .order("performed_on", { ascending: false }),
     supabase
       .from("athlete_journal_entries")
       .select("entry_on, sleep_hours, sleep_quality, alcohol, late_caffeine, high_stress, mobility, notes")
@@ -358,6 +361,7 @@ export async function runChatWithClient(supabase: Supabase, opts: ChatOptions): 
     supabase
       .from("ai_chat_messages")
       .select("role, content")
+      .eq("cleared", false)
       .order("created_at", { ascending: false })
       .limit(HISTORY_LIMIT),
   ]);
