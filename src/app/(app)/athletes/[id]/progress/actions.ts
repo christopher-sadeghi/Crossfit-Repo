@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { getCoach } from "@/lib/coach";
-import { GOAL_TYPES, TRACKING } from "@/lib/progress";
+import { GOAL_TYPES, normalizeMetric, TRACKING } from "@/lib/progress";
 import { createClient } from "@/lib/supabase/server";
 import { toKg } from "@/lib/units";
 
@@ -92,7 +92,7 @@ export async function saveGoal(_: FormState, formData: FormData): Promise<FormSt
     max_load: { metric: g.metric ?? "best load", unit: "kg", start_value: kg(g.start_value), target_value: kg(g.target_value) },
     max_reps: { metric: g.metric ?? "max reps", unit: "reps" },
     // Avoid matching an automatic rule by accident.
-    manual: { movement_id: null, unit: g.unit === "kg" || g.unit === "%" ? null : g.unit, metric: g.metric === "body weight" || g.metric === "body fat" ? null : g.metric },
+    manual: { movement_id: null, unit: g.unit === "kg" || g.unit === "%" ? null : g.unit, metric: ["body weight", "body fat"].includes(normalizeMetric(g.metric)) ? null : g.metric },
     } satisfies Record<(typeof TRACKING)[number], Fields>
   )[tracking] as Fields;
   const goal = { ...g, ...fields };

@@ -38,7 +38,7 @@ export default async function AthleteProgressPage({ params }: Props) {
       .eq("athlete_id", id)
       .order("status")
       .order("target_date", { nullsFirst: false }),
-    supabase.from("workout_results").select("performed_on, load_kg, reps, workouts(workout_type, workout_movements(movement_id))").eq("athlete_id", id),
+    supabase.from("workout_results").select("performed_on, load_kg, reps, rounds, workouts(workout_type, workout_movements(movement_id))").eq("athlete_id", id),
     supabase.from("movements").select("id, name").order("name"),
     supabase.from("nutrition_targets").select("calories, protein_g, carbs_g, fat_g, start_date, end_date").eq("athlete_id", id),
     supabase.from("food_logs").select("logged_on, calories, protein_g, carbs_g, fat_g").eq("athlete_id", id).gte("logged_on", since).lte("logged_on", now),

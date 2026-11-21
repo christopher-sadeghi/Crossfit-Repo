@@ -32,15 +32,18 @@ export type MovementResult = {
   performed_on: string;
   load_kg: number | null;
   reps: number | null;
+  rounds: number | null;
   workouts: { workout_type: Enums<"workout_type">; workout_movements: { movement_id: string }[] } | null;
 };
 
+export const normalizeMetric = (metric: string | null | undefined) => metric?.trim().toLowerCase() ?? "";
+
 export function trackingOf(goal: Pick<GoalLike, "metric" | "unit" | "movement_id">): Tracking {
-  const metric = goal.metric?.trim().toLowerCase() ?? "";
-  if (metric === "body weight") return "body_weight";
-  if (metric === "body fat" || goal.unit === "%") return "body_fat";
   if (goal.movement_id && goal.unit === "kg") return "max_load";
   if (goal.movement_id && goal.unit === "reps") return "max_reps";
+  const metric = normalizeMetric(goal.metric);
+  if (metric === "body weight") return "body_weight";
+  if (metric === "body fat" || goal.unit === "%") return "body_fat";
   return "manual";
 }
 
@@ -53,13 +56,14 @@ export function latestMetric<M extends MetricRow>(metrics: M[], key: "weight_kg"
 
 /**
  * Load counts from strength WODs or single-movement WODs that include the movement;
- * reps only from single-movement WODs, where every rep belongs to that movement.
+ * reps only from single-movement, reps-only scores (a rounds score's reps are just the partial round).
  */
 function movementScore(r: MovementResult, movementId: string, kind: "load" | "reps") {
   const ids = r.workouts?.workout_movements.map((m) => m.movement_id) ?? [];
   if (!ids.includes(movementId)) return null;
-  const solo = ids.length === 1;
-  const value = kind === "load" ? (solo || r.workouts?.workout_type === "strength" ? r.load_kg : null) : solo ? r.reps : null;
+  const solo = new Set(ids).size === 1;
+  const value =
+    kind === "load" ? (solo || r.workouts?.workout_type === "strength" ? r.load_kg : null) : solo && r.rounds == null ? r.reps : null;
   return value == null ? null : Number(value);
 }
 
@@ -95,8 +99,10 @@ export function goalProgress(goal: GoalLike, data: { metrics: MetricRow[]; resul
           : null;
 
   const { start_value: start, target_value: target } = goal;
-  const increasing = start == null || target == null || target >= start;
-  const reached = current != null && target != null && (increasing ? current >= target : current <= target);
+  // Without a start value, assume lifts go up and body fat goes down; body weight could go either way.
+  const increasing =
+    start != null && target != null ? target >= start : tracking === "body_fat" ? false : tracking === "body_weight" ? null : true;
+  const reached = current != null && target != null && increasing != null && (increasing ? current >= target : current <= target);
   let pct: number | null = null;
   if (goal.status === "achieved") pct = 100;
   else if (reached) pct = 100;
