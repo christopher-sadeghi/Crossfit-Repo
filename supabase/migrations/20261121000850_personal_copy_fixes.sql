@@ -18,6 +18,8 @@ declare
   v_source public.programs%rowtype;
   v_athlete public.athletes%rowtype;
   v_start_date date;
+  v_suffix text;
+  v_program_name text;
   v_new_program_id uuid;
   v_source_workout record;
   v_new_workout_id uuid;
@@ -62,10 +64,13 @@ begin
     raise exception 'Choose a start date for this personal program.';
   end if;
 
+  v_suffix := ' — ' || v_athlete.first_name;
+  v_program_name := left(v_source.name, greatest(1, 80 - char_length(v_suffix))) || v_suffix;
+
   insert into public.programs (coach_id, name, description, weeks, athlete_id, source_program_id)
   values (
     v_coach_id,
-    v_source.name || ' — ' || v_athlete.first_name,
+    left(v_program_name, 80),
     v_source.description,
     v_source.weeks,
     p_athlete_id,
