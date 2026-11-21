@@ -64,9 +64,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
     days.set(f.logged_on, d);
   }
   const dayRows = [...days.entries()].sort(([a], [b]) => b.localeCompare(a));
-  const age = athlete.birth_date
-    ? Math.floor((Date.now() - new Date(athlete.birth_date).getTime()) / (365.25 * 86_400_000))
-    : null;
+  const age = athlete.birth_date ? ageOn(athlete.birth_date, new Date()) : null;
 
   return (
     <>
@@ -264,4 +262,10 @@ function ListCard({ show, empty, title, children }: { show: boolean; empty: stri
       <CardContent className="p-0">{show ? children : <p className="p-8 text-center text-muted-foreground">{empty}</p>}</CardContent>
     </Card>
   );
+}
+
+function ageOn(birthDate: string, today: Date) {
+  const [y, m, d] = birthDate.split("-").map(Number);
+  const hadBirthday = today.getMonth() + 1 > m || (today.getMonth() + 1 === m && today.getDate() >= d);
+  return today.getFullYear() - y - (hadBirthday ? 0 : 1);
 }
