@@ -46,7 +46,9 @@ export async function updateSession(request: NextRequest) {
     return redirectWithCookies(url, response);
   }
 
-  if (isLoggedIn && matches(path, LOGGED_OUT_ONLY_PATHS)) {
+  // Keep /login?error=… reachable so a signed-in coach still sees why an email link failed.
+  const showingError = path === "/login" && request.nextUrl.searchParams.has("error");
+  if (isLoggedIn && !showingError && matches(path, LOGGED_OUT_ONLY_PATHS)) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     url.search = "";

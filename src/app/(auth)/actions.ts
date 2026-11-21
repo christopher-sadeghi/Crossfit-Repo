@@ -1,5 +1,6 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
@@ -87,6 +88,11 @@ export async function updatePassword(
 
 export async function logout() {
   const supabase = await createClient();
-  await supabase.auth.signOut();
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    // Revoking on the server failed (e.g. network); still clear this browser's session.
+    const store = await cookies();
+    for (const c of store.getAll()) if (c.name.startsWith("sb-")) store.delete(c.name);
+  }
   redirect("/login");
 }
