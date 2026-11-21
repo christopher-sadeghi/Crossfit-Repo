@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { scaleWorkoutDetailsSchema } from "@/lib/ai/scale-workout";
 import { SCHEDULE_LABEL, loadAthleteSchedule } from "@/lib/athlete-schedule";
 import { getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
@@ -12,7 +13,7 @@ import { feedbackSummary } from "@/lib/feedback";
 import { formatDate, formatScore } from "@/lib/units";
 import { getViewer } from "@/lib/viewer";
 
-import { formatHeadline, Whiteboard, type WhiteboardWorkout } from "../(app)/programs/workouts/whiteboard";
+import { formatHeadline, formatMovementLine, Whiteboard, type WhiteboardWorkout } from "../(app)/programs/workouts/whiteboard";
 import { AthleteResultForm } from "./log/[workoutId]/result-form";
 import { ScrollIntoView } from "./scroll-into-view";
 
@@ -106,7 +107,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
   const { data: scalings } = todayWorkoutIds.length
     ? await supabase
         .from("athlete_workout_scalings")
-        .select("workout_id, modifications")
+        .select("workout_id, modifications, details")
         .eq("athlete_id", viewer.athleteId)
         .in("workout_id", todayWorkoutIds)
     : { data: [] };
@@ -117,7 +118,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
     .eq("entry_on", currentDate)
     .maybeSingle();
   const scalingByWorkout = new Map(
-    (scalings ?? []).map((scaling) => [scaling.workout_id, scaling.modifications]),
+    (scalings ?? []).map((scaling) => [scaling.workout_id, scaling]),
   );
 
   return (
@@ -135,6 +136,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                 name: movement?.name ?? "",
               }));
             const scaling = scalingByWorkout.get(workout.id);
+            const scalingDetails = scaling ? scaleWorkoutDetailsSchema.safeParse(scaling.details) : null;
             const todayResult = todayResultForWorkout(workout);
 
             return (
@@ -146,7 +148,28 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm">Your scaling</CardTitle>
                     </CardHeader>
-                    <CardContent className="whitespace-pre-line text-sm">{scaling}</CardContent>
+                    <CardContent className="grid gap-3 text-sm">
+                      <p className="whitespace-pre-line">{scaling.modifications}</p>
+                      {scalingDetails?.success && (
+                        <ul className="grid gap-2">
+                          {scalingDetails.data.movements.map((movement, index) => (
+                            <li key={`${movement.movement_id}-${index}`}>
+                              <p>{formatMovementLine({
+                                name: movement.movement_name,
+                                sets: movement.sets,
+                                reps: movement.reps,
+                                load_kg: movement.load_kg,
+                                distance_m: movement.distance_m,
+                                calories: movement.calories,
+                                duration_seconds: movement.duration_seconds,
+                                notes: null,
+                              }, viewer.units)}</p>
+                              <p className="text-xs text-muted-foreground">{movement.reason}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </CardContent>
                   </Card>
                 )}
                 {todayResult ? (
