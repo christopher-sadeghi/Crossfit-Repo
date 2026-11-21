@@ -17,8 +17,8 @@ import {
   writeWorkoutInputSchema,
   writeWorkoutSchema,
 } from "@/lib/ai/suggestions";
-import { today } from "@/lib/program-dates";
 import { createClient } from "@/lib/supabase/server";
+import { getToday } from "@/lib/time-zone";
 import { formatDate, toKg, type Units } from "@/lib/units";
 import { Whiteboard } from "@/app/(app)/programs/workouts/whiteboard";
 import { ScaleWorkoutReview } from "@/components/suggestions/scale-workout-review";
@@ -78,6 +78,7 @@ export default async function SuggestionPage({ params }: Props) {
   const proposedMovements =
     shownWorkout?.movements.map(({ movement_id, load, ...movement }) => ({
       ...movement,
+      movement_id,
       name: libraryNames.get(movement_id) ?? "Unknown movement",
       load_kg: load == null ? null : toKg(load, units),
     })) ?? [];
@@ -87,7 +88,7 @@ export default async function SuggestionPage({ params }: Props) {
       ...movement,
       load_kg: load == null ? null : toKg(load, units),
     })) ?? [];
-  const todayValue = today();
+  const todayValue = await getToday();
   const [athleteResult, targetResult] = await Promise.all([
     suggestion.athlete_id
       ? supabase.from("athletes").select("id, first_name, last_name, injuries").eq("id", suggestion.athlete_id).maybeSingle()
@@ -239,6 +240,7 @@ export default async function SuggestionPage({ params }: Props) {
                 }}
                 movements={currentMovements}
                 units={units}
+                howToHref={(id) => `/programs/movements/${id}`}
               />
             </section>
           )}
@@ -255,6 +257,7 @@ export default async function SuggestionPage({ params }: Props) {
               }}
               movements={proposedMovements}
               units={units}
+              howToHref={(id) => `/programs/movements/${id}`}
             />
           </section>
         </div>
@@ -359,7 +362,11 @@ export default async function SuggestionPage({ params }: Props) {
         </Card>
       )}
 
-      {!macrosType && !workoutType && !scaleType && <p className="text-sm text-muted-foreground">This suggestion type isn&apos;t ready yet.</p>}
+      {suggestion.suggestion_type === "movement_guide" && suggestion.input && typeof suggestion.input === "object" && !Array.isArray(suggestion.input) && typeof suggestion.input.movement_id === "string" ? (
+        <Link href={`/programs/movements/${encodeURIComponent(suggestion.input.movement_id)}`} className="underline underline-offset-4">Review on the movement page</Link>
+      ) : !macrosType && !workoutType && !scaleType && suggestion.suggestion_type !== "movement_guide" ? (
+        <p className="text-sm text-muted-foreground">This suggestion type isn&apos;t ready yet.</p>
+      ) : null}
     </>
   );
 }

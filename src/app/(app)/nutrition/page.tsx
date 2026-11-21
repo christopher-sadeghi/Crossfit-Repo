@@ -4,11 +4,11 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { addDays, onTarget, targetOn, totals } from "@/lib/nutrition";
-import { today } from "@/lib/program-dates";
+import { getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function NutritionPage() {
-  const end = today();
+  const end = await getToday();
   const start = addDays(end, -6);
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
   const supabase = await createClient();

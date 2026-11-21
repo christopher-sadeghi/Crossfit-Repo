@@ -125,6 +125,79 @@ export type Database = {
           },
         ];
       };
+      athlete_journal_entries: {
+        Row: {
+          alcohol: boolean;
+          athlete_id: string;
+          coach_id: string;
+          created_at: string;
+          entry_on: string;
+          high_stress: boolean;
+          hit_water_goal: boolean;
+          id: string;
+          late_caffeine: boolean;
+          late_meal: boolean;
+          mobility: boolean;
+          notes: string | null;
+          screens_in_bed: boolean;
+          sleep_hours: number | null;
+          sleep_quality: number | null;
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          alcohol?: boolean;
+          athlete_id: string;
+          coach_id: string;
+          created_at?: string;
+          entry_on?: string;
+          high_stress?: boolean;
+          hit_water_goal?: boolean;
+          id?: string;
+          late_caffeine?: boolean;
+          late_meal?: boolean;
+          mobility?: boolean;
+          notes?: string | null;
+          screens_in_bed?: boolean;
+          sleep_hours?: number | null;
+          sleep_quality?: number | null;
+          updated_at?: string;
+        };
+        Update: {
+          alcohol?: boolean;
+          athlete_id?: string;
+          coach_id?: string;
+          created_at?: string;
+          entry_on?: string;
+          high_stress?: boolean;
+          hit_water_goal?: boolean;
+          id?: string;
+          late_caffeine?: boolean;
+          late_meal?: boolean;
+          mobility?: boolean;
+          notes?: string | null;
+          screens_in_bed?: boolean;
+          sleep_hours?: number | null;
+          sleep_quality?: number | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "athlete_journal_entries_athlete_id_coach_id_fkey";
+            columns: ["athlete_id", "coach_id"];
+            isOneToOne: false;
+            referencedRelation: "athletes";
+            referencedColumns: ["id", "coach_id"];
+          },
+          {
+            foreignKeyName: "athlete_journal_entries_coach_id_fkey";
+            columns: ["coach_id"];
+            isOneToOne: false;
+            referencedRelation: "coaches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       athlete_workout_scalings: {
         Row: {
           athlete_id: string;
@@ -456,6 +529,53 @@ export type Database = {
           },
         ];
       };
+      movement_guides: {
+        Row: {
+          id: string;
+          coach_id: string;
+          movement_id: string;
+          video_url: string | null;
+          cues: string[];
+          common_mistakes: string[];
+          easier_versions: string[];
+          harder_versions: string[];
+          ai_suggestion_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          id?: string;
+          coach_id?: string;
+          movement_id: string;
+          video_url?: string | null;
+          cues?: string[];
+          common_mistakes?: string[];
+          easier_versions?: string[];
+          harder_versions?: string[];
+          ai_suggestion_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          coach_id?: string;
+          movement_id?: string;
+          video_url?: string | null;
+          cues?: string[];
+          common_mistakes?: string[];
+          easier_versions?: string[];
+          harder_versions?: string[];
+          ai_suggestion_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          { foreignKeyName: "movement_guides_coach_id_fkey"; columns: ["coach_id"]; isOneToOne: false; referencedRelation: "coaches"; referencedColumns: ["id"] },
+          { foreignKeyName: "movement_guides_movement_id_fkey"; columns: ["movement_id"]; isOneToOne: false; referencedRelation: "movements"; referencedColumns: ["id"] },
+          { foreignKeyName: "movement_guides_ai_suggestion_id_fkey"; columns: ["ai_suggestion_id"]; isOneToOne: false; referencedRelation: "ai_suggestions"; referencedColumns: ["id"] },
+        ];
+      };
       movements: {
         Row: {
           category: Database["public"]["Enums"]["movement_category"];
@@ -463,6 +583,7 @@ export type Database = {
           created_at: string;
           id: string;
           measure: Database["public"]["Enums"]["movement_measure"];
+          demo_video_url: string | null;
           name: string;
         };
         ComputedFields: never;
@@ -472,6 +593,7 @@ export type Database = {
           created_at?: string;
           id?: string;
           measure?: Database["public"]["Enums"]["movement_measure"];
+          demo_video_url?: string | null;
           name: string;
         };
         Update: {
@@ -480,6 +602,7 @@ export type Database = {
           created_at?: string;
           id?: string;
           measure?: Database["public"]["Enums"]["movement_measure"];
+          demo_video_url?: string | null;
           name?: string;
         };
         Relationships: [
@@ -969,7 +1092,8 @@ export type Database = {
         | "write_workout"
         | "scale_workout"
         | "adjust_macros"
-        | "progress_summary";
+        | "progress_summary"
+        | "movement_guide";
       weight_unit: "lb" | "kg";
       workout_type: "for_time" | "amrap" | "emom" | "strength" | "other";
     };
@@ -1119,6 +1243,7 @@ export const Constants = {
         "failed",
       ],
       suggestion_type: [
+        "movement_guide",
         "write_workout",
         "scale_workout",
         "adjust_macros",

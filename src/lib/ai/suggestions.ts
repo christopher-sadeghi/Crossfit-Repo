@@ -3,11 +3,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { addDays, totals } from "@/lib/nutrition";
 import { applyTarget } from "@/lib/nutrition-targets";
-import { today } from "@/lib/program-dates";
 import { WORKOUT_TYPES } from "@/app/(app)/programs/options";
 import { fromKgPrecise, toKg } from "@/lib/units";
 import type { Database, Enums, Json, Tables } from "@/lib/supabase/database.types";
+import { getToday } from "@/lib/time-zone";
 
+import { movementGuideEntry } from "./movement-guides";
 import { ApprovalError } from "./errors";
 import {
   applyScaleSuggestion,
@@ -25,6 +26,7 @@ export const SUGGESTION_LABELS: Record<Enums<"suggestion_type">, string> = {
   scale_workout: "Scale workout",
   adjust_macros: "Adjust macros",
   progress_summary: "Progress summary",
+  movement_guide: "Movement how-to",
 };
 
 export const adjustMacrosSchema = z.object({
@@ -101,7 +103,12 @@ export const writeWorkoutInputSchema = z.object({
 
 type SuggestionRequest = { input: Json; system: string; prompt: string; schema?: z.ZodType };
 type AppliedTarget = { target_table: string; target_id: string };
-type SuggestionParams = { athleteId: string | null; workoutId?: string | null; request?: string | null };
+export type SuggestionParams = {
+  athleteId: string | null;
+  workoutId?: string | null;
+  request?: string | null;
+  movementId?: string;
+};
 export type SuggestionApplyOptions = { saveAs?: "update" | "new" };
 type SuggestionEntry = {
   label: string;
@@ -128,7 +135,7 @@ Rules:
 async function buildMacroRequest(supabase: SupabaseClient<Database>, params: SuggestionParams): Promise<SuggestionRequest> {
   const { athleteId } = params;
   if (!athleteId) throw new Error("Athlete not found.");
-  const asOf = today();
+  const asOf = await getToday();
   const [
     { data: athlete, error: athleteError },
     { data: target, error: targetError },
@@ -371,7 +378,7 @@ async function applyMacroSuggestion(
 ): Promise<AppliedTarget> {
   const parsed = adjustMacrosSchema.parse(final);
   if (!suggestion.athlete_id) throw new Error("This suggestion has no athlete.");
-  const startDate = today();
+  const startDate = await getToday();
   const { data: openTarget, error: targetError } = await supabase
     .from("nutrition_targets")
     .select("start_date")
@@ -398,6 +405,7 @@ async function applyMacroSuggestion(
 }
 
 export const SUGGESTION_REGISTRY: Record<Enums<"suggestion_type">, SuggestionEntry> = {
+  movement_guide: movementGuideEntry,
   write_workout: {
     label: SUGGESTION_LABELS.write_workout,
     proposalSchema: writeWorkoutSchema,
