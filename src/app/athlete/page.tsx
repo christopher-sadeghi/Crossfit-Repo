@@ -13,8 +13,10 @@ import { getViewer } from "@/lib/viewer";
 
 import { formatHeadline, Whiteboard } from "../(app)/programs/workouts/whiteboard";
 import { AthleteResultForm } from "./log/[workoutId]/result-form";
+import { ScrollIntoView } from "./scroll-into-view";
 
-export default async function AthleteTodayPage() {
+export default async function AthleteTodayPage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
+  const { saved } = await searchParams;
   const viewer = await getViewer();
   if (!viewer) redirect("/login");
   if (viewer.kind === "coach") redirect("/");
@@ -130,6 +132,7 @@ export default async function AthleteTodayPage() {
                 )}
                 {todayResult ? (
                   <Card id={`result-${workout.id}`} className="scroll-mt-4">
+                    {saved === workout.id && <ScrollIntoView targetId={`result-${workout.id}`} />}
                     <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
                       <CardTitle className="text-sm">Your result</CardTitle>
                       <Button asChild size="sm" variant="outline">

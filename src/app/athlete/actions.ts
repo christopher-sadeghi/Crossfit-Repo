@@ -94,7 +94,7 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
     revalidateResultPaths(data.workout_id, data.athlete_id);
   }
 
-  redirect(r.return_to === "/athlete" ? `/athlete#result-${r.workout_id}` : r.return_to);
+  redirect(r.return_to === "/athlete" ? `/athlete?saved=${r.workout_id}` : r.return_to);
 }
 
 export async function deleteAthleteResult(id: string): Promise<FormState> {
