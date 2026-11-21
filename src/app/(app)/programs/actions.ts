@@ -76,11 +76,14 @@ export async function placeWorkout(_: FormState, formData: FormData): Promise<Fo
   const { data: program } = await supabase.from("programs").select("weeks").eq("id", placement.program_id).maybeSingle();
   if (!program) return failure(formData, "Program not found.");
   if (placement.week_number > program.weeks) return failure(formData, `This program only has ${program.weeks} weeks.`);
+  const { data: workout } = await supabase.from("workouts").select("athlete_id").eq("id", workout_id).maybeSingle();
+  if (!workout || workout.athlete_id) return failure(formData, "One-off WODs can't be added to a program.");
 
   const { count, error } = await supabase
     .from("workouts")
     .update({ ...placement, scheduled_on: null, updated_at: new Date().toISOString() }, { count: "exact" })
     .eq("id", workout_id)
+    .is("athlete_id", null)
     .is("program_id", null);
   if (error || !count) return failure(formData, "Couldn't add that WOD. It may already be in a program.");
 

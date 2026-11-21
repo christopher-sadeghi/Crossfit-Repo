@@ -24,7 +24,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
     getCoach(),
     supabase
       .from("workouts")
-      .select("id, title, workout_type, time_cap_seconds, rounds, description, notes, scheduled_on, week_number, day_number, program_id, programs(name), workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(name))")
+      .select("id, title, workout_type, time_cap_seconds, rounds, description, notes, athlete_id, scheduled_on, week_number, day_number, program_id, athletes(id, first_name, last_name), programs(name), workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(name))")
       .eq("id", id)
       .order("position", { referencedTable: "workout_movements" })
       .maybeSingle(),
@@ -52,6 +52,16 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
           <h1 className="text-2xl font-semibold tracking-tight">{workout.title}</h1>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <Badge variant="secondary">{WORKOUT_TYPE_LABELS[workout.workout_type]}</Badge>
+            {workout.athlete_id && (
+              <>
+                <Badge variant="outline">One-off</Badge>
+                {workout.athletes && (
+                  <Link href={`/athletes/${workout.athletes.id}`} className="hover:underline">
+                    {workout.athletes.first_name} {workout.athletes.last_name}
+                  </Link>
+                )}
+              </>
+            )}
             {workout.programs?.name && (
               <Link href={`/programs/${workout.program_id}`} className="hover:underline">
                 {workout.programs.name}
