@@ -2,7 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { JOURNAL_COLUMNS, JOURNAL_LOOKBACK_DAYS, journalSleepSummary, journalYesAnswers } from "@/lib/journal";
 import { today } from "@/lib/program-dates";
 import { createClient } from "@/lib/supabase/server";
@@ -48,14 +51,23 @@ export default async function AthleteJournalPage({ searchParams }: { searchParam
         </div>
         <Card>
           <CardContent className="pt-6">
-            <JournalForm entryOn={entryOn} entry={entry} />
+            <JournalForm key={entryOn} entryOn={entryOn} entry={entry} />
           </CardContent>
         </Card>
-        {entryOn !== todayIso && (
-          <Link href="/athlete/journal" className="text-sm text-muted-foreground hover:text-foreground">
-            Back to today
-          </Link>
-        )}
+        <form action="/athlete/journal" className="flex items-end gap-2">
+          <div className="grid gap-1.5">
+            <Label htmlFor="journal_date">Fill in another day</Label>
+            <Input id="journal_date" name="date" type="date" min={earliestIso} max={todayIso} defaultValue={entryOn} required />
+          </div>
+          <Button type="submit" variant="outline">
+            Open
+          </Button>
+          {entryOn !== todayIso && (
+            <Button asChild variant="ghost">
+              <Link href="/athlete/journal">Today</Link>
+            </Button>
+          )}
+        </form>
       </section>
 
       {past.length > 0 && (
