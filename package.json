@@ -10,8 +10,10 @@
     "demo:reset": "node --env-file=.env.local scripts/demo-data.mjs"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^4.0.122",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.119.2",
+    "ai": "^7.0.179",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.2",
     "lucide-react": "^1.77.0",
