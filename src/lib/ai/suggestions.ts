@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { movementGuideEntry } from "./movement-guides";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { addDays, totals } from "@/lib/nutrition";
@@ -9,7 +8,19 @@ import { fromKgPrecise, toKg } from "@/lib/units";
 import type { Database, Enums, Json, Tables } from "@/lib/supabase/database.types";
 import { getToday } from "@/lib/time-zone";
 
+import { movementGuideEntry } from "./movement-guides";
+import { ApprovalError } from "./errors";
+import {
+  applyScaleSuggestion,
+  buildScaleRequest,
+  scaleWorkoutSchema,
+  validateScaleProposal,
+} from "./scale-workout";
+import { ageOn, loadWorkoutContext } from "./workout-context";
 import { movementIdSchema } from "./movement-schema";
+
+export { ApprovalError } from "./errors";
+
 export const SUGGESTION_LABELS: Record<Enums<"suggestion_type">, string> = {
   write_workout: "Write workout",
   scale_workout: "Scale workout",
@@ -94,15 +105,14 @@ export const writeWorkoutInputSchema = z.object({
 
 type SuggestionRequest = { input: Json; system: string; prompt: string; schema?: z.ZodType };
 type AppliedTarget = { target_table: string; target_id: string };
-type SuggestionParams = {
+export type SuggestionParams = {
   athleteId: string | null;
   workoutId?: string | null;
   request?: string | null;
   scheduledOn?: string | null;
+  movementId?: string;
 };
 export type SuggestionApplyOptions = { saveAs?: "update" | "new" };
-export class ApprovalError extends Error {}
-
 type SuggestionEntry = {
   label: string;
   proposalSchema: z.ZodType;
@@ -124,18 +134,6 @@ Rules:
 - If there is a current target, change calories by no more than 15% from it.
 - If the food log shows the athlete is far from their current target, say so. The fix may be adherence, not new numbers.
 - Write the rationale for the coach in 2–4 short, plain-English sentences, citing the numbers you relied on.`;
-
-function ageOn(birthDate: string, asOf: string) {
-  const birth = new Date(`${birthDate}T00:00:00Z`);
-  const date = new Date(`${asOf}T00:00:00Z`);
-  let age = date.getUTCFullYear() - birth.getUTCFullYear();
-  if (
-    date.getUTCMonth() < birth.getUTCMonth() ||
-    (date.getUTCMonth() === birth.getUTCMonth() && date.getUTCDate() < birth.getUTCDate())
-  )
-    age -= 1;
-  return age;
-}
 
 async function buildMacroRequest(supabase: SupabaseClient<Database>, params: SuggestionParams): Promise<SuggestionRequest> {
   const { athleteId } = params;
@@ -281,14 +279,7 @@ async function buildWorkoutRequest(
   const request = params.request?.trim();
   if (!request) throw new Error("A workout request is required.");
 
-  const [{ data: coach, error: coachError }, { data: library, error: libraryError }] = await Promise.all([
-    supabase.from("coaches").select("units").maybeSingle(),
-    supabase.from("movements").select("id, name, category, measure").order("name"),
-  ]);
-  if (coachError || !coach) throw coachError ?? new Error("Coach not found.");
-  if (libraryError) throw libraryError;
-
-  const units = coach.units;
+  const { units, library } = await loadWorkoutContext(supabase);
   let workoutId: string | null = null;
   let workoutUpdatedAt: string | null = null;
   let currentWorkout: Json | null = null;
@@ -462,7 +453,13 @@ export const SUGGESTION_REGISTRY: Record<Enums<"suggestion_type">, SuggestionEnt
     validate: validateWorkoutProposal,
     apply: applyWorkoutSuggestion,
   },
-  scale_workout: { label: SUGGESTION_LABELS.scale_workout, proposalSchema: z.unknown() },
+  scale_workout: {
+    label: SUGGESTION_LABELS.scale_workout,
+    proposalSchema: scaleWorkoutSchema,
+    buildRequest: buildScaleRequest,
+    validate: validateScaleProposal,
+    apply: applyScaleSuggestion,
+  },
   adjust_macros: {
     label: SUGGESTION_LABELS.adjust_macros,
     proposalSchema: adjustMacrosSchema,

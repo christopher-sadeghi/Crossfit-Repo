@@ -382,7 +382,7 @@ export async function runChatWithClient(supabase: Supabase, opts: ChatOptions): 
   }
   const reserved = await countAiUsageToday(supabase);
   if (!reserved.error && reserved.count > limit) {
-    await supabase.from("ai_chat_messages").delete().eq("id", userMessage.id);
+    await supabase.from("ai_chat_messages").update({ cleared: true }).eq("id", userMessage.id);
     return { error: aiLimitMessage(limit) };
   }
 
