@@ -158,7 +158,9 @@ export default async function SuggestionPage({ params }: Props) {
         </Card>
       )}
 
-      {!macrosType && <p className="text-sm text-muted-foreground">This suggestion type isn&apos;t ready yet.</p>}
+      {suggestion.suggestion_type === "movement_guide" && suggestion.input && typeof suggestion.input === "object" && !Array.isArray(suggestion.input) && typeof suggestion.input.movement_id === "string" ? (
+        <Link href={`/programs/movements/${encodeURIComponent(suggestion.input.movement_id)}`} className="underline underline-offset-4">Review on the movement page</Link>
+      ) : !macrosType && <p className="text-sm text-muted-foreground">This suggestion type isn&apos;t ready yet.</p>}
     </>
   );
 }

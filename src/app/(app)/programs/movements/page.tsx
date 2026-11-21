@@ -83,7 +83,7 @@ export default async function MovementsPage({ searchParams }: Props) {
                 {movements.map((m) => (
                   <TableRow key={m.id}>
                     <TableCell className="pl-4 font-medium">
-                      {m.name} {m.coach_id && <Badge variant="outline">Custom</Badge>}
+                      <Link href={`/programs/movements/${m.id}`} className="hover:underline">{m.name}</Link> {m.coach_id && <Badge variant="outline">Custom</Badge>}
                     </TableCell>
                     <TableCell>{CATEGORY_LABELS[m.category]}</TableCell>
                     <TableCell>{MEASURE_LABELS[m.measure]}</TableCell>
