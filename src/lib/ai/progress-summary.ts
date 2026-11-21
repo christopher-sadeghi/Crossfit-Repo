@@ -46,6 +46,7 @@ Rules:
 - Each goal note is one plain-English sentence that cites the numbers (start, current, target, date) exactly as given.
 - The summary is 2–4 short sentences for the coach about overall progress, including training consistency, body weight trend, and nutrition adherence when there is data. If there are no goals, say so and summarise the rest.
 - Values are already formatted in the coach's units; repeat them as given.
+- Keep the whole note (summary plus all goal notes) under 1,500 characters; with many goals, keep each goal note very short.
 - This is general fitness coaching, not medical advice. Never diagnose.`;
 
 async function buildRequest(supabase: SupabaseClient<Database>, { athleteId }: { athleteId: string | null }) {
@@ -154,6 +155,13 @@ function validate(proposal: unknown, input: Json) {
     throw new Error("summary must cover each goal exactly once");
 }
 
+/** Rejects AI output that could never fit in the athlete's notes, so the coach is never left with an unsaveable draft. */
+function validateGenerated(proposal: unknown, input: Json) {
+  validate(proposal, input);
+  if (progressNote(progressSummarySchema.parse(proposal), input).length > NOTES_MAX)
+    throw new Error(`progress note is longer than ${NOTES_MAX} characters`);
+}
+
 /** Header and goal lines that wrap the summary in the athlete's coach notes. */
 export function progressNoteParts(summary: ProgressSummary, input: Json) {
   const parsed = progressSummaryInputSchema.safeParse(input);
@@ -205,6 +213,6 @@ export const progressSummaryEntry = {
   label: "Progress summary",
   proposalSchema: progressSummarySchema,
   buildRequest,
-  validate,
+  validate: validateGenerated,
   apply,
 };
