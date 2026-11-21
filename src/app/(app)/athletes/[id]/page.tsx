@@ -228,7 +228,10 @@ export default async function AthletePage({ params, searchParams }: Props) {
           </ListCard>
         </TabsContent>
 
-        <TabsContent value="nutrition">
+        <TabsContent value="nutrition" className="grid gap-4">
+          <Button variant="outline" className="justify-self-start" asChild>
+            <Link href={`/nutrition/${athlete.id}`}>Open food log & targets</Link>
+          </Button>
           <ListCard empty="No food logged in the last 7 days." show={dayRows.length > 0} title={target ? `Target: ${target.calories} kcal · P ${target.protein_g}g · C ${target.carbs_g}g · F ${target.fat_g}g` : "No macro target set"}>
             <Table>
               <TableHeader>
