@@ -2,15 +2,20 @@ import { CalendarDays } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { scaleWorkoutDetailsSchema } from "@/lib/ai/scale-workout";
 import { SCHEDULE_LABEL, loadAthleteSchedule } from "@/lib/athlete-schedule";
-import { today } from "@/lib/program-dates";
+import { getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
-import { formatDate } from "@/lib/units";
+import { feedbackSummary } from "@/lib/feedback";
+import { formatDate, formatScore } from "@/lib/units";
 import { getViewer } from "@/lib/viewer";
 
-import { formatHeadline, Whiteboard, type WhiteboardWorkout } from "../(app)/programs/workouts/whiteboard";
+import { formatHeadline, formatMovementLine, Whiteboard, type WhiteboardWorkout } from "../(app)/programs/workouts/whiteboard";
+import { AthleteResultForm } from "./log/[workoutId]/result-form";
+import { ScrollIntoView } from "./scroll-into-view";
 
 type TodayWorkout = WhiteboardWorkout & {
   id: string;
@@ -30,14 +35,15 @@ type TodayWorkout = WhiteboardWorkout & {
   }[];
 };
 
-export default async function AthleteTodayPage() {
+export default async function AthleteTodayPage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
+  const { saved } = await searchParams;
   const viewer = await getViewer();
   if (!viewer) redirect("/login");
   if (viewer.kind === "coach") redirect("/");
   if (viewer.kind === "none") redirect("/no-access");
 
   const supabase = await createClient();
-  const currentDate = today();
+  const currentDate = await getToday();
   const recentStart = new Date(`${currentDate}T00:00:00Z`);
   recentStart.setUTCDate(recentStart.getUTCDate() - 7);
   const recentStartIso = recentStart.toISOString().slice(0, 10);
@@ -70,7 +76,9 @@ export default async function AthleteTodayPage() {
         supabase.auth.getClaims(),
         supabase
           .from("workout_results")
-          .select("id, workout_id, performed_on, logged_by, created_at")
+          .select(
+            "id, workout_id, performed_on, logged_by, created_at, time_seconds, rounds, reps, load_kg, is_rx, notes, rpe, energy, sleep_hours, soreness",
+          )
           .eq("athlete_id", viewer.athleteId)
           .in("workout_id", workoutIds)
           .order("created_at", { ascending: false }),
@@ -99,12 +107,18 @@ export default async function AthleteTodayPage() {
   const { data: scalings } = todayWorkoutIds.length
     ? await supabase
         .from("athlete_workout_scalings")
-        .select("workout_id, modifications")
+        .select("workout_id, modifications, details")
         .eq("athlete_id", viewer.athleteId)
         .in("workout_id", todayWorkoutIds)
     : { data: [] };
+  const { data: todayJournal } = await supabase
+    .from("athlete_journal_entries")
+    .select("entry_on")
+    .eq("athlete_id", viewer.athleteId)
+    .eq("entry_on", currentDate)
+    .maybeSingle();
   const scalingByWorkout = new Map(
-    (scalings ?? []).map((scaling) => [scaling.workout_id, scaling.modifications]),
+    (scalings ?? []).map((scaling) => [scaling.workout_id, scaling]),
   );
 
   return (
@@ -122,29 +136,81 @@ export default async function AthleteTodayPage() {
                 name: movement?.name ?? "",
               }));
             const scaling = scalingByWorkout.get(workout.id);
-            const result = todayResultForWorkout(workout);
+            const scalingDetails = scaling ? scaleWorkoutDetailsSchema.safeParse(scaling.details) : null;
+            const todayResult = todayResultForWorkout(workout);
 
             return (
               <div key={workout.id} className="grid gap-3">
                 <p className="text-sm text-muted-foreground">{SCHEDULE_LABEL(item)}</p>
                 <Whiteboard workout={workout} movements={movements} units={viewer.units} howToHref={(id) => `/athlete/movements/${id}`} />
-                <Button asChild>
-                  <Link
-                    href={
-                      result
-                        ? `/athlete/log/${result.workout_id}?result=${result.id}`
-                        : `/athlete/log/${workout.id}`
-                    }
-                  >
-                    {result ? "Edit result" : "Log result"}
-                  </Link>
-                </Button>
                 {scaling && (
                   <Card>
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm">Your scaling</CardTitle>
                     </CardHeader>
-                    <CardContent className="whitespace-pre-line text-sm">{scaling}</CardContent>
+                    <CardContent className="grid gap-3 text-sm">
+                      <p className="whitespace-pre-line">{scaling.modifications}</p>
+                      {scalingDetails?.success && (
+                        <ul className="grid gap-2">
+                          {scalingDetails.data.movements.map((movement, index) => (
+                            <li key={`${movement.movement_id}-${index}`}>
+                              <p>{formatMovementLine({
+                                name: movement.movement_name,
+                                sets: movement.sets,
+                                reps: movement.reps,
+                                load_kg: movement.load_kg,
+                                distance_m: movement.distance_m,
+                                calories: movement.calories,
+                                duration_seconds: movement.duration_seconds,
+                                notes: null,
+                              }, viewer.units)}</p>
+                              <p className="text-xs text-muted-foreground">{movement.reason}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+                {todayResult ? (
+                  <Card id={`result-${workout.id}`} className="scroll-mt-4">
+                    {saved === workout.id && <ScrollIntoView targetId={`result-${workout.id}`} />}
+                    <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
+                      <CardTitle className="text-sm">Your result</CardTitle>
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={`/athlete/log/${todayResult.workout_id}?result=${todayResult.id}`}>Edit result</Link>
+                      </Button>
+                    </CardHeader>
+                    <CardContent className="grid gap-1 text-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{formatScore(todayResult, viewer.units)}</span>
+                        <Badge variant={todayResult.is_rx ? "default" : "outline"}>
+                          {todayResult.is_rx ? "Rx" : "Scaled"}
+                        </Badge>
+                      </div>
+                      {feedbackSummary(todayResult) && (
+                        <p className="text-muted-foreground">{feedbackSummary(todayResult)}</p>
+                      )}
+                      {todayResult.notes && <p className="text-muted-foreground">{todayResult.notes}</p>}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">Log your result</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <AthleteResultForm
+                        workoutId={workout.id}
+                        workoutType={workout.workout_type}
+                        today={currentDate}
+                        minDate={currentDate}
+                        defaultDate={currentDate}
+                        units={viewer.units}
+                        existingResult={null}
+                        inline
+                      />
+                    </CardContent>
                   </Card>
                 )}
               </div>
@@ -158,6 +224,20 @@ export default async function AthleteTodayPage() {
           </Card>
         )}
       </section>
+
+      <Card>
+        <CardContent className="flex items-center justify-between gap-3 py-4">
+          <div className="min-w-0">
+            <p className="font-medium">Daily journal</p>
+            <p className="text-xs text-muted-foreground">
+              {todayJournal ? "Logged for today." : "Sleep and habits, about 30 seconds. Optional."}
+            </p>
+          </div>
+          <Button asChild size="sm" variant={todayJournal ? "outline" : "default"}>
+            <Link href="/athlete/journal">{todayJournal ? "Edit" : "Fill in"}</Link>
+          </Button>
+        </CardContent>
+      </Card>
 
       {recentWithoutResults.length > 0 && (
         <section className="grid gap-3">

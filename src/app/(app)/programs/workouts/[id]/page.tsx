@@ -6,10 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RequestWorkoutSuggestionForm } from "@/components/suggestions/suggestion-forms";
+import { RemoveWorkoutScalingForm, ScaleWorkoutRequestForm } from "@/components/suggestions/scale-workout-controls";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { scaleWorkoutDetailsSchema } from "@/lib/ai/scale-workout";
 import { getCoach } from "@/lib/coach";
 import { createClient } from "@/lib/supabase/server";
-import { today } from "@/lib/program-dates";
+import { getToday } from "@/lib/time-zone";
 import { compareScores } from "@/lib/results";
 import { formatDate, formatScore } from "@/lib/units";
 
@@ -21,7 +23,7 @@ import { WorkoutButtons } from "../workout-buttons";
 export default async function WorkoutPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-  const [coach, { data: workout }, { data: resultRows }, { data: athletes }] = await Promise.all([
+  const [coach, { data: workout }, { data: resultRows }, { data: athletes }, { data: scalingRows }] = await Promise.all([
     getCoach(),
     supabase
       .from("workouts")
@@ -31,9 +33,14 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
       .maybeSingle(),
     supabase
       .from("workout_results")
-      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, logged_by, athletes(id, first_name, last_name)")
+      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, logged_by, rpe, athletes(id, first_name, last_name, user_id)")
       .eq("workout_id", id),
     supabase.from("athletes").select("id, first_name, last_name").eq("status", "active").order("first_name").order("last_name"),
+    supabase
+      .from("athlete_workout_scalings")
+      .select("id, athlete_id, modifications, details")
+      .eq("workout_id", id)
+      .order("updated_at", { ascending: false }),
   ]);
   if (!workout) notFound();
 
@@ -41,7 +48,18 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
   const results = (resultRows ?? []).sort(compareScores(workout.workout_type));
   const resultCount = results.length;
 
-  const movements = workout.workout_movements.map(({ movements: mv, ...m }) => ({ ...m, movement_id: mv?.id, name: mv?.name ?? "" }));
+  const movements = workout.workout_movements.map(({ movements: mv, ...m }) => ({
+    ...m,
+    movement_id: mv?.id,
+    name: mv?.name ?? "",
+  }));
+  const scalingAthleteIds = [...new Set((scalingRows ?? []).map((row) => row.athlete_id))];
+  const { data: scalingAthletes } = scalingAthleteIds.length
+    ? await supabase.from("athletes").select("id, first_name, last_name").in("id", scalingAthleteIds)
+    : { data: [] };
+  const scalingAthleteNames = new Map(
+    (scalingAthletes ?? []).map((athlete) => [athlete.id, `${athlete.first_name} ${athlete.last_name}`]),
+  );
 
   return (
     <>
@@ -93,6 +111,23 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
           <RequestWorkoutSuggestionForm workoutId={workout.id} />
         </CardContent>
       </Card>
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Scale for athlete…</CardTitle>
+          <p className="text-sm text-muted-foreground">Review the athlete-specific proposal before saving it.</p>
+        </CardHeader>
+        <CardContent>
+          <ScaleWorkoutRequestForm
+            workoutId={workout.id}
+            athletes={(athletes ?? []).map((athlete) => ({ id: athlete.id, name: `${athlete.first_name} ${athlete.last_name}` }))}
+            lockedAthlete={
+              workout.athlete_id
+                ? { id: workout.athlete_id, name: workout.athletes ? `${workout.athletes.first_name} ${workout.athletes.last_name}` : "Assigned athlete" }
+                : null
+            }
+          />
+        </CardContent>
+      </Card>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,42rem)_1fr]">
         <Whiteboard workout={workout} movements={movements} units={units} howToHref={(id) => `/programs/movements/${id}`} />
         <Card className="content-start">
@@ -104,7 +139,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
               workoutId={workout.id}
               workoutType={workout.workout_type}
               units={units}
-              today={today()}
+              today={await getToday()}
               athletes={(athletes ?? []).map((a) => ({ id: a.id, name: `${a.first_name} ${a.last_name}` }))}
             />
           </CardContent>
@@ -124,6 +159,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
                   <TableHead>Athlete</TableHead>
                   <TableHead>Score</TableHead>
                   <TableHead>Rx / Scaled</TableHead>
+                  <TableHead>Effort</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Notes</TableHead>
                   <TableHead className="w-12" />
@@ -144,13 +180,14 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
                           ) : (
                             name
                           )}
-                          {r.logged_by !== coach?.id && <Badge variant="secondary">Athlete-logged</Badge>}
+                          {r.logged_by != null && r.logged_by !== coach?.id && <Badge variant="secondary">Logged by athlete</Badge>}
                         </div>
                       </TableCell>
                       <TableCell>{formatScore(r, units)}</TableCell>
                       <TableCell>
                         <Badge variant={r.is_rx ? "default" : "outline"}>{r.is_rx ? "Rx" : "Scaled"}</Badge>
                       </TableCell>
+                      <TableCell className="text-muted-foreground">{r.rpe != null ? `RPE ${r.rpe}/10` : ""}</TableCell>
                       <TableCell>{formatDate(r.performed_on)}</TableCell>
                       <TableCell className="max-w-xs truncate text-muted-foreground">{r.notes ?? ""}</TableCell>
                       <TableCell>
@@ -164,6 +201,26 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
           ) : (
             <p className="p-8 text-center text-muted-foreground">No results logged yet.</p>
           )}
+        </CardContent>
+      </Card>
+      <Card className="mt-6">
+        <CardHeader><CardTitle>Scaled versions</CardTitle></CardHeader>
+        <CardContent className="grid gap-4">
+          {(scalingRows ?? []).length ? (scalingRows ?? []).map((scaling) => {
+            const details = scaleWorkoutDetailsSchema.safeParse(scaling.details);
+            const suggestionId = details.success ? details.data.suggestion_id : null;
+            const athleteName = scalingAthleteNames.get(scaling.athlete_id) ?? "Athlete";
+            return (
+              <div key={scaling.id} className="flex flex-wrap items-start justify-between gap-4 border-b pb-4 last:border-0 last:pb-0">
+                <div className="grid gap-1">
+                  <Link href={`/athletes/${scaling.athlete_id}`} className="font-medium hover:underline">{athleteName}</Link>
+                  <p className="whitespace-pre-line text-sm text-muted-foreground">{scaling.modifications}</p>
+                  {suggestionId && <Link href={`/suggestions/${suggestionId}`} className="text-sm underline">View AI suggestion</Link>}
+                </div>
+                <RemoveWorkoutScalingForm id={scaling.id} />
+              </div>
+            );
+          }) : <p className="text-sm text-muted-foreground">No scaled versions yet.</p>}
         </CardContent>
       </Card>
     </>

@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { addDays } from "@/lib/nutrition";
-import { today } from "@/lib/program-dates";
+import { getToday } from "@/lib/time-zone";
 import { formatGoalValue, goalProgress, TRACKING_LABELS } from "@/lib/progress";
 import type { Database, Json, Tables } from "@/lib/supabase/database.types";
 import { formatDate } from "@/lib/units";
@@ -51,7 +51,7 @@ Rules:
 
 async function buildRequest(supabase: SupabaseClient<Database>, { athleteId }: { athleteId: string | null }) {
   if (!athleteId) throw new Error("Athlete not found.");
-  const asOf = today();
+  const asOf = await getToday();
   const [
     { data: coach, error: coachError },
     { data: athlete, error: athleteError },

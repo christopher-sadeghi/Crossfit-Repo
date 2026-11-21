@@ -7,6 +7,7 @@ import { z } from "zod";
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { buildScore, feedbackFields, scoreFields } from "@/lib/result-score";
 import { createClient } from "@/lib/supabase/server";
+import { fromKgPrecise } from "@/lib/units";
 import { getViewer } from "@/lib/viewer";
 
 const resultSchema = z.object({
@@ -17,6 +18,7 @@ const resultSchema = z.object({
   is_rx: z.enum(["rx", "scaled"], { message: "Choose Rx or Scaled." }),
   notes: z.string().trim().max(500).transform((v) => v || null),
   ...feedbackFields,
+  return_to: z.enum(["/athlete", "/athlete/history"]).catch("/athlete/history"),
 });
 
 const uuidSchema = z.string().uuid();
@@ -58,6 +60,14 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
 
   const scoreResult = buildScore(r, workout.workout_type, viewer.units);
   if ("error" in scoreResult) return failure(formData, scoreResult.error);
+  const score = { ...scoreResult.score };
+  if (r.result_id && score.load_kg != null) {
+    // Keep the stored load when the athlete didn't change the value the edit form showed.
+    const { data: existing } = await supabase.from("workout_results").select("load_kg").eq("id", r.result_id).maybeSingle();
+    const existingKg = existing?.load_kg == null ? null : Number(existing.load_kg);
+    if (existingKg != null && Number(formData.get("load")) === fromKgPrecise(existingKg, viewer.units))
+      score.load_kg = existingKg;
+  }
 
   const values = {
     workout_id: r.workout_id,
@@ -65,14 +75,12 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
     coach_id: viewer.coachId,
     logged_by: loggedBy,
     performed_on: r.performed_on,
-    ...scoreResult.score,
+    ...score,
     is_rx: r.is_rx === "rx",
     notes: r.notes,
     rpe: r.rpe,
     energy: r.energy,
-    sleep_hours: r.sleep_hours,
     soreness: r.soreness,
-    pain_notes: r.pain_notes,
   };
 
   if (r.result_id) {
@@ -95,7 +103,7 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
     revalidateResultPaths(data.workout_id, data.athlete_id);
   }
 
-  redirect("/athlete/history");
+  redirect(r.return_to === "/athlete" ? `/athlete?saved=${r.workout_id}` : r.return_to);
 }
 
 export async function deleteAthleteResult(id: string): Promise<FormState> {

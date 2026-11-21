@@ -1,16 +1,27 @@
 import { z } from "zod";
-import { ApprovalError } from "./errors";
-import { foodAverages, trainingVolume, weightTrend } from "./athlete-context";
-import { movementGuideEntry } from "./movement-guides";
-import { progressSummaryEntry } from "./progress-summary";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { addDays } from "@/lib/nutrition";
 import { applyTarget } from "@/lib/nutrition-targets";
-import { today } from "@/lib/program-dates";
 import { WORKOUT_TYPES } from "@/app/(app)/programs/options";
 import { fromKgPrecise, toKg } from "@/lib/units";
 import type { Database, Enums, Json, Tables } from "@/lib/supabase/database.types";
+import { getToday } from "@/lib/time-zone";
+
+import { movementGuideEntry } from "./movement-guides";
+import { ApprovalError } from "./errors";
+import {
+  applyScaleSuggestion,
+  buildScaleRequest,
+  scaleWorkoutSchema,
+  validateScaleProposal,
+} from "./scale-workout";
+import { ageOn, loadWorkoutContext } from "./workout-context";
+import { movementIdSchema } from "./movement-schema";
+import { foodAverages, trainingVolume, weightTrend } from "./athlete-context";
+import { progressSummaryEntry } from "./progress-summary";
+
+export { ApprovalError } from "./errors";
 
 export const SUGGESTION_LABELS: Record<Enums<"suggestion_type">, string> = {
   write_workout: "Write workout",
@@ -28,6 +39,17 @@ export const adjustMacrosSchema = z.object({
   rationale: z.string().min(1).max(1000),
 });
 
+const writeWorkoutMovementSchema = z.object({
+  movement_id: z.string(),
+  sets: z.number().int().min(1).max(100).nullable(),
+  reps: z.number().int().min(1).max(1000).nullable(),
+  load: z.number().min(0).max(2000).nullable(),
+  distance_m: z.number().min(1).max(100_000).nullable(),
+  calories: z.number().int().min(1).max(1000).nullable(),
+  duration_seconds: z.number().int().min(1).max(7200).nullable(),
+  notes: z.string().max(200).nullable(),
+});
+
 export const writeWorkoutSchema = z.object({
   title: z.string().min(1).max(80),
   workout_type: z.enum(WORKOUT_TYPES),
@@ -36,18 +58,7 @@ export const writeWorkoutSchema = z.object({
   description: z.string().max(1000).nullable(),
   notes: z.string().max(1000).nullable(),
   movements: z
-    .array(
-      z.object({
-        movement_id: z.string(),
-        sets: z.number().int().min(1).max(100).nullable(),
-        reps: z.number().int().min(1).max(1000).nullable(),
-        load: z.number().min(0).max(2000).nullable(),
-        distance_m: z.number().min(1).max(100_000).nullable(),
-        calories: z.number().int().min(1).max(1000).nullable(),
-        duration_seconds: z.number().int().min(1).max(7200).nullable(),
-        notes: z.string().max(200).nullable(),
-      }),
-    )
+    .array(writeWorkoutMovementSchema)
     .min(1)
     .max(15),
   rationale: z.string().min(1).max(1000),
@@ -92,13 +103,15 @@ export const writeWorkoutInputSchema = z.object({
     .optional(),
 });
 
-export { ApprovalError };
-
-type SuggestionRequest = { input: Json; system: string; prompt: string };
+type SuggestionRequest = { input: Json; system: string; prompt: string; schema?: z.ZodType };
 type AppliedTarget = { target_table: string; target_id: string };
-type SuggestionParams = { athleteId: string | null; workoutId?: string | null; request?: string | null };
+export type SuggestionParams = {
+  athleteId: string | null;
+  workoutId?: string | null;
+  request?: string | null;
+  movementId?: string;
+};
 export type SuggestionApplyOptions = { saveAs?: "update" | "new" };
-
 type SuggestionEntry = {
   label: string;
   proposalSchema: z.ZodType;
@@ -129,22 +142,10 @@ Rules:
 - This is general fitness guidance, not medical advice. Never diagnose or give medical or clinical nutrition advice.
 - Write the rationale for the coach in 2–4 short, plain-English sentences, citing the numbers you relied on (goal, weight trend, intake, training).`;
 
-function ageOn(birthDate: string, asOf: string) {
-  const birth = new Date(`${birthDate}T00:00:00Z`);
-  const date = new Date(`${asOf}T00:00:00Z`);
-  let age = date.getUTCFullYear() - birth.getUTCFullYear();
-  if (
-    date.getUTCMonth() < birth.getUTCMonth() ||
-    (date.getUTCMonth() === birth.getUTCMonth() && date.getUTCDate() < birth.getUTCDate())
-  )
-    age -= 1;
-  return age;
-}
-
 async function buildMacroRequest(supabase: SupabaseClient<Database>, params: SuggestionParams): Promise<SuggestionRequest> {
   const { athleteId } = params;
   if (!athleteId) throw new Error("Athlete not found.");
-  const asOf = today();
+  const asOf = await getToday();
   const [
     { data: athlete, error: athleteError },
     { data: target, error: targetError },
@@ -234,14 +235,7 @@ async function buildWorkoutRequest(
   const request = params.request?.trim();
   if (!request) throw new Error("A workout request is required.");
 
-  const [{ data: coach, error: coachError }, { data: library, error: libraryError }] = await Promise.all([
-    supabase.from("coaches").select("units").maybeSingle(),
-    supabase.from("movements").select("id, name, category, measure").order("name"),
-  ]);
-  if (coachError || !coach) throw coachError ?? new Error("Coach not found.");
-  if (libraryError) throw libraryError;
-
-  const units = coach.units;
+  const { units, library } = await loadWorkoutContext(supabase);
   let workoutId: string | null = null;
   let workoutUpdatedAt: string | null = null;
   let currentWorkout: Json | null = null;
@@ -287,6 +281,12 @@ async function buildWorkoutRequest(
     input,
     system: WRITE_WORKOUT_SYSTEM.replace("<units>", units),
     prompt: `Request: ${request}\n\nProgram context (JSON):\n${JSON.stringify(input, null, 2)}\n\nReturn a complete WOD proposal.`,
+    schema: writeWorkoutSchema.extend({
+      movements: z
+        .array(writeWorkoutMovementSchema.extend({ movement_id: movementIdSchema((library ?? []).map(({ id }) => id)) }))
+        .min(1)
+        .max(15),
+    }),
   };
 }
 
@@ -368,7 +368,7 @@ async function applyMacroSuggestion(
 ): Promise<AppliedTarget> {
   const parsed = adjustMacrosSchema.parse(final);
   if (!suggestion.athlete_id) throw new Error("This suggestion has no athlete.");
-  const startDate = today();
+  const startDate = await getToday();
   const { data: openTarget, error: targetError } = await supabase
     .from("nutrition_targets")
     .select("start_date")
@@ -403,7 +403,13 @@ export const SUGGESTION_REGISTRY: Record<Enums<"suggestion_type">, SuggestionEnt
     validate: validateWorkoutProposal,
     apply: applyWorkoutSuggestion,
   },
-  scale_workout: { label: SUGGESTION_LABELS.scale_workout, proposalSchema: z.unknown() },
+  scale_workout: {
+    label: SUGGESTION_LABELS.scale_workout,
+    proposalSchema: scaleWorkoutSchema,
+    buildRequest: buildScaleRequest,
+    validate: validateScaleProposal,
+    apply: applyScaleSuggestion,
+  },
   adjust_macros: {
     label: SUGGESTION_LABELS.adjust_macros,
     proposalSchema: adjustMacrosSchema,

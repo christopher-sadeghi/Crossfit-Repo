@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/layout/page-header";
-import { today } from "@/lib/program-dates";
+import { getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
 
 import { loadBuilderData } from "../../load-builder-data";
@@ -25,7 +25,7 @@ export default async function EditWorkoutPage({ params }: { params: Promise<{ id
       ? {
           athleteId: workout.athlete_id,
           athleteName: `${workout.athletes.first_name} ${workout.athletes.last_name}`,
-          date: workout.scheduled_on ?? today(),
+          date: workout.scheduled_on ?? await getToday(),
         }
       : undefined;
 

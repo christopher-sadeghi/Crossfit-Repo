@@ -3,6 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database, Tables } from "@/lib/supabase/database.types";
 
+import type { SuggestionParams } from "./suggestions";
+
 const instruction = z.string().trim().min(1).max(200).refine(
   (value) => !/http|www\.|[a-z][a-z\d+.-]*:\/\/|\b(?:mailto|tel|data):|\b[\w-]+\.[a-z]{2,}(?:\b|\/)/i.test(value),
   "Use plain text without URLs or links.",
@@ -15,7 +17,7 @@ export const movementGuideSchema = z.object({
   harder_versions: z.array(instruction).min(1).max(4),
 });
 
-async function buildRequest(supabase: SupabaseClient<Database>, { movementId }: { athleteId: string | null; movementId?: string }) {
+async function buildRequest(supabase: SupabaseClient<Database>, { movementId }: SuggestionParams) {
   if (!movementId) throw new Error("Movement not found.");
   const { data: movement, error } = await supabase.from("movements")
     .select("id, name, category, measure").eq("id", movementId).single();

@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { RequestMacroSuggestionForm } from "@/components/suggestions/suggestion-forms";
 import { MACRO_DISCLAIMER } from "@/lib/ai/suggestions";
 import { addDays, MEALS, onTarget, targetOn, totals, type Macros } from "@/lib/nutrition";
-import { today } from "@/lib/program-dates";
+import { getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/units";
 
@@ -21,7 +21,7 @@ const weekday = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString("en-
 
 export default async function AthleteNutritionPage({ params, searchParams }: Props) {
   const [{ athleteId }, { date: rawDate }] = await Promise.all([params, searchParams]);
-  const now = today();
+  const now = await getToday();
   const date = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) && !Number.isNaN(Date.parse(rawDate)) ? rawDate : now;
   const weekStart = addDays(date, -6);
   const week = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));

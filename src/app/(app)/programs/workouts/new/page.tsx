@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { createClient } from "@/lib/supabase/server";
-import { today } from "@/lib/program-dates";
+import { getToday } from "@/lib/time-zone";
 
 import { loadBuilderData } from "../load-builder-data";
 import { WodBuilder, type OneOff, type Placement } from "../wod-builder";
@@ -39,7 +39,7 @@ async function loadOneOff(athleteId: string, date?: string): Promise<OneOff | nu
   const defaultDate =
     requestedDate && !Number.isNaN(requestedDate.getTime()) && requestedDate.toISOString().slice(0, 10) === date
       ? date
-      : today();
+      : await getToday();
   return {
     athleteId: athlete.id,
     athleteName: `${athlete.first_name} ${athlete.last_name}`,

@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getCoach } from "@/lib/coach";
 import { addDays, targetOn, totals } from "@/lib/nutrition";
-import { today } from "@/lib/program-dates";
+import { getToday } from "@/lib/time-zone";
 import { formatGoalValue, GOAL_TYPE_LABELS, goalProgress, loadPrsByMovement, TRACKING_LABELS } from "@/lib/progress";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatWeight, fromKg, type Units } from "@/lib/units";
@@ -27,7 +27,7 @@ export default async function AthleteProgressPage({ params }: Props) {
   const supabase = await createClient();
   const coach = await getCoach();
   const units: Units = coach?.units ?? "lb";
-  const now = today();
+  const now = await getToday();
   const since = addDays(now, -(MACRO_DAYS - 1));
 
   const [athleteRes, metricsRes, goalsRes, resultsRes, movementsRes, targetsRes, foodRes] = await Promise.all([
