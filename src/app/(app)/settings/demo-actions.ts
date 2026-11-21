@@ -6,7 +6,7 @@ import type { FormState } from "@/lib/auth/form-state";
 import { createClient } from "@/lib/supabase/server";
 
 export async function loadDemoData(_: FormState, formData: FormData): Promise<FormState> {
-  const reset = formData.get("reset") === "true";
+  const reset = formData.get("mode") === "reset";
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("load_demo_data", { reset });
   if (error) return { error: error.message };

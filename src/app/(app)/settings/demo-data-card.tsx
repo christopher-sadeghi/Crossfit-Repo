@@ -31,7 +31,8 @@ export function DemoDataCard({ hasAthletes }: { hasAthletes: boolean }) {
             }
           }}
         >
-          <input type="hidden" name="reset" value={String(hasAthletes)} />
+          {/* Not name="reset": that would shadow HTMLFormElement.reset(), which React calls after the action. */}
+          <input type="hidden" name="mode" value={hasAthletes ? "reset" : "load"} />
           <Button type="submit" variant={hasAthletes ? "destructive" : "default"} disabled={pending}>
             {pending ? "Loading…" : hasAthletes ? "Reset demo" : "Load demo data"}
           </Button>
