@@ -91,13 +91,15 @@ declare
     {"first": "Priya", "last": "Patel", "sex": "female", "born": "1997-11-20", "height": 160, "level": "beginner",
      "weight": 58, "trend": 0.15, "skill": "First strict pull-up", "skill_movement": "Pull-Up"},
     {"first": "Marcus", "last": "Johnson", "sex": "male", "born": "1991-01-15", "height": 178, "level": "competitor",
-     "weight": 84, "trend": 0, "skill": "25 m unbroken handstand walk", "skill_movement": "Handstand Walk"},
+     "weight": 84, "trend": 0, "skill": "25 m unbroken handstand walk", "skill_movement": "Handstand Walk",
+     "skill_metric": "unbroken distance", "skill_unit": "m", "skill_start": 10, "skill_target": 25},
     {"first": "Sofia", "last": "Rodriguez", "sex": "female", "born": "1986-05-08", "height": 168, "level": "intermediate",
      "weight": 66, "trend": -0.25,
      "injuries": "Recovering from right knee meniscus repair (cleared 4 weeks ago).",
      "scaling": "Box step-ups instead of box jumps; squat to a box at parallel; row instead of runs over 400 m."},
     {"first": "Ethan", "last": "Walker", "sex": "male", "born": "2000-09-30", "height": 175, "level": "beginner",
-     "weight": 72, "trend": 0.3, "skill": "30 unbroken double-unders", "skill_movement": "Double-Under"},
+     "weight": 72, "trend": 0.3, "skill": "30 unbroken double-unders", "skill_movement": "Double-Under",
+     "skill_metric": "unbroken reps", "skill_unit": "reps", "skill_start": 8, "skill_target": 30},
     {"first": "Hannah", "last": "Kim", "sex": "female", "born": "1993-12-01", "height": 170, "level": "advanced",
      "weight": 64, "trend": -0.1, "skill": "First bar muscle-up", "skill_movement": "Bar Muscle-Up", "achieved": true},
     {"first": "David", "last": "Okafor", "sex": "male", "born": "1983-04-22", "height": 188, "level": "intermediate",
@@ -322,7 +324,9 @@ begin
     if a ? 'skill' then
       insert into public.goals (athlete_id, title, goal_type, movement_id, metric, unit, start_value, target_value,
         target_date, status, achieved_at)
-      select v_athlete_id, a ->> 'skill', 'skill', mv.id, 'reps', 'reps', 0, 1, program_start + 56,
+      select v_athlete_id, a ->> 'skill', 'skill', mv.id,
+        coalesce(a ->> 'skill_metric', 'reps'), coalesce(a ->> 'skill_unit', 'reps'),
+        coalesce((a ->> 'skill_start')::numeric, 0), coalesce((a ->> 'skill_target')::numeric, 1), program_start + 56,
         case when (a ->> 'achieved')::boolean then 'achieved' else 'active' end::public.goal_status,
         case when (a ->> 'achieved')::boolean then now() - interval '5 days' end
       from public.movements mv where mv.coach_id is null and mv.name = a ->> 'skill_movement';
