@@ -43,7 +43,13 @@ export default async function AthletePage({ params, searchParams }: Props) {
       .eq("athlete_id", id)
       .order("performed_on", { ascending: false })
       .order("created_at", { ascending: false }),
-    supabase.from("nutrition_targets").select("*").eq("athlete_id", id).is("end_date", null).maybeSingle(),
+    supabase
+      .from("nutrition_targets")
+      .select("*")
+      .eq("athlete_id", id)
+      .lte("start_date", today())
+      .or(`end_date.is.null,end_date.gte.${today()}`)
+      .maybeSingle(),
     supabase.from("food_logs").select("logged_on, calories, protein_g, carbs_g, fat_g").eq("athlete_id", id).gte("logged_on", since),
     supabase.from("goals").select("id, title, goal_type, metric, unit, start_value, target_value, target_date, status").eq("athlete_id", id).order("status").order("target_date"),
     supabase.from("ai_suggestions").select("id, suggestion_type, status, created_at, decided_at").eq("athlete_id", id).order("created_at", { ascending: false }),
