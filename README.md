@@ -31,3 +31,12 @@ TypeScript types for the tables are in `src/lib/supabase/database.types.ts`. Reg
 ```bash
 npx supabase gen types typescript --project-id <project-ref> --schema public > src/lib/supabase/database.types.ts
 ```
+
+## Authentication
+
+Coaches sign up and log in with email and password (Supabase Auth). Logged-out visitors are redirected to `/login` by `src/middleware.ts`.
+
+Emails for confirming sign-up and resetting a password link to `/auth/callback`. In Supabase, open **Authentication > URL Configuration** and add these redirect URLs:
+
+- `http://localhost:3000/**` for local development.
+- Your Vercel domains, for example `https://*.vercel.app/**`, once deploys are set up.
