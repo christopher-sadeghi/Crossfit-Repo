@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import type { FormState } from "@/lib/auth/form-state";
+import { failure, type FormState } from "@/lib/auth/form-state";
 import { createClient } from "@/lib/supabase/server";
 
 const profileSchema = z.object({
@@ -15,19 +15,19 @@ const profileSchema = z.object({
 export async function updateProfile(_: FormState, formData: FormData): Promise<FormState> {
   const parsed = profileSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Please check the form." };
+    return failure(formData, parsed.error.issues[0]?.message ?? "Please check the form.");
   }
 
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   const userId = claims?.claims.sub;
-  if (!userId) return { error: "Your session has expired. Please log in again." };
+  if (!userId) return failure(formData, "Your session has expired. Please log in again.");
 
   const { error } = await supabase
     .from("coaches")
     .update({ ...parsed.data, gym_name: parsed.data.gym_name || null })
     .eq("id", userId);
-  if (error) return { error: "Couldn't save your settings. Please try again." };
+  if (error) return failure(formData, "Couldn't save your settings. Please try again.");
 
   revalidatePath("/", "layout");
   return { message: "Settings saved." };
