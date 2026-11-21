@@ -50,12 +50,16 @@ const toKg = (v: string, units: Units) => {
   return n == null ? null : Math.round((units === "lb" ? n / LB_PER_KG : n) * 100) / 100;
 };
 
+export type Placement = { program_id: string; program_name: string; week_number: number; day_number: number };
+
 export function WodBuilder({
   workout,
+  placement,
   movementOptions,
   units,
 }: {
   workout?: BuilderWorkout;
+  placement?: Placement;
   movementOptions: MovementOption[];
   units: Units;
 }) {
@@ -116,6 +120,16 @@ export function WodBuilder({
         className="grid content-start gap-5"
       >
         {workout && <input type="hidden" name="id" value={workout.id} />}
+        {placement && (
+          <>
+            <input type="hidden" name="program_id" value={placement.program_id} />
+            <input type="hidden" name="week_number" value={placement.week_number} />
+            <input type="hidden" name="day_number" value={placement.day_number} />
+            <p className="rounded-md bg-muted px-3 py-2 text-sm">
+              Adds to <strong>{placement.program_name}</strong>, week {placement.week_number}, day {placement.day_number}.
+            </p>
+          </>
+        )}
         <input type="hidden" name="movements" value={JSON.stringify(movements)} />
         <div className="grid gap-5 sm:grid-cols-[2fr_1fr_1fr_1fr]">
           <Field label="Name *" id="title">
@@ -230,7 +244,17 @@ export function WodBuilder({
             {pending ? "Saving…" : workout ? "Save changes" : "Save WOD"}
           </Button>
           <Button variant="outline" asChild>
-            <Link href={workout ? `/programs/workouts/${workout.id}` : "/programs/workouts"}>Cancel</Link>
+            <Link
+              href={
+                workout
+                  ? `/programs/workouts/${workout.id}`
+                  : placement
+                    ? `/programs/${placement.program_id}`
+                    : "/programs/workouts"
+              }
+            >
+              Cancel
+            </Link>
           </Button>
         </div>
       </form>
