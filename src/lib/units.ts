@@ -2,6 +2,10 @@ export type Units = "lb" | "kg";
 
 const LB_PER_KG = 2.20462;
 
+export function toKg(value: number, units: Units) {
+  return Math.round((units === "lb" ? value / LB_PER_KG : value) * 100) / 100;
+}
+
 export function formatWeight(kg: number | null | undefined, units: Units) {
   if (kg == null) return "—";
   const value = units === "lb" ? kg * LB_PER_KG : kg;
