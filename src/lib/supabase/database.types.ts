@@ -529,6 +529,53 @@ export type Database = {
           },
         ];
       };
+      movement_guides: {
+        Row: {
+          id: string;
+          coach_id: string;
+          movement_id: string;
+          video_url: string | null;
+          cues: string[];
+          common_mistakes: string[];
+          easier_versions: string[];
+          harder_versions: string[];
+          ai_suggestion_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          id?: string;
+          coach_id?: string;
+          movement_id: string;
+          video_url?: string | null;
+          cues?: string[];
+          common_mistakes?: string[];
+          easier_versions?: string[];
+          harder_versions?: string[];
+          ai_suggestion_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          coach_id?: string;
+          movement_id?: string;
+          video_url?: string | null;
+          cues?: string[];
+          common_mistakes?: string[];
+          easier_versions?: string[];
+          harder_versions?: string[];
+          ai_suggestion_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          { foreignKeyName: "movement_guides_coach_id_fkey"; columns: ["coach_id"]; isOneToOne: false; referencedRelation: "coaches"; referencedColumns: ["id"] },
+          { foreignKeyName: "movement_guides_movement_id_fkey"; columns: ["movement_id"]; isOneToOne: false; referencedRelation: "movements"; referencedColumns: ["id"] },
+          { foreignKeyName: "movement_guides_ai_suggestion_id_fkey"; columns: ["ai_suggestion_id"]; isOneToOne: false; referencedRelation: "ai_suggestions"; referencedColumns: ["id"] },
+        ];
+      };
       movements: {
         Row: {
           category: Database["public"]["Enums"]["movement_category"];
@@ -536,6 +583,7 @@ export type Database = {
           created_at: string;
           id: string;
           measure: Database["public"]["Enums"]["movement_measure"];
+          demo_video_url: string | null;
           name: string;
         };
         ComputedFields: never;
@@ -545,6 +593,7 @@ export type Database = {
           created_at?: string;
           id?: string;
           measure?: Database["public"]["Enums"]["movement_measure"];
+          demo_video_url?: string | null;
           name: string;
         };
         Update: {
@@ -553,6 +602,7 @@ export type Database = {
           created_at?: string;
           id?: string;
           measure?: Database["public"]["Enums"]["movement_measure"];
+          demo_video_url?: string | null;
           name?: string;
         };
         Relationships: [
@@ -1042,7 +1092,8 @@ export type Database = {
         | "write_workout"
         | "scale_workout"
         | "adjust_macros"
-        | "progress_summary";
+        | "progress_summary"
+        | "movement_guide";
       weight_unit: "lb" | "kg";
       workout_type: "for_time" | "amrap" | "emom" | "strength" | "other";
     };
@@ -1192,6 +1243,7 @@ export const Constants = {
         "failed",
       ],
       suggestion_type: [
+        "movement_guide",
         "write_workout",
         "scale_workout",
         "adjust_macros",

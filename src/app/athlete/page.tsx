@@ -30,7 +30,7 @@ type TodayWorkout = WhiteboardWorkout & {
     calories: number | null;
     duration_seconds: number | null;
     notes: string | null;
-    movements: { name: string } | null;
+    movements: { id: string; name: string } | null;
   }[];
 };
 
@@ -50,7 +50,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
     supabase,
     viewer.athleteId,
     { from: recentStartIso, to: "9999-12-31" },
-    "id, source_workout_id, title, workout_type, time_cap_seconds, rounds, description, notes, week_number, day_number, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(name))",
+    "id, source_workout_id, title, workout_type, time_cap_seconds, rounds, description, notes, week_number, day_number, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(id, name))",
   );
 
   const todayWods = scheduled
@@ -131,6 +131,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
               .sort((a, b) => a.position - b.position)
               .map(({ movements: movement, ...item }) => ({
                 ...item,
+                movement_id: movement?.id,
                 name: movement?.name ?? "",
               }));
             const scaling = scalingByWorkout.get(workout.id);
@@ -139,7 +140,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
             return (
               <div key={workout.id} className="grid gap-3">
                 <p className="text-sm text-muted-foreground">{SCHEDULE_LABEL(item)}</p>
-                <Whiteboard workout={workout} movements={movements} units={viewer.units} />
+                <Whiteboard workout={workout} movements={movements} units={viewer.units} howToHref={(id) => `/athlete/movements/${id}`} />
                 {scaling && (
                   <Card>
                     <CardHeader className="pb-2">

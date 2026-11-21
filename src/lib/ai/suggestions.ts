@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { movementGuideEntry } from "./movement-guides";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { addDays, totals } from "@/lib/nutrition";
@@ -13,6 +14,7 @@ export const SUGGESTION_LABELS: Record<Enums<"suggestion_type">, string> = {
   scale_workout: "Scale workout",
   adjust_macros: "Adjust macros",
   progress_summary: "Progress summary",
+  movement_guide: "Movement how-to",
 };
 
 export const adjustMacrosSchema = z.object({
@@ -401,6 +403,7 @@ async function applyMacroSuggestion(
 }
 
 export const SUGGESTION_REGISTRY: Record<Enums<"suggestion_type">, SuggestionEntry> = {
+  movement_guide: movementGuideEntry,
   write_workout: {
     label: SUGGESTION_LABELS.write_workout,
     proposalSchema: writeWorkoutSchema,

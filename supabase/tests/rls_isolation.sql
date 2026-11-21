@@ -207,6 +207,74 @@ begin
   assert (select count(*) from public.athlete_journal_entries) = 0, 'coach B must not see coach A athletes'' journals';
 end $$;
 
+-- Movement guides are private to the coach and readable by linked athletes.
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000a"}', true);
+insert into public.movement_guides (movement_id, cues)
+select id, array['Brace your trunk.'] from public.movements where coach_id is null limit 1;
+insert into public.movement_guides (movement_id, cues)
+values ('00000000-0000-0000-0000-0000000000a3', array['Move with control.']);
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000b"}', true);
+do $$
+declare n integer;
+begin
+  assert (select count(*) from public.movement_guides) = 0, 'coach B cannot see A guides';
+  update public.movement_guides set cues = array['hacked'];
+  get diagnostics n = row_count;
+  assert n = 0, 'coach B cannot update A guides';
+  delete from public.movement_guides;
+  get diagnostics n = row_count;
+  assert n = 0, 'coach B cannot delete A guides';
+  begin
+    insert into public.movement_guides (movement_id)
+    values ('00000000-0000-0000-0000-0000000000a3');
+    raise exception 'coach B inserted guide for A custom movement';
+  exception when insufficient_privilege then null;
+  end;
+  insert into public.movement_guides (movement_id)
+  select id from public.movements where coach_id is null limit 1;
+  begin
+    update public.movement_guides set movement_id = '00000000-0000-0000-0000-0000000000a3';
+    raise exception 'coach B updated guide to A custom movement';
+  exception when insufficient_privilege then null;
+  end;
+  delete from public.movement_guides;
+end $$;
+
+reset role;
+select set_config('request.jwt.claims', '{}', true);
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('00000000-0000-0000-0000-0000000000a4', 'athlete-a@test.local', '{}'),
+  ('00000000-0000-0000-0000-0000000000b4', 'athlete-b@test.local', '{}');
+delete from public.coaches where id in ('00000000-0000-0000-0000-0000000000a4', '00000000-0000-0000-0000-0000000000b4');
+update public.athletes set user_id = '00000000-0000-0000-0000-0000000000a4'
+where id = '00000000-0000-0000-0000-0000000000a1';
+insert into public.athletes (coach_id, user_id, first_name, last_name)
+values ('00000000-0000-0000-0000-00000000000b', '00000000-0000-0000-0000-0000000000b4', 'Blake', 'Athlete');
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a4"}', true);
+do $$
+declare n integer;
+begin
+  assert (select count(*) from public.movement_guides) = 2, 'athlete A can read coach A guides';
+  update public.movement_guides set cues = array['hacked'];
+  get diagnostics n = row_count;
+  assert n = 0, 'athlete cannot update guides';
+  delete from public.movement_guides;
+  get diagnostics n = row_count;
+  assert n = 0, 'athlete cannot delete guides';
+  begin
+    insert into public.movement_guides (coach_id, movement_id)
+    select '00000000-0000-0000-0000-00000000000a', id from public.movements where coach_id is null limit 1;
+    raise exception 'athlete inserted guide';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000b4"}', true);
+do $$ begin
+  assert (select count(*) from public.movement_guides) = 0, 'athlete B cannot read A guides';
+end $$;
+
 select 'rls_isolation: all checks passed' as result;
 
 rollback;
