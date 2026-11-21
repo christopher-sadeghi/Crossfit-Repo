@@ -24,7 +24,7 @@ import { GoalBar } from "./progress/goal-bar";
 import { formatHeadline } from "../../programs/workouts/whiteboard";
 import { LEVEL_LABELS } from "../options";
 
-const TABS = ["overview", "workouts", "nutrition", "goals", "ai"] as const;
+const TABS = ["overview", "workouts", "journal", "nutrition", "goals", "ai"] as const;
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> };
 
@@ -136,7 +136,8 @@ export default async function AthletePage({ params, searchParams }: Props) {
       </div>
 
       <Tabs defaultValue={TABS.includes(tab as (typeof TABS)[number]) ? tab : "overview"}>
-        <TabsList className="mb-4">
+        <div className="mb-4 max-w-full overflow-x-auto">
+        <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="workouts">Workouts</TabsTrigger>
           <TabsTrigger value="journal">Journal</TabsTrigger>
@@ -144,6 +145,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
           <TabsTrigger value="goals">Goals</TabsTrigger>
           <TabsTrigger value="ai">AI History</TabsTrigger>
         </TabsList>
+        </div>
 
         <TabsContent value="overview" className="grid gap-4 md:grid-cols-3">
           {attention.flagged && (
