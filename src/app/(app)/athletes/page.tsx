@@ -25,10 +25,11 @@ export default async function AthletesPage({ searchParams }: Props) {
     .eq("status", status)
     .order("first_name")
     .order("last_name");
+  // Every word must match a name or the email, so "Maya Chen" finds Maya Chen.
   // Quoted values let PostgREST accept "." and "@"; strip only characters that would break the filter.
   const term = q.trim().replace(/[",()\\%*]/g, "");
-  if (term) {
-    const like = `ilike."%${term}%"`;
+  for (const word of term.split(/\s+/).filter(Boolean)) {
+    const like = `ilike."%${word}%"`;
     query = query.or(`first_name.${like},last_name.${like},email.${like}`);
   }
   const { data: athletes = [] } = await query;
