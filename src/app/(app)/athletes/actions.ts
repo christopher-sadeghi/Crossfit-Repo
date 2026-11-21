@@ -211,3 +211,34 @@ export async function revokeAthleteAccess(
   revalidatePath(`/athletes/${parsed.data}`);
   return { message: "App access revoked." };
 }
+
+const copyProgramSchema = z.object({
+  program_id: z.string().uuid("Choose a group program."),
+  athlete_id: z.string().uuid(),
+  start_date: z.preprocess(
+    (value) => (value == null || value === "" ? null : value),
+    z.string().date("Choose a start date.").nullable(),
+  ),
+});
+
+export async function copyProgramForAthlete(_: FormState, formData: FormData): Promise<FormState> {
+  const parsed = copyProgramSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return failure(formData, parsed.error.issues[0]?.message ?? "Please check the form.");
+
+  const supabase = await createClient();
+  const { data: programId, error } = await supabase.rpc("copy_program_for_athlete", {
+    p_program_id: parsed.data.program_id,
+    p_athlete_id: parsed.data.athlete_id,
+    p_start_date: parsed.data.start_date,
+  });
+  if (error || !programId) {
+    if (error?.message.includes("start date")) {
+      return failure(formData, "Choose a start date for this personal program.");
+    }
+    return failure(formData, "Couldn't make a personal copy. Check your selection and try again.");
+  }
+
+  revalidatePath("/programs");
+  revalidatePath(`/athletes/${parsed.data.athlete_id}`);
+  redirect(`/programs/${programId}`);
+}

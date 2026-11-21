@@ -10,8 +10,9 @@ import { SUGGESTION_LABELS } from "@/lib/ai/suggestions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCoach } from "@/lib/coach";
 import { getOrigin } from "@/lib/auth/redirect";
+import { SCHEDULE_LABEL, loadAthleteSchedule } from "@/lib/athlete-schedule";
 import { feedbackSummary, needsAttention } from "@/lib/feedback";
-import { programDate, today } from "@/lib/program-dates";
+import { today } from "@/lib/program-dates";
 import { formatGoalValue, goalProgress, latestMetric } from "@/lib/progress";
 import { personalRecords } from "@/lib/results";
 import { createClient } from "@/lib/supabase/server";
@@ -19,13 +20,20 @@ import { formatDate, formatScore, formatWeight, type Units } from "@/lib/units";
 
 import { ArchiveButton } from "../archive-button";
 import { AthleteAccessCard } from "../access-card";
+import { PersonalProgramCopyForm } from "./program-copy-form";
 import { GoalBar } from "./progress/goal-bar";
-import { formatHeadline } from "../../programs/workouts/whiteboard";
+import { formatHeadline, type WhiteboardWorkout } from "../../programs/workouts/whiteboard";
 import { LEVEL_LABELS } from "../options";
 
 const TABS = ["overview", "workouts", "nutrition", "goals", "ai"] as const;
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> };
+type ProfileScheduleWorkout = WhiteboardWorkout & {
+  id: string;
+  source_workout_id: string | null;
+  week_number: number | null;
+  day_number: number | null;
+};
 
 export default async function AthletePage({ params, searchParams }: Props) {
   const [{ id }, { tab }] = await Promise.all([params, searchParams]);
@@ -34,7 +42,26 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const units: Units = coach?.units ?? "lb";
 
   const since = new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
-  const [athleteRes, metricsRes, resultsRes, targetRes, foodRes, goalsRes, aiRes, assignmentsRes, inviteRes] = await Promise.all([
+  const now = today();
+  const scheduleFromDate = new Date(`${now}T00:00:00Z`);
+  scheduleFromDate.setUTCDate(scheduleFromDate.getUTCDate() - 7);
+  const scheduleToDate = new Date(`${now}T00:00:00Z`);
+  scheduleToDate.setUTCDate(scheduleToDate.getUTCDate() + 14);
+  const scheduleFrom = scheduleFromDate.toISOString().slice(0, 10);
+  const scheduleTo = scheduleToDate.toISOString().slice(0, 10);
+  const [
+    athleteRes,
+    metricsRes,
+    resultsRes,
+    targetRes,
+    foodRes,
+    goalsRes,
+    aiRes,
+    scheduleItems,
+    inviteRes,
+    groupProgramsRes,
+    athleteAssignmentsRes,
+  ] = await Promise.all([
     supabase.from("athletes").select("*").eq("id", id).maybeSingle(),
     supabase.from("body_metrics").select("measured_on, weight_kg, body_fat_pct").eq("athlete_id", id).order("measured_on", { ascending: false }),
     supabase
@@ -53,10 +80,12 @@ export default async function AthletePage({ params, searchParams }: Props) {
     supabase.from("food_logs").select("logged_on, calories, protein_g, carbs_g, fat_g").eq("athlete_id", id).gte("logged_on", since),
     supabase.from("goals").select("id, title, goal_type, movement_id, metric, unit, start_value, target_value, target_date, status").eq("athlete_id", id).order("status").order("target_date"),
     supabase.from("ai_suggestions").select("id, suggestion_type, status, created_at, decided_at").eq("athlete_id", id).order("created_at", { ascending: false }),
-    supabase
-      .from("program_assignments")
-      .select("start_date, programs(id, name, workouts(id, title, workout_type, time_cap_seconds, rounds, week_number, day_number))")
-      .eq("athlete_id", id),
+    loadAthleteSchedule<ProfileScheduleWorkout>(
+      supabase,
+      id,
+      { from: scheduleFrom, to: scheduleTo },
+      "id, source_workout_id, title, workout_type, time_cap_seconds, rounds, week_number, day_number",
+    ),
     supabase
       .from("athlete_invites")
       .select("email, token, created_at")
@@ -64,6 +93,8 @@ export default async function AthletePage({ params, searchParams }: Props) {
       .is("accepted_at", null)
       .is("revoked_at", null)
       .maybeSingle(),
+    supabase.from("programs").select("id, name").is("athlete_id", null).order("name"),
+    supabase.from("program_assignments").select("program_id").eq("athlete_id", id),
   ]);
 
   const athlete = athleteRes.data;
@@ -78,6 +109,12 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const inviteUrl = invite ? `${await getOrigin()}/join/${invite.token}` : null;
   const goals = goalsRes.data ?? [];
   const suggestions = aiRes.data ?? [];
+  const loggedWorkoutIds = new Set(results.map((result) => result.workout_id));
+  const assignedProgramIds = new Set((athleteAssignmentsRes.data ?? []).map((assignment) => assignment.program_id));
+  const groupPrograms = (groupProgramsRes.data ?? []).map((program) => ({
+    ...program,
+    assigned: assignedProgramIds.has(program.id),
+  }));
 
   const days = new Map<string, { calories: number; protein: number; carbs: number; fat: number }>();
   for (const f of foodRes.data ?? []) {
@@ -88,16 +125,6 @@ export default async function AthletePage({ params, searchParams }: Props) {
     d.fat += Number(f.fat_g);
     days.set(f.logged_on, d);
   }
-  const now = today();
-  const upcoming = (assignmentsRes.data ?? [])
-    .flatMap((a) =>
-      (a.programs?.workouts ?? [])
-        .filter((w) => w.week_number && w.day_number)
-        .map((w) => ({ ...w, program: a.programs!, date: programDate(a.start_date, w.week_number!, w.day_number!) })),
-    )
-    .filter((w) => w.date >= now)
-    .sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title))
-    .slice(0, 10);
   const dayRows = [...days.entries()].sort(([a], [b]) => b.localeCompare(a));
   const age = athlete.birth_date ? ageOn(athlete.birth_date, new Date()) : null;
 
@@ -186,36 +213,71 @@ export default async function AthletePage({ params, searchParams }: Props) {
         </TabsContent>
 
         <TabsContent value="workouts" className="grid gap-4">
-          <ListCard title="Upcoming WODs" empty="No upcoming WODs. Assign a program from Programs." show={upcoming.length > 0}>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="pl-4">Date</TableHead>
-                  <TableHead>Workout</TableHead>
-                  <TableHead>Format</TableHead>
-                  <TableHead>Program</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {upcoming.map((w) => (
-                  <TableRow key={`${w.program.id}-${w.id}`}>
-                    <TableCell className="pl-4">{formatDate(w.date)}</TableCell>
-                    <TableCell className="font-medium">
-                      <Link href={`/programs/workouts/${w.id}`} className="hover:underline">
-                        {w.title}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{formatHeadline(w) || "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      <Link href={`/programs/${w.program.id}`} className="hover:underline">
-                        {w.program.name} · W{w.week_number} D{w.day_number}
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </ListCard>
+          <Card>
+            <CardHeader>
+              <CardTitle>Schedule</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <div className="grid gap-3 lg:grid-cols-2">
+                <Button variant="outline" className="justify-self-start" asChild>
+                  <Link href={`/programs/workouts/new?athlete=${athlete.id}&date=${now}`}>Add one-off WOD</Link>
+                </Button>
+                <PersonalProgramCopyForm athleteId={athlete.id} programs={groupPrograms} defaultStart={now} />
+              </div>
+              {scheduleItems.length ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="pl-4">Date</TableHead>
+                        <TableHead>Workout</TableHead>
+                        <TableHead>Format</TableHead>
+                        <TableHead>Program</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {scheduleItems.map((item) => {
+                        const logged =
+                          loggedWorkoutIds.has(item.workout.id) ||
+                          (item.workout.source_workout_id != null && loggedWorkoutIds.has(item.workout.source_workout_id));
+                        return (
+                          <TableRow key={`${item.source}-${item.programId ?? "one-off"}-${item.workout.id}`}>
+                            <TableCell className="pl-4">{formatDate(item.date)}</TableCell>
+                            <TableCell className="font-medium">
+                              <Link href={`/programs/workouts/${item.workout.id}`} className="hover:underline">
+                                {item.workout.title}
+                              </Link>
+                            </TableCell>
+                            <TableCell>{formatHeadline(item.workout) || "—"}</TableCell>
+                            <TableCell>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="secondary">{SCHEDULE_LABEL(item)}</Badge>
+                                {item.programId && (
+                                  <Link href={`/programs/${item.programId}`} className="text-sm text-muted-foreground hover:underline">
+                                    {item.programName}
+                                  </Link>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {item.date < now ? (
+                                <Badge variant={logged ? "default" : "outline"}>{logged ? "Logged" : "Not logged"}</Badge>
+                              ) : (
+                                "—"
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <p className="p-4 text-center text-muted-foreground">No WODs in this date range.</p>
+              )}
+            </CardContent>
+          </Card>
           <ListCard title="Personal records" empty="No results logged yet." show={prs.length > 0}>
             <Table>
               <TableHeader>

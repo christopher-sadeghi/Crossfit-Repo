@@ -51,15 +51,18 @@ const toKg = (v: string, units: Units) => {
 };
 
 export type Placement = { program_id: string; program_name: string; week_number: number; day_number: number };
+export type OneOff = { athleteId: string; athleteName: string; date: string };
 
 export function WodBuilder({
   workout,
   placement,
+  oneOff,
   movementOptions,
   units,
 }: {
   workout?: BuilderWorkout;
   placement?: Placement;
+  oneOff?: OneOff;
   movementOptions: MovementOption[];
   units: Units;
 }) {
@@ -70,6 +73,7 @@ export function WodBuilder({
   const [rounds, setRounds] = useState(workout?.rounds ? String(workout.rounds) : "");
   const [description, setDescription] = useState(workout?.description ?? "");
   const [notes, setNotes] = useState(workout?.notes ?? "");
+  const [scheduledOn, setScheduledOn] = useState(oneOff?.date ?? "");
   const [rows, setRows] = useState<Row[]>(() =>
     workout?.movements.length
       ? workout.movements.map((m) => ({
@@ -128,6 +132,22 @@ export function WodBuilder({
             <p className="rounded-md bg-muted px-3 py-2 text-sm">
               Adds to <strong>{placement.program_name}</strong>, week {placement.week_number}, day {placement.day_number}.
             </p>
+          </>
+        )}
+        {oneOff && (
+          <>
+            <input type="hidden" name="athlete_id" value={oneOff.athleteId} />
+            <h2 className="text-lg font-semibold">One-off WOD for {oneOff.athleteName}</h2>
+            <Field label="Date *" id="scheduled_on">
+              <Input
+                id="scheduled_on"
+                name="scheduled_on"
+                type="date"
+                value={scheduledOn}
+                onChange={(e) => setScheduledOn(e.target.value)}
+                required
+              />
+            </Field>
           </>
         )}
         <input type="hidden" name="movements" value={JSON.stringify(movements)} />
@@ -246,7 +266,9 @@ export function WodBuilder({
           <Button variant="outline" asChild>
             <Link
               href={
-                workout
+                oneOff
+                  ? `/athletes/${oneOff.athleteId}`
+                  : workout
                   ? `/programs/workouts/${workout.id}`
                   : placement
                     ? `/programs/${placement.program_id}`

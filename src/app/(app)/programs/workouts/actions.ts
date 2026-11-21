@@ -67,11 +67,27 @@ export async function saveWorkout(_: FormState, formData: FormData): Promise<For
   const supabase = await createClient();
 
   let workoutId: string;
+  let oneOffAthleteId: string | null = null;
   if (typeof id === "string" && id) {
+    const { data: existingWorkout, error: existingError } = await supabase
+      .from("workouts")
+      .select("athlete_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (existingError || !existingWorkout) return failure(formData, "Couldn't find this WOD. Please refresh and try again.");
+
+    let scheduledOn: string | undefined;
+    if (existingWorkout.athlete_id) {
+      const date = z.string().date("Choose a date for this one-off WOD.").safeParse(formData.get("scheduled_on"));
+      if (!date.success) return failure(formData, "Choose a valid date for this one-off WOD.");
+      oneOffAthleteId = existingWorkout.athlete_id;
+      scheduledOn = date.data;
+    }
+
     const { data: old } = await supabase.from("workout_movements").select("*").eq("workout_id", id);
     const { error } = await supabase
       .from("workouts")
-      .update({ ...workout, updated_at: new Date().toISOString() })
+      .update({ ...workout, ...(scheduledOn ? { scheduled_on: scheduledOn } : {}), updated_at: new Date().toISOString() })
       .eq("id", id)
       .select("id")
       .single();
@@ -87,6 +103,24 @@ export async function saveWorkout(_: FormState, formData: FormData): Promise<For
     }
     workoutId = id;
   } else {
+    const requestedAthleteId = formData.get("athlete_id");
+    if (typeof requestedAthleteId !== "string" && requestedAthleteId !== null) {
+      return failure(formData, "Couldn't find this athlete. Please refresh and try again.");
+    }
+    if (requestedAthleteId && formData.get("program_id")) {
+      return failure(formData, "A one-off WOD can't be part of a group program.");
+    }
+
+    let scheduledOn: string | undefined;
+    if (requestedAthleteId) {
+      const date = z.string().date("Choose a date for this one-off WOD.").safeParse(formData.get("scheduled_on"));
+      if (!date.success) return failure(formData, "Choose a valid date for this one-off WOD.");
+      const { data: athlete } = await supabase.from("athletes").select("id").eq("id", requestedAthleteId).maybeSingle();
+      if (!athlete) return failure(formData, "Couldn't find this athlete on your roster.");
+      oneOffAthleteId = athlete.id;
+      scheduledOn = date.data;
+    }
+
     const placement = formData.get("program_id") ? placementSchema.safeParse(Object.fromEntries(formData)) : null;
     if (placement && !placement.success) return failure(formData, "Invalid program day.");
     if (placement) {
@@ -95,7 +129,11 @@ export async function saveWorkout(_: FormState, formData: FormData): Promise<For
     }
     const { data, error } = await supabase
       .from("workouts")
-      .insert({ ...workout, ...placement?.data })
+      .insert({
+        ...workout,
+        ...placement?.data,
+        ...(oneOffAthleteId ? { athlete_id: oneOffAthleteId, scheduled_on: scheduledOn } : {}),
+      })
       .select("id")
       .single();
     if (error) return failure(formData, "Couldn't save the WOD. Please try again.");
@@ -110,6 +148,10 @@ export async function saveWorkout(_: FormState, formData: FormData): Promise<For
   }
 
   revalidatePath("/programs/workouts");
+  if (oneOffAthleteId) {
+    revalidatePath(`/athletes/${oneOffAthleteId}`);
+    redirect(`/athletes/${oneOffAthleteId}`);
+  }
   const programId = formData.get("program_id");
   if (!id && typeof programId === "string" && programId) {
     revalidatePath(`/programs/${programId}`);
@@ -130,7 +172,7 @@ export async function duplicateWorkout(id: string) {
   const { workout_movements, ...fields } = original;
   const { data: copy, error } = await supabase
     .from("workouts")
-    .insert({ ...fields, title: `${fields.title} (copy)`.slice(0, 80) })
+    .insert({ ...fields, title: `${fields.title} (copy)`.slice(0, 80), program_id: null, athlete_id: null, scheduled_on: null })
     .select("id")
     .single();
   if (error) throw new Error("Couldn't duplicate the WOD.");

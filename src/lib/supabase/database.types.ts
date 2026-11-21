@@ -602,39 +602,59 @@ export type Database = {
       };
       programs: {
         Row: {
+          athlete_id: string | null;
           coach_id: string;
           created_at: string;
           description: string | null;
           id: string;
           name: string;
+          source_program_id: string | null;
           updated_at: string;
           weeks: number;
         };
         ComputedFields: never;
         Insert: {
+          athlete_id?: string | null;
           coach_id?: string;
           created_at?: string;
           description?: string | null;
           id?: string;
           name: string;
+          source_program_id?: string | null;
           updated_at?: string;
           weeks?: number;
         };
         Update: {
+          athlete_id?: string | null;
           coach_id?: string;
           created_at?: string;
           description?: string | null;
           id?: string;
           name?: string;
+          source_program_id?: string | null;
           updated_at?: string;
           weeks?: number;
         };
         Relationships: [
           {
+            foreignKeyName: "programs_athlete_id_coach_id_fkey";
+            columns: ["athlete_id", "coach_id"];
+            isOneToOne: false;
+            referencedRelation: "athletes";
+            referencedColumns: ["id", "coach_id"];
+          },
+          {
             foreignKeyName: "programs_coach_id_fkey";
             columns: ["coach_id"];
             isOneToOne: false;
             referencedRelation: "coaches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "programs_source_program_id_fkey";
+            columns: ["source_program_id"];
+            isOneToOne: false;
+            referencedRelation: "programs";
             referencedColumns: ["id"];
           },
         ];
@@ -798,6 +818,7 @@ export type Database = {
       };
       workouts: {
         Row: {
+          athlete_id: string | null;
           coach_id: string;
           created_at: string;
           day_number: number | null;
@@ -807,6 +828,7 @@ export type Database = {
           program_id: string | null;
           rounds: number | null;
           scheduled_on: string | null;
+          source_workout_id: string | null;
           time_cap_seconds: number | null;
           title: string;
           updated_at: string;
@@ -815,6 +837,7 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          athlete_id?: string | null;
           coach_id?: string;
           created_at?: string;
           day_number?: number | null;
@@ -824,6 +847,7 @@ export type Database = {
           program_id?: string | null;
           rounds?: number | null;
           scheduled_on?: string | null;
+          source_workout_id?: string | null;
           time_cap_seconds?: number | null;
           title: string;
           updated_at?: string;
@@ -831,6 +855,7 @@ export type Database = {
           workout_type: Database["public"]["Enums"]["workout_type"];
         };
         Update: {
+          athlete_id?: string | null;
           coach_id?: string;
           created_at?: string;
           day_number?: number | null;
@@ -840,6 +865,7 @@ export type Database = {
           program_id?: string | null;
           rounds?: number | null;
           scheduled_on?: string | null;
+          source_workout_id?: string | null;
           time_cap_seconds?: number | null;
           title?: string;
           updated_at?: string;
@@ -847,6 +873,13 @@ export type Database = {
           workout_type?: Database["public"]["Enums"]["workout_type"];
         };
         Relationships: [
+          {
+            foreignKeyName: "workouts_athlete_id_coach_id_fkey";
+            columns: ["athlete_id", "coach_id"];
+            isOneToOne: false;
+            referencedRelation: "athletes";
+            referencedColumns: ["id", "coach_id"];
+          },
           {
             foreignKeyName: "workouts_coach_id_fkey";
             columns: ["coach_id"];
@@ -861,6 +894,13 @@ export type Database = {
             referencedRelation: "programs";
             referencedColumns: ["id", "coach_id"];
           },
+          {
+            foreignKeyName: "workouts_source_workout_id_fkey";
+            columns: ["source_workout_id"];
+            isOneToOne: false;
+            referencedRelation: "workouts";
+            referencedColumns: ["id"];
+          },
         ];
       };
     };
@@ -871,6 +911,14 @@ export type Database = {
       athlete_can_view_workout: {
         Args: { p_workout_id: string };
         Returns: boolean;
+      };
+      copy_program_for_athlete: {
+        Args: {
+          p_athlete_id: string;
+          p_program_id: string;
+          p_start_date?: string | null;
+        };
+        Returns: string;
       };
       claim_athlete_invite: {
         Args: { p_token: string };

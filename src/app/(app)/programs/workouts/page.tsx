@@ -25,7 +25,7 @@ export default async function WorkoutsPage({ searchParams }: Props) {
 
   let query = supabase
     .from("workouts")
-    .select("id, title, workout_type, time_cap_seconds, rounds, scheduled_on, updated_at, programs(name), workout_movements(count)")
+    .select("id, title, workout_type, time_cap_seconds, rounds, athlete_id, scheduled_on, updated_at, athletes(first_name, last_name), programs(name), workout_movements(count)")
     .order("scheduled_on", { ascending: true, nullsFirst: true })
     .order("updated_at", { ascending: false });
   if (type) query = query.eq("workout_type", type);
@@ -88,15 +88,25 @@ export default async function WorkoutsPage({ searchParams }: Props) {
                 {workouts.map((w) => (
                   <TableRow key={w.id}>
                     <TableCell className="pl-4 font-medium">
-                      <Link href={`/programs/workouts/${w.id}`} className="hover:underline">
-                        {w.title}
-                      </Link>
+                      <div className="flex flex-col items-start gap-1">
+                        <Link href={`/programs/workouts/${w.id}`} className="hover:underline">
+                          {w.title}
+                        </Link>
+                        {w.athlete_id && (
+                          <Badge variant="outline">
+                            One-off · {w.athletes ? `${w.athletes.first_name} ${w.athletes.last_name}` : "Athlete"} ·{" "}
+                            {w.scheduled_on ? formatDate(w.scheduled_on) : ""}
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary">{formatHeadline(w) || WORKOUT_TYPE_LABELS[w.workout_type]}</Badge>
                     </TableCell>
                     <TableCell>{w.workout_movements[0]?.count ?? 0}</TableCell>
-                    <TableCell className="text-muted-foreground">{w.programs?.name ?? "Standalone"}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {w.programs?.name ?? (w.athlete_id ? "One-off" : "Standalone")}
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{w.scheduled_on ? formatDate(w.scheduled_on) : "—"}</TableCell>
                   </TableRow>
                 ))}
