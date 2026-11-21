@@ -100,11 +100,18 @@ export async function createAthleteInvite(
   }
 
   if (openInvite) {
-    const { error } = await supabase
+    const { data: revokedInvite, error } = await supabase
       .from("athlete_invites")
       .update({ revoked_at: new Date().toISOString() })
-      .eq("id", openInvite.id);
+      .eq("id", openInvite.id)
+      .is("accepted_at", null)
+      .is("revoked_at", null)
+      .select("id")
+      .maybeSingle();
     if (error) return failure(formData, "Couldn't resend the invite. Please try again.");
+    if (!revokedInvite) {
+      return failure(formData, "This invite was just accepted. Refresh the page.");
+    }
   }
 
   const { error } = await supabase
@@ -140,12 +147,19 @@ export async function revokeAthleteInvite(
     return failure(formData, "This invite is no longer active.");
   }
 
-  const { error } = await supabase
+  const { data: revokedInvite, error } = await supabase
     .from("athlete_invites")
     .update({ revoked_at: new Date().toISOString() })
-    .eq("id", invite.id);
+    .eq("id", invite.id)
+    .is("accepted_at", null)
+    .is("revoked_at", null)
+    .select("id")
+    .maybeSingle();
 
   if (error) return failure(formData, "Couldn't revoke the invite. Please try again.");
+  if (!revokedInvite) {
+    return failure(formData, "This athlete just joined. Use Revoke access instead.");
+  }
 
   revalidatePath("/athletes");
   revalidatePath(`/athletes/${parsed.data}`);
