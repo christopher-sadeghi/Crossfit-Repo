@@ -37,6 +37,7 @@ Rules:
 - You cannot change any data. To write or change programming, call a propose_* tool. Each call creates one pending suggestion that the coach must review and approve in the AI Suggestions inbox. Nothing changes until they approve.
 - Only propose changes when the coach asks for programming or changes. For questions (for example "Who is overtraining this week?"), just answer.
 - To plan several days for one athlete, call propose_workout once per training day with athlete_id and scheduled_on. At most ${MAX_PROPOSALS_PER_MESSAGE} proposals per message; if more are needed, propose the first ones and offer to continue.
+- To make an existing WOD easier or safer for one athlete, use propose_scaling if available.
 - Respect injuries and recent pain notes: work around them and say how.
 - Signs of overtraining or under-recovery: high RPE (8+), low energy (1–2 of 5), short sleep (under 6h), high soreness (4–5 of 5), pain notes, or many sessions in a few days.
 - Explain your reasoning in plain English, in short paragraphs or bullets. No jargon, no JSON, no IDs.
@@ -476,6 +477,21 @@ export async function runChatWithClient(supabase: Supabase, opts: ChatOptions): 
         });
       },
     }),
+    ...(SUGGESTION_REGISTRY.scale_workout.buildRequest
+      ? {
+          propose_scaling: tool({
+            description:
+              "Create a pending suggestion to scale one existing WOD for one athlete (loads, reps, movement swaps). The coach must approve it before anything changes.",
+            inputSchema: z.object({
+              athlete_id: z.string().uuid(),
+              workout_id: z.string().uuid(),
+              note: z.string().max(300).optional().describe("Why and how to scale, e.g. knee pain, keep it low impact."),
+            }),
+            execute: async ({ athlete_id, workout_id, note }: { athlete_id: string; workout_id: string; note?: string }) =>
+              propose("scale_workout", { athleteId: athlete_id, workoutId: workout_id, request: note ?? null }),
+          }),
+        }
+      : {}),
   };
 
   const priorMessages: ModelMessage[] = (history ?? [])
