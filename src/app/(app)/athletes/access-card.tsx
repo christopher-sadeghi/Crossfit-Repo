@@ -49,6 +49,7 @@ export function AthleteAccessCard({
   const [pendingState, pendingAction, revokingInvite] = useActionState(revokeAthleteInvite, {});
   const [accessState, accessAction, revokingAccess] = useActionState(revokeAthleteAccess, {});
   const [copied, setCopied] = useState(false);
+  const [lastAction, setLastAction] = useState<"invite" | "pending" | "access" | null>(null);
   const joined = Boolean(userId);
   const activeInviteUrl = inviteUrl;
   const inviteEmail = invite?.email ?? email;
@@ -69,6 +70,8 @@ export function AthleteAccessCard({
   function confirmRevoke(event: FormEvent<HTMLFormElement>) {
     if (!window.confirm("Revoke this athlete's app access? They will no longer be able to see their workouts.")) {
       event.preventDefault();
+    } else {
+      setLastAction("access");
     }
   }
 
@@ -106,7 +109,7 @@ export function AthleteAccessCard({
         )}
 
         {!joined && (
-          <form action={inviteAction} className="grid gap-2">
+          <form action={inviteAction} onSubmit={() => setLastAction("invite")} className="grid gap-2">
             <input type="hidden" name="athlete_id" value={athleteId} />
             {!email?.trim() && (
               <p className="text-sm text-muted-foreground">
@@ -116,12 +119,11 @@ export function AthleteAccessCard({
             <Button type="submit" disabled={inviting || !email?.trim()} className="w-fit">
               {inviting ? "Please wait…" : invite ? "Resend invite" : "Invite"}
             </Button>
-            <ActionMessage state={inviteState} />
           </form>
         )}
 
         {invite && !joined && (
-          <form action={pendingAction} className="grid gap-2">
+          <form action={pendingAction} onSubmit={() => setLastAction("pending")} className="grid gap-2">
             <input type="hidden" name="athlete_id" value={athleteId} />
             <Button
               type="submit"
@@ -131,7 +133,6 @@ export function AthleteAccessCard({
             >
               Revoke invite
             </Button>
-            <ActionMessage state={pendingState} />
           </form>
         )}
 
@@ -141,9 +142,12 @@ export function AthleteAccessCard({
             <Button type="submit" variant="destructive" disabled={revokingAccess} className="w-fit">
               {revokingAccess ? "Please wait…" : "Revoke access"}
             </Button>
-            <ActionMessage state={accessState} />
           </form>
         )}
+
+        {lastAction === "invite" && <ActionMessage state={inviteState} />}
+        {lastAction === "pending" && <ActionMessage state={pendingState} />}
+        {lastAction === "access" && <ActionMessage state={accessState} />}
       </CardContent>
     </Card>
   );
