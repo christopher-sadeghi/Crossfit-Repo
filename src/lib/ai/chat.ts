@@ -403,6 +403,7 @@ export async function runChatWithClient(supabase: Supabase, opts: ChatOptions): 
         athleteId: params.athleteId,
         ...request,
         schema: entry.proposalSchema,
+        generationSchema: request.schema,
         validate: entry.validate,
       });
       if ("error" in result) {

@@ -11,6 +11,7 @@ export type SuggestionOptions<S extends z.ZodType> = {
   athleteId: string | null;
   input: Json;
   schema: S;
+  generationSchema?: z.ZodType;
   system: string;
   prompt: string;
   validate?: (proposal: unknown, input: Json) => void;
@@ -130,7 +131,7 @@ export async function runSuggestionWithClient<S extends z.ZodType>(
       model,
       system: opts.system,
       prompt: opts.prompt,
-      output: Output.object({ schema: opts.schema }),
+      output: Output.object({ schema: opts.generationSchema ?? opts.schema }),
       timeout: 45_000,
       maxRetries: 1,
       providerOptions: { openai: { reasoningEffort: "low" } },
