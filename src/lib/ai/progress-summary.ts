@@ -149,6 +149,8 @@ function validate(proposal: unknown, input: Json) {
   const { goals } = progressSummaryInputSchema.parse(input);
   const ids = new Set(goals.map(({ id }) => id));
   if (parsed.goals.some(({ goal_id }) => !ids.has(goal_id))) throw new Error("unknown goal id");
+  if (new Set(parsed.goals.map(({ goal_id }) => goal_id)).size !== ids.size || parsed.goals.length !== ids.size)
+    throw new Error("summary must cover each goal exactly once");
 }
 
 /** Header and goal lines that wrap the summary in the athlete's coach notes. */
