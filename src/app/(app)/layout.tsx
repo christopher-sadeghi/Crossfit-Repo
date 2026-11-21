@@ -3,13 +3,16 @@ import { redirect } from "next/navigation";
 
 import { NavLinks } from "@/components/layout/nav-links";
 import { Button } from "@/components/ui/button";
-import { getCoach } from "@/lib/coach";
+import { getViewer } from "@/lib/viewer";
 
 import { logout } from "../(auth)/actions";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const coach = await getCoach();
-  if (!coach) redirect("/login");
+  const viewer = await getViewer();
+  if (!viewer) redirect("/login");
+  if (viewer.kind === "athlete") redirect("/athlete");
+  if (viewer.kind === "none") redirect("/no-access");
+  const coach = viewer;
 
   return (
     <div className="flex min-h-screen">

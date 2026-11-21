@@ -12,6 +12,9 @@ type Field = {
   label: string;
   type?: string;
   autoComplete?: string;
+  defaultValue?: string;
+  minLength?: number;
+  readOnly?: boolean;
 };
 
 type Props = {
@@ -37,7 +40,9 @@ export function AuthForm({ action, fields, submitLabel, hidden }: Props) {
             name={f.name}
             type={f.type ?? "text"}
             autoComplete={f.autoComplete}
-            defaultValue={state.values?.[f.name]}
+            defaultValue={state.values?.[f.name] ?? f.defaultValue}
+            minLength={f.minLength}
+            readOnly={f.readOnly}
             required
           />
         </div>

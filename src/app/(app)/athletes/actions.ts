@@ -56,3 +56,158 @@ export async function setAthleteStatus(id: string, status: "active" | "archived"
   revalidatePath("/athletes");
   revalidatePath(`/athletes/${id}`);
 }
+
+const athleteIdSchema = z.string().uuid();
+
+function parseAthleteId(formData: FormData) {
+  return athleteIdSchema.safeParse(formData.get("athlete_id"));
+}
+
+export async function createAthleteInvite(
+  _: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const parsed = parseAthleteId(formData);
+  if (!parsed.success) return failure(formData, "Couldn't create the invite. Please try again.");
+
+  const supabase = await createClient();
+  const { data: athlete, error: athleteError } = await supabase
+    .from("athletes")
+    .select("email, user_id")
+    .eq("id", parsed.data)
+    .maybeSingle();
+
+  if (athleteError || !athlete) {
+    return failure(formData, "Couldn't find this athlete. Please refresh and try again.");
+  }
+  if (athlete.user_id) {
+    return failure(formData, "This athlete already has app access.");
+  }
+
+  const email = athlete.email?.trim();
+  if (!email) return failure(formData, "Add an email to the athlete profile before inviting them.");
+
+  const { data: openInvite, error: openInviteError } = await supabase
+    .from("athlete_invites")
+    .select("id")
+    .eq("athlete_id", parsed.data)
+    .is("accepted_at", null)
+    .is("revoked_at", null)
+    .maybeSingle();
+
+  if (openInviteError) {
+    return failure(formData, "Couldn't create the invite. Please try again.");
+  }
+
+  if (openInvite) {
+    const { data: revokedInvite, error } = await supabase
+      .from("athlete_invites")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("id", openInvite.id)
+      .is("accepted_at", null)
+      .is("revoked_at", null)
+      .select("id")
+      .maybeSingle();
+    if (error) return failure(formData, "Couldn't resend the invite. Please try again.");
+    if (!revokedInvite) {
+      return failure(formData, "This invite was just accepted. Refresh the page.");
+    }
+  }
+
+  const { error } = await supabase
+    .from("athlete_invites")
+    .insert({ athlete_id: parsed.data, email })
+    .select("id")
+    .single();
+
+  if (error) return failure(formData, "Couldn't create the invite. Please try again.");
+
+  revalidatePath("/athletes");
+  revalidatePath(`/athletes/${parsed.data}`);
+  return { message: `Invite ready for ${email}.` };
+}
+
+export async function revokeAthleteInvite(
+  _: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const parsed = parseAthleteId(formData);
+  if (!parsed.success) return failure(formData, "Couldn't revoke the invite. Please try again.");
+
+  const supabase = await createClient();
+  const { data: invite, error: inviteError } = await supabase
+    .from("athlete_invites")
+    .select("id")
+    .eq("athlete_id", parsed.data)
+    .is("accepted_at", null)
+    .is("revoked_at", null)
+    .maybeSingle();
+
+  if (inviteError || !invite) {
+    return failure(formData, "This invite is no longer active.");
+  }
+
+  const { data: revokedInvite, error } = await supabase
+    .from("athlete_invites")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("id", invite.id)
+    .is("accepted_at", null)
+    .is("revoked_at", null)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return failure(formData, "Couldn't revoke the invite. Please try again.");
+  if (!revokedInvite) {
+    return failure(formData, "This athlete just joined. Use Revoke access instead.");
+  }
+
+  revalidatePath("/athletes");
+  revalidatePath(`/athletes/${parsed.data}`);
+  return { message: "Invite revoked." };
+}
+
+export async function revokeAthleteAccess(
+  _: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const parsed = parseAthleteId(formData);
+  if (!parsed.success) return failure(formData, "Couldn't revoke app access. Please try again.");
+
+  const supabase = await createClient();
+  const { data: athlete, error: athleteError } = await supabase
+    .from("athletes")
+    .select("user_id")
+    .eq("id", parsed.data)
+    .maybeSingle();
+
+  if (athleteError || !athlete?.user_id) {
+    return failure(formData, "This athlete does not have app access.");
+  }
+
+  const { error: inviteError } = await supabase
+    .from("athlete_invites")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("athlete_id", parsed.data)
+    .is("accepted_at", null)
+    .is("revoked_at", null);
+
+  if (inviteError) {
+    return failure(formData, "Couldn't revoke app access. Please try again.");
+  }
+
+  const { data: updated, error } = await supabase
+    .from("athletes")
+    .update({ user_id: null, updated_at: new Date().toISOString() })
+    .eq("id", parsed.data)
+    .not("user_id", "is", null)
+    .select("id")
+    .maybeSingle();
+
+  if (error || !updated) {
+    return failure(formData, "Couldn't revoke app access. Please try again.");
+  }
+
+  revalidatePath("/athletes");
+  revalidatePath(`/athletes/${parsed.data}`);
+  return { message: "App access revoked." };
+}

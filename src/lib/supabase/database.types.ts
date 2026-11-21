@@ -76,6 +76,55 @@ export type Database = {
           },
         ];
       };
+      athlete_invites: {
+        Row: {
+          accepted_at: string | null;
+          athlete_id: string;
+          coach_id: string;
+          created_at: string;
+          email: string;
+          id: string;
+          revoked_at: string | null;
+          token: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          accepted_at?: string | null;
+          athlete_id: string;
+          coach_id?: string;
+          created_at?: string;
+          email: string;
+          id?: string;
+          revoked_at?: string | null;
+          token?: string;
+        };
+        Update: {
+          accepted_at?: string | null;
+          athlete_id?: string;
+          coach_id?: string;
+          created_at?: string;
+          email?: string;
+          id?: string;
+          revoked_at?: string | null;
+          token?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "athlete_invites_athlete_id_coach_id_fkey";
+            columns: ["athlete_id", "coach_id"];
+            isOneToOne: false;
+            referencedRelation: "athletes";
+            referencedColumns: ["id", "coach_id"];
+          },
+          {
+            foreignKeyName: "athlete_invites_coach_id_fkey";
+            columns: ["coach_id"];
+            isOneToOne: false;
+            referencedRelation: "coaches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       athlete_workout_scalings: {
         Row: {
           athlete_id: string;
@@ -801,7 +850,28 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      claim_athlete_invite: {
+        Args: { p_token: string };
+        Returns: undefined;
+      };
       clear_demo_data: { Args: Record<PropertyKey, never>; Returns: undefined };
+      current_athlete_coach_id: {
+        Args: Record<PropertyKey, never>;
+        Returns: string;
+      };
+      current_athlete_id: {
+        Args: Record<PropertyKey, never>;
+        Returns: string;
+      };
+      get_invite: {
+        Args: { p_token: string };
+        Returns: {
+          athlete_first_name: string;
+          coach_full_name: string;
+          email: string;
+          gym_name: string;
+        }[];
+      };
       load_demo_data: { Args: { reset?: boolean }; Returns: Json };
     };
     Enums: {

@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { SUGGESTION_LABELS } from "@/lib/ai/suggestions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCoach } from "@/lib/coach";
+import { getOrigin } from "@/lib/auth/redirect";
 import { programDate, today } from "@/lib/program-dates";
 import { formatGoalValue, goalProgress, latestMetric } from "@/lib/progress";
 import { personalRecords } from "@/lib/results";
@@ -16,6 +17,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatScore, formatWeight, type Units } from "@/lib/units";
 
 import { ArchiveButton } from "../archive-button";
+import { AthleteAccessCard } from "../access-card";
 import { GoalBar } from "./progress/goal-bar";
 import { formatHeadline } from "../../programs/workouts/whiteboard";
 import { LEVEL_LABELS } from "../options";
@@ -31,7 +33,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const units: Units = coach?.units ?? "lb";
 
   const since = new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
-  const [athleteRes, metricsRes, resultsRes, targetRes, foodRes, goalsRes, aiRes, assignmentsRes] = await Promise.all([
+  const [athleteRes, metricsRes, resultsRes, targetRes, foodRes, goalsRes, aiRes, assignmentsRes, inviteRes] = await Promise.all([
     supabase.from("athletes").select("*").eq("id", id).maybeSingle(),
     supabase.from("body_metrics").select("measured_on, weight_kg, body_fat_pct").eq("athlete_id", id).order("measured_on", { ascending: false }),
     supabase
@@ -54,6 +56,13 @@ export default async function AthletePage({ params, searchParams }: Props) {
       .from("program_assignments")
       .select("start_date, programs(id, name, workouts(id, title, workout_type, time_cap_seconds, rounds, week_number, day_number))")
       .eq("athlete_id", id),
+    supabase
+      .from("athlete_invites")
+      .select("email, token, created_at")
+      .eq("athlete_id", id)
+      .is("accepted_at", null)
+      .is("revoked_at", null)
+      .maybeSingle(),
   ]);
 
   const athlete = athleteRes.data;
@@ -63,6 +72,8 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const results = resultsRes.data ?? [];
   const prs = personalRecords(results);
   const target = targetRes.data;
+  const invite = inviteRes.data;
+  const inviteUrl = invite ? `${await getOrigin()}/join/${invite.token}` : null;
   const goals = goalsRes.data ?? [];
   const suggestions = aiRes.data ?? [];
 
@@ -127,6 +138,13 @@ export default async function AthletePage({ params, searchParams }: Props) {
           <Stat label="Current weight" value={formatWeight(latestWeight?.weight_kg, units)} hint={latestWeight ? `as of ${formatDate(latestWeight.measured_on)}` : undefined} />
           <Stat label="Daily calories target" value={target ? `${target.calories} kcal` : "—"} hint={target ? `P ${target.protein_g}g · C ${target.carbs_g}g · F ${target.fat_g}g` : "No target set"} />
           <Stat label="Active goals" value={String(goals.filter((g) => g.status === "active").length)} hint={`${results.length} logged results · ${prs.length} PRs`} />
+          <AthleteAccessCard
+            athleteId={athlete.id}
+            email={athlete.email}
+            userId={athlete.user_id}
+            invite={invite}
+            inviteUrl={inviteUrl}
+          />
           <Card className="md:col-span-3">
             <CardHeader>
               <CardTitle>Injuries / limitations</CardTitle>
