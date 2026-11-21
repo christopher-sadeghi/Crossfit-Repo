@@ -44,6 +44,12 @@ const workoutSchema = z.object({
     .pipe(z.array(movementSchema).min(1, "Add at least one movement.").max(30)),
 });
 
+const placementSchema = z.object({
+  program_id: z.string().uuid(),
+  week_number: z.coerce.number().int().min(1),
+  day_number: z.coerce.number().int().min(1).max(7),
+});
+
 export async function saveWorkout(_: FormState, formData: FormData): Promise<FormState> {
   const parsed = workoutSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
@@ -81,7 +87,17 @@ export async function saveWorkout(_: FormState, formData: FormData): Promise<For
     }
     workoutId = id;
   } else {
-    const { data, error } = await supabase.from("workouts").insert(workout).select("id").single();
+    const placement = formData.get("program_id") ? placementSchema.safeParse(Object.fromEntries(formData)) : null;
+    if (placement && !placement.success) return failure(formData, "Invalid program day.");
+    if (placement) {
+      const { data: program } = await supabase.from("programs").select("weeks").eq("id", placement.data.program_id).maybeSingle();
+      if (!program || placement.data.week_number > program.weeks) return failure(formData, "That program day no longer exists.");
+    }
+    const { data, error } = await supabase
+      .from("workouts")
+      .insert({ ...workout, ...placement?.data })
+      .select("id")
+      .single();
     if (error) return failure(formData, "Couldn't save the WOD. Please try again.");
     const { error: insertError } = await supabase
       .from("workout_movements")
@@ -94,6 +110,11 @@ export async function saveWorkout(_: FormState, formData: FormData): Promise<For
   }
 
   revalidatePath("/programs/workouts");
+  const programId = formData.get("program_id");
+  if (!id && typeof programId === "string" && programId) {
+    revalidatePath(`/programs/${programId}`);
+    redirect(`/programs/${programId}`);
+  }
   redirect(`/programs/workouts/${workoutId}`);
 }
 

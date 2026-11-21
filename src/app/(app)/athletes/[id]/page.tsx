@@ -8,10 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCoach } from "@/lib/coach";
+import { programDate, today } from "@/lib/program-dates";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatScore, formatWeight, type Units } from "@/lib/units";
 
 import { ArchiveButton } from "../archive-button";
+import { formatHeadline } from "../../programs/workouts/whiteboard";
 import { LEVEL_LABELS } from "../options";
 
 const TABS = ["overview", "workouts", "nutrition", "goals", "ai"] as const;
@@ -31,7 +33,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const units: Units = coach?.units ?? "lb";
 
   const since = new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
-  const [athleteRes, metricsRes, resultsRes, targetRes, foodRes, goalsRes, aiRes] = await Promise.all([
+  const [athleteRes, metricsRes, resultsRes, targetRes, foodRes, goalsRes, aiRes, assignmentsRes] = await Promise.all([
     supabase.from("athletes").select("*").eq("id", id).maybeSingle(),
     supabase.from("body_metrics").select("measured_on, weight_kg").eq("athlete_id", id).order("measured_on", { ascending: false }).limit(8),
     supabase
@@ -44,6 +46,10 @@ export default async function AthletePage({ params, searchParams }: Props) {
     supabase.from("food_logs").select("logged_on, calories, protein_g, carbs_g, fat_g").eq("athlete_id", id).gte("logged_on", since),
     supabase.from("goals").select("id, title, goal_type, metric, unit, start_value, target_value, target_date, status").eq("athlete_id", id).order("status").order("target_date"),
     supabase.from("ai_suggestions").select("id, suggestion_type, status, created_at, decided_at").eq("athlete_id", id).order("created_at", { ascending: false }),
+    supabase
+      .from("program_assignments")
+      .select("start_date, programs(id, name, workouts(id, title, workout_type, time_cap_seconds, rounds, week_number, day_number))")
+      .eq("athlete_id", id),
   ]);
 
   const athlete = athleteRes.data;
@@ -63,6 +69,16 @@ export default async function AthletePage({ params, searchParams }: Props) {
     d.fat += Number(f.fat_g);
     days.set(f.logged_on, d);
   }
+  const now = today();
+  const upcoming = (assignmentsRes.data ?? [])
+    .flatMap((a) =>
+      (a.programs?.workouts ?? [])
+        .filter((w) => w.week_number && w.day_number)
+        .map((w) => ({ ...w, program: a.programs!, date: programDate(a.start_date, w.week_number!, w.day_number!) })),
+    )
+    .filter((w) => w.date >= now)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title))
+    .slice(0, 10);
   const dayRows = [...days.entries()].sort(([a], [b]) => b.localeCompare(a));
   const age = athlete.birth_date ? ageOn(athlete.birth_date, new Date()) : null;
 
@@ -121,8 +137,38 @@ export default async function AthletePage({ params, searchParams }: Props) {
           )}
         </TabsContent>
 
-        <TabsContent value="workouts">
-          <ListCard empty="No results logged yet." show={results.length > 0}>
+        <TabsContent value="workouts" className="grid gap-4">
+          <ListCard title="Upcoming WODs" empty="No upcoming WODs. Assign a program from Programs." show={upcoming.length > 0}>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="pl-4">Date</TableHead>
+                  <TableHead>Workout</TableHead>
+                  <TableHead>Format</TableHead>
+                  <TableHead>Program</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {upcoming.map((w) => (
+                  <TableRow key={`${w.program.id}-${w.id}`}>
+                    <TableCell className="pl-4">{formatDate(w.date)}</TableCell>
+                    <TableCell className="font-medium">
+                      <Link href={`/programs/workouts/${w.id}`} className="hover:underline">
+                        {w.title}
+                      </Link>
+                    </TableCell>
+                    <TableCell>{formatHeadline(w) || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      <Link href={`/programs/${w.program.id}`} className="hover:underline">
+                        {w.program.name} · W{w.week_number} D{w.day_number}
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ListCard>
+          <ListCard title="Results" empty="No results logged yet." show={results.length > 0}>
             <Table>
               <TableHeader>
                 <TableRow>
