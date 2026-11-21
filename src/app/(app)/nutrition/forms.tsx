@@ -17,7 +17,7 @@ import { deleteFood, saveFood, saveTarget } from "./actions";
 type Tracked = FormState & { successes?: number };
 
 // Submit manually so a failed submit keeps the inputs; remount after each success to reset them.
-function useForm(action: (s: FormState, d: FormData) => Promise<FormState>, onSuccess?: () => void) {
+export function useForm(action: (s: FormState, d: FormData) => Promise<FormState>, onSuccess?: () => void) {
   const [state, formAction, pending] = useActionState<Tracked, FormData>(async (prev, data) => {
     const next = await action(prev, data);
     if (!next.error) onSuccess?.();
@@ -39,7 +39,7 @@ function useForm(action: (s: FormState, d: FormData) => Promise<FormState>, onSu
   };
 }
 
-function Status({ state }: { state: FormState }) {
+export function Status({ state }: { state: FormState }) {
   if (state.error)
     return (
       <p role="alert" className="text-sm text-destructive">
