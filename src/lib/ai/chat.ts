@@ -414,7 +414,11 @@ export async function runChatWithClient(supabase: Supabase, opts: ChatOptions): 
       return { status: "pending_coach_approval", suggestion_id: result.id };
     } catch (error) {
       console.error("AI chat proposal failed:", error);
-      return { error: "That suggestion couldn't be created. Check the IDs and try again." };
+      proposalCount--;
+      return {
+        error:
+          "That suggestion couldn't be created. Check that workout_id is a WOD id (from get_program or get_workout) and athlete_id is an athlete id, then try again.",
+      };
     }
   }
 
