@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { RequestMacroSuggestionForm } from "@/components/suggestions/suggestion-forms";
 import { addDays, MEALS, onTarget, targetOn, totals, type Macros } from "@/lib/nutrition";
 import { today } from "@/lib/program-dates";
 import { createClient } from "@/lib/supabase/server";
@@ -101,6 +102,16 @@ export default async function AthleteNutritionPage({ params, searchParams }: Pro
           )}
         </nav>
       </div>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>AI macro suggestion</CardTitle>
+          <p className="text-sm text-muted-foreground">Review any suggested targets before they change.</p>
+        </CardHeader>
+        <CardContent>
+          <RequestMacroSuggestionForm athleteId={athlete.id} />
+        </CardContent>
+      </Card>
 
       <section aria-label="Daily intake" className="mb-6 grid gap-4">
         <h2 className="text-lg font-semibold">{date === now ? "Today" : weekday(date)}</h2>
