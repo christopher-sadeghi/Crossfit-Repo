@@ -32,7 +32,7 @@ export async function requestMovementGuide(_: FormState, form: FormData): Promis
   if (guide.error || pending.error) return { error: "Couldn't check existing how-to suggestions. Please try again." };
   if (hasGuideText(guide.data) || pending.data?.length) return { error: "This movement already has a how-to or a pending suggestion. Review or edit it below." };
   try {
-    const request = await movementGuideEntry.buildRequest(supabase, id.data);
+    const request = await movementGuideEntry.buildRequest(supabase, { athleteId: null, movementId: id.data });
     const result = await runSuggestion({ type: "movement_guide", athleteId: null, ...request, schema: movementGuideSchema });
     if ("error" in result) return { error: result.error };
     refresh(id.data);

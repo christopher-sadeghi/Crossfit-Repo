@@ -91,11 +91,12 @@ test("HowTo renders embeds, external links, empty placeholders and escaped cues"
 test("buildRequest uses the exact movement and propagates a missing movement", async () => {
   const movement = { id: "movement", name: "Hang Power Clean", category: "weightlifting", measure: "load" };
   const mock = (result) => ({ from: () => ({ select: () => ({ eq: () => ({ single: async () => result }) }) }) });
-  const request = await movementGuideEntry.buildRequest(mock({ data: movement }), "movement");
+  const request = await movementGuideEntry.buildRequest(mock({ data: movement }), { athleteId: null, movementId: "movement" });
   assert.equal(request.input.movement_id, movement.id);
   assert.match(request.prompt, /Hang Power Clean/);
   assert.match(request.system, /Never include links/);
-  await assert.rejects(() => movementGuideEntry.buildRequest(mock({ data: null, error: new Error() }), "missing"), /Movement not found/);
+  await assert.rejects(() => movementGuideEntry.buildRequest(mock({ data: null, error: new Error() }), { athleteId: null, movementId: "missing" }), /Movement not found/);
+  await assert.rejects(() => movementGuideEntry.buildRequest(mock({ data: movement }), { athleteId: null }), /Movement not found/);
 });
 
 test("apply publishes only approved arrays and AI reference, without updating the video override", async () => {

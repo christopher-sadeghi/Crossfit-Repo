@@ -5,6 +5,7 @@ import { ArrowLeft, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { RequestWorkoutSuggestionForm } from "@/components/suggestions/suggestion-forms";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getCoach } from "@/lib/coach";
 import { createClient } from "@/lib/supabase/server";
@@ -81,6 +82,17 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
           <WorkoutButtons id={workout.id} resultCount={resultCount} />
         </div>
       </div>
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Ask AI to adjust</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Describe a change and review the proposal before it updates or copies this WOD.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <RequestWorkoutSuggestionForm workoutId={workout.id} />
+        </CardContent>
+      </Card>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,42rem)_1fr]">
         <Whiteboard workout={workout} movements={movements} units={units} howToHref={(id) => `/programs/movements/${id}`} />
         <Card className="content-start">

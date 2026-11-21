@@ -15,7 +15,8 @@ export const movementGuideSchema = z.object({
   harder_versions: z.array(instruction).min(1).max(4),
 });
 
-async function buildRequest(supabase: SupabaseClient<Database>, movementId: string) {
+async function buildRequest(supabase: SupabaseClient<Database>, { movementId }: { athleteId: string | null; movementId?: string }) {
+  if (!movementId) throw new Error("Movement not found.");
   const { data: movement, error } = await supabase.from("movements")
     .select("id, name, category, measure").eq("id", movementId).single();
   if (error || !movement) throw new Error("Movement not found.");
