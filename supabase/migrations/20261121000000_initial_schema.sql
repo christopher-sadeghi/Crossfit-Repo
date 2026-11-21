@@ -59,6 +59,11 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
+-- Accounts created before this migration also need a coach profile.
+insert into public.coaches (id, full_name)
+select id, raw_user_meta_data ->> 'full_name' from auth.users
+on conflict (id) do nothing;
+
 -- Athletes -----------------------------------------------------------------
 
 create table public.athletes (
