@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { approveScaleSuggestion } from "@/app/(app)/suggestions/scale-actions";
 import { formatMovementLine, type WhiteboardMovement } from "@/app/(app)/programs/workouts/whiteboard";
+import { RejectSuggestionForm } from "@/components/suggestions/suggestion-forms";
 import type { Units } from "@/lib/units";
 import type { FormState } from "@/lib/auth/form-state";
 
@@ -58,25 +59,30 @@ export function ScaleWorkoutReview({
         <CardHeader><CardTitle>Athlete-facing summary</CardTitle></CardHeader>
         <CardContent className="grid gap-3">
           {editable ? (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                startTransition(() => formAction(new FormData(event.currentTarget)));
-              }}
-              className="grid gap-3"
-            >
-              <input type="hidden" name="id" value={id} />
-              <Textarea name="summary" rows={3} maxLength={300} required defaultValue={summary} />
-              {hasExistingScaling && (
-                <p className="text-sm text-amber-700 dark:text-amber-300">
-                  Approving replaces their current scaled version.
-                </p>
-              )}
-              <p className="whitespace-pre-line text-sm text-muted-foreground">{rationale}</p>
-              {state.error && <p role="alert" className="text-sm text-destructive">{state.error}</p>}
-              {state.message && <p role="status" className="text-sm text-emerald-600">{state.message}</p>}
-              <Button type="submit" disabled={pending}>{pending ? "Approving…" : "Approve scaling"}</Button>
-            </form>
+            <>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  startTransition(() => formAction(new FormData(event.currentTarget)));
+                }}
+                className="grid gap-3"
+              >
+                <input type="hidden" name="id" value={id} />
+                <Textarea name="summary" rows={3} maxLength={300} required defaultValue={summary} />
+                {hasExistingScaling && (
+                  <p className="text-sm text-amber-700 dark:text-amber-300">
+                    Approving replaces their current scaled version.
+                  </p>
+                )}
+                <p className="whitespace-pre-line text-sm text-muted-foreground">{rationale}</p>
+                {state.error && <p role="alert" className="text-sm text-destructive">{state.error}</p>}
+                {state.message && <p role="status" className="text-sm text-emerald-600">{state.message}</p>}
+                <Button type="submit" disabled={pending}>{pending ? "Approving…" : "Approve scaling"}</Button>
+              </form>
+              <div className="border-t pt-4">
+                <RejectSuggestionForm id={id} />
+              </div>
+            </>
           ) : (
             <>
               <p className="whitespace-pre-line">{summary}</p>
