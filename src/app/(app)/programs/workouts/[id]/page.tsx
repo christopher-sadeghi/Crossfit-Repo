@@ -25,7 +25,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
     getCoach(),
     supabase
       .from("workouts")
-      .select("id, title, workout_type, time_cap_seconds, rounds, description, notes, athlete_id, scheduled_on, week_number, day_number, program_id, athletes(id, first_name, last_name), programs(name), workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(name))")
+      .select("id, title, workout_type, time_cap_seconds, rounds, description, notes, athlete_id, scheduled_on, week_number, day_number, program_id, athletes(id, first_name, last_name), programs(name), workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(id, name))")
       .eq("id", id)
       .order("position", { referencedTable: "workout_movements" })
       .maybeSingle(),
@@ -41,7 +41,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
   const results = (resultRows ?? []).sort(compareScores(workout.workout_type));
   const resultCount = results.length;
 
-  const movements = workout.workout_movements.map(({ movements: mv, ...m }) => ({ ...m, name: mv?.name ?? "" }));
+  const movements = workout.workout_movements.map(({ movements: mv, ...m }) => ({ ...m, movement_id: mv?.id, name: mv?.name ?? "" }));
 
   return (
     <>
@@ -94,7 +94,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
         </CardContent>
       </Card>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,42rem)_1fr]">
-        <Whiteboard workout={workout} movements={movements} units={units} />
+        <Whiteboard workout={workout} movements={movements} units={units} howToHref={(id) => `/programs/movements/${id}`} />
         <Card className="content-start">
           <CardHeader>
             <CardTitle>Log a result</CardTitle>

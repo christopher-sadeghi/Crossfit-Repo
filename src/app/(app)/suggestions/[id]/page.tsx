@@ -66,6 +66,7 @@ export default async function SuggestionPage({ params }: Props) {
   const proposedMovements =
     shownWorkout?.movements.map(({ movement_id, load, ...movement }) => ({
       ...movement,
+      movement_id,
       name: libraryNames.get(movement_id) ?? "Unknown movement",
       load_kg: load == null ? null : toKg(load, units),
     })) ?? [];
@@ -188,6 +189,7 @@ export default async function SuggestionPage({ params }: Props) {
                 }}
                 movements={currentMovements}
                 units={units}
+                howToHref={(id) => `/programs/movements/${id}`}
               />
             </section>
           )}
@@ -204,6 +206,7 @@ export default async function SuggestionPage({ params }: Props) {
               }}
               movements={proposedMovements}
               units={units}
+              howToHref={(id) => `/programs/movements/${id}`}
             />
           </section>
         </div>
@@ -287,7 +290,9 @@ export default async function SuggestionPage({ params }: Props) {
         </Card>
       )}
 
-      {!macrosType && !workoutType && <p className="text-sm text-muted-foreground">This suggestion type isn&apos;t ready yet.</p>}
+      {suggestion.suggestion_type === "movement_guide" && suggestion.input && typeof suggestion.input === "object" && !Array.isArray(suggestion.input) && typeof suggestion.input.movement_id === "string" ? (
+        <Link href={`/programs/movements/${encodeURIComponent(suggestion.input.movement_id)}`} className="underline underline-offset-4">Review on the movement page</Link>
+      ) : !macrosType && !workoutType && <p className="text-sm text-muted-foreground">This suggestion type isn&apos;t ready yet.</p>}
     </>
   );
 }

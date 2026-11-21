@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import type { Enums } from "@/lib/supabase/database.types";
 import { formatDuration, formatWeight, type Units } from "@/lib/units";
 
@@ -11,6 +13,7 @@ export type WhiteboardWorkout = {
 };
 
 export type WhiteboardMovement = {
+  movement_id?: string;
   name: string;
   sets: number | null;
   reps: number | null;
@@ -56,10 +59,12 @@ export function Whiteboard({
   workout,
   movements,
   units,
+  howToHref,
 }: {
   workout: WhiteboardWorkout;
   movements: WhiteboardMovement[];
   units: Units;
+  howToHref?: (movementId: string) => string;
 }) {
   const headline = formatHeadline(workout);
   const showCap = workout.time_cap_seconds && (workout.workout_type === "for_time" || workout.workout_type === "other");
@@ -74,6 +79,7 @@ export function Whiteboard({
           movements.map((m, i) => (
             <li key={i}>
               {formatMovementLine(m, units)}
+              {m.movement_id && howToHref && <Link href={howToHref(m.movement_id)} aria-label={`How to ${m.name}`} className="ml-3 text-sm text-amber-300 underline underline-offset-4">How to</Link>}
               {m.notes && <span className="ml-2 text-sm text-zinc-400">({m.notes})</span>}
             </li>
           ))
