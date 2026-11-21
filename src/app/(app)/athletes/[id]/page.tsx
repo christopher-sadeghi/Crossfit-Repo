@@ -12,7 +12,8 @@ import { getCoach } from "@/lib/coach";
 import { getOrigin } from "@/lib/auth/redirect";
 import { SCHEDULE_LABEL, loadAthleteSchedule } from "@/lib/athlete-schedule";
 import { feedbackSummary, needsAttention } from "@/lib/feedback";
-import { today } from "@/lib/program-dates";
+import { JOURNAL_COLUMNS, journalSleepSummary, journalYesAnswers } from "@/lib/journal";
+import { getToday } from "@/lib/time-zone";
 import { formatGoalValue, goalProgress, latestMetric } from "@/lib/progress";
 import { personalRecords } from "@/lib/results";
 import { createClient } from "@/lib/supabase/server";
@@ -25,7 +26,7 @@ import { GoalBar } from "./progress/goal-bar";
 import { formatHeadline, type WhiteboardWorkout } from "../../programs/workouts/whiteboard";
 import { LEVEL_LABELS } from "../options";
 
-const TABS = ["overview", "workouts", "nutrition", "goals", "ai"] as const;
+const TABS = ["overview", "workouts", "journal", "nutrition", "goals", "ai"] as const;
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> };
 type ProfileScheduleWorkout = WhiteboardWorkout & {
@@ -41,8 +42,10 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const coach = await getCoach();
   const units: Units = coach?.units ?? "lb";
 
-  const since = new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
-  const now = today();
+  const now = await getToday();
+  const sinceDate = new Date(`${now}T00:00:00Z`);
+  sinceDate.setUTCDate(sinceDate.getUTCDate() - 6);
+  const since = sinceDate.toISOString().slice(0, 10);
   const scheduleFromDate = new Date(`${now}T00:00:00Z`);
   scheduleFromDate.setUTCDate(scheduleFromDate.getUTCDate() - 7);
   const scheduleToDate = new Date(`${now}T00:00:00Z`);
@@ -61,6 +64,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
     inviteRes,
     groupProgramsRes,
     athleteAssignmentsRes,
+    journalRes,
   ] = await Promise.all([
     supabase.from("athletes").select("*").eq("id", id).maybeSingle(),
     supabase.from("body_metrics").select("measured_on, weight_kg, body_fat_pct").eq("athlete_id", id).order("measured_on", { ascending: false }),
@@ -74,8 +78,8 @@ export default async function AthletePage({ params, searchParams }: Props) {
       .from("nutrition_targets")
       .select("*")
       .eq("athlete_id", id)
-      .lte("start_date", today())
-      .or(`end_date.is.null,end_date.gte.${today()}`)
+      .lte("start_date", await getToday())
+      .or(`end_date.is.null,end_date.gte.${await getToday()}`)
       .maybeSingle(),
     supabase.from("food_logs").select("logged_on, calories, protein_g, carbs_g, fat_g").eq("athlete_id", id).gte("logged_on", since),
     supabase.from("goals").select("id, title, goal_type, movement_id, metric, unit, start_value, target_value, target_date, status").eq("athlete_id", id).order("status").order("target_date"),
@@ -95,6 +99,12 @@ export default async function AthletePage({ params, searchParams }: Props) {
       .maybeSingle(),
     supabase.from("programs").select("id, name").is("athlete_id", null).order("name"),
     supabase.from("program_assignments").select("program_id").eq("athlete_id", id),
+    supabase
+      .from("athlete_journal_entries")
+      .select(JOURNAL_COLUMNS)
+      .eq("athlete_id", id)
+      .order("entry_on", { ascending: false })
+      .limit(30),
   ]);
 
   const athlete = athleteRes.data;
@@ -103,12 +113,13 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const latestWeight = latestMetric(metrics, "weight_kg");
   const results = resultsRes.data ?? [];
   const prs = personalRecords(results);
-  const attention = needsAttention(results, today());
+  const attention = needsAttention(results, await getToday());
   const target = targetRes.data;
   const invite = inviteRes.data;
   const inviteUrl = invite ? `${await getOrigin()}/join/${invite.token}` : null;
   const goals = goalsRes.data ?? [];
   const suggestions = aiRes.data ?? [];
+  const journal = journalRes.data ?? [];
   const loggedWorkoutIds = new Set(results.map((result) => result.workout_id));
   const assignedProgramIds = new Set((athleteAssignmentsRes.data ?? []).map((assignment) => assignment.program_id));
   const groupPrograms = (groupProgramsRes.data ?? []).map((program) => ({
@@ -155,13 +166,16 @@ export default async function AthletePage({ params, searchParams }: Props) {
       </div>
 
       <Tabs defaultValue={TABS.includes(tab as (typeof TABS)[number]) ? tab : "overview"}>
-        <TabsList className="mb-4">
+        <div className="mb-4 max-w-full overflow-x-auto">
+        <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="workouts">Workouts</TabsTrigger>
+          <TabsTrigger value="journal">Journal</TabsTrigger>
           <TabsTrigger value="nutrition">Nutrition</TabsTrigger>
           <TabsTrigger value="goals">Goals</TabsTrigger>
           <TabsTrigger value="ai">AI History</TabsTrigger>
         </TabsList>
+        </div>
 
         <TabsContent value="overview" className="grid gap-4 md:grid-cols-3">
           {attention.flagged && (
@@ -325,7 +339,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
                         <Link href={`/programs/workouts/${r.workout_id}`} className="hover:underline">
                           {r.workouts?.title}
                         </Link>
-                        {r.logged_by !== coach?.id && <Badge variant="secondary">Athlete-logged</Badge>}
+                        {r.logged_by != null && r.logged_by !== coach?.id && <Badge variant="secondary">Logged by athlete</Badge>}
                       </div>
                     </TableCell>
                     <TableCell>{formatScore(r, units)}</TableCell>
@@ -341,6 +355,39 @@ export default async function AthletePage({ params, searchParams }: Props) {
                       )}
                     </TableCell>
                     <TableCell className="max-w-xs truncate text-muted-foreground">{r.notes ?? ""}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ListCard>
+        </TabsContent>
+
+        <TabsContent value="journal" className="grid gap-4">
+          <ListCard title="Daily journal" empty="No journal entries yet. Athletes fill these in from their Journal tab." show={journal.length > 0}>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="pl-4">Date</TableHead>
+                  <TableHead>Sleep</TableHead>
+                  <TableHead>Habits</TableHead>
+                  <TableHead>Notes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {journal.map((e) => (
+                  <TableRow key={e.entry_on}>
+                    <TableCell className="pl-4">{formatDate(e.entry_on)}</TableCell>
+                    <TableCell>{journalSleepSummary(e) || "—"}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1.5">
+                        {journalYesAnswers(e).map((label) => (
+                          <Badge key={label} variant="secondary">
+                            {label}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-xs whitespace-normal text-muted-foreground">{e.notes ?? ""}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

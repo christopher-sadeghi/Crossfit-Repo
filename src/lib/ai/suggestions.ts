@@ -4,10 +4,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { addDays, totals } from "@/lib/nutrition";
 import { applyTarget } from "@/lib/nutrition-targets";
-import { today } from "@/lib/program-dates";
 import { WORKOUT_TYPES } from "@/app/(app)/programs/options";
 import { fromKgPrecise, toKg } from "@/lib/units";
 import type { Database, Enums, Json, Tables } from "@/lib/supabase/database.types";
+import { getToday } from "@/lib/time-zone";
 
 export const SUGGESTION_LABELS: Record<Enums<"suggestion_type">, string> = {
   write_workout: "Write workout",
@@ -132,7 +132,7 @@ function ageOn(birthDate: string, asOf: string) {
 async function buildMacroRequest(supabase: SupabaseClient<Database>, params: SuggestionParams): Promise<SuggestionRequest> {
   const { athleteId } = params;
   if (!athleteId) throw new Error("Athlete not found.");
-  const asOf = today();
+  const asOf = await getToday();
   const [
     { data: athlete, error: athleteError },
     { data: target, error: targetError },
@@ -376,7 +376,7 @@ async function applyMacroSuggestion(
 ): Promise<AppliedTarget> {
   const parsed = adjustMacrosSchema.parse(final);
   if (!suggestion.athlete_id) throw new Error("This suggestion has no athlete.");
-  const startDate = today();
+  const startDate = await getToday();
   const { data: openTarget, error: targetError } = await supabase
     .from("nutrition_targets")
     .select("start_date")

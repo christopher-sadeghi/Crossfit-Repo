@@ -125,6 +125,79 @@ export type Database = {
           },
         ];
       };
+      athlete_journal_entries: {
+        Row: {
+          alcohol: boolean;
+          athlete_id: string;
+          coach_id: string;
+          created_at: string;
+          entry_on: string;
+          high_stress: boolean;
+          hit_water_goal: boolean;
+          id: string;
+          late_caffeine: boolean;
+          late_meal: boolean;
+          mobility: boolean;
+          notes: string | null;
+          screens_in_bed: boolean;
+          sleep_hours: number | null;
+          sleep_quality: number | null;
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          alcohol?: boolean;
+          athlete_id: string;
+          coach_id: string;
+          created_at?: string;
+          entry_on?: string;
+          high_stress?: boolean;
+          hit_water_goal?: boolean;
+          id?: string;
+          late_caffeine?: boolean;
+          late_meal?: boolean;
+          mobility?: boolean;
+          notes?: string | null;
+          screens_in_bed?: boolean;
+          sleep_hours?: number | null;
+          sleep_quality?: number | null;
+          updated_at?: string;
+        };
+        Update: {
+          alcohol?: boolean;
+          athlete_id?: string;
+          coach_id?: string;
+          created_at?: string;
+          entry_on?: string;
+          high_stress?: boolean;
+          hit_water_goal?: boolean;
+          id?: string;
+          late_caffeine?: boolean;
+          late_meal?: boolean;
+          mobility?: boolean;
+          notes?: string | null;
+          screens_in_bed?: boolean;
+          sleep_hours?: number | null;
+          sleep_quality?: number | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "athlete_journal_entries_athlete_id_coach_id_fkey";
+            columns: ["athlete_id", "coach_id"];
+            isOneToOne: false;
+            referencedRelation: "athletes";
+            referencedColumns: ["id", "coach_id"];
+          },
+          {
+            foreignKeyName: "athlete_journal_entries_coach_id_fkey";
+            columns: ["coach_id"];
+            isOneToOne: false;
+            referencedRelation: "coaches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       athlete_workout_scalings: {
         Row: {
           athlete_id: string;

@@ -6,7 +6,7 @@ import { z } from "zod";
 import { Badge } from "@/components/ui/badge";
 import { getViewer } from "@/lib/viewer";
 import { createClient } from "@/lib/supabase/server";
-import { today } from "@/lib/program-dates";
+import { getToday } from "@/lib/time-zone";
 import { formatHeadline } from "@/app/(app)/programs/workouts/whiteboard";
 import type { Tables } from "@/lib/supabase/database.types";
 
@@ -30,9 +30,7 @@ type EditableResult = Pick<
   | "notes"
   | "rpe"
   | "energy"
-  | "sleep_hours"
   | "soreness"
-  | "pain_notes"
   | "logged_by"
 >;
 
@@ -63,7 +61,7 @@ export default async function AthleteLogResultPage({ params, searchParams }: Pro
     const { data } = await supabase
       .from("workout_results")
       .select(
-        "id, workout_id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, rpe, energy, sleep_hours, soreness, pain_notes, logged_by",
+        "id, workout_id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, rpe, energy, soreness, logged_by",
       )
       .eq("id", parsedId.data)
       .eq("workout_id", workout.id)
@@ -74,7 +72,7 @@ export default async function AthleteLogResultPage({ params, searchParams }: Pro
     existingResult = data;
   }
 
-  const todayIso = today();
+  const todayIso = await getToday();
   const minDate = new Date(`${todayIso}T00:00:00Z`);
   minDate.setUTCDate(minDate.getUTCDate() - 14);
   const minDateIso = minDate.toISOString().slice(0, 10);

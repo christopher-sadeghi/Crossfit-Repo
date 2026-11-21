@@ -4,7 +4,8 @@ import { ArrowLeft, Pencil, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { programDate, today } from "@/lib/program-dates";
+import { programDate } from "@/lib/program-dates";
+import { getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/units";
 
@@ -180,7 +181,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
                 <CardContent>
                   <AssignForm
                     programId={program.id}
-                    defaultStart={today()}
+                    defaultStart={await getToday()}
                     athletes={(athletes ?? [])
                       .filter((a) => !assigned.has(a.id))
                       .map((a) => ({ id: a.id, name: `${a.first_name} ${a.last_name}` }))}

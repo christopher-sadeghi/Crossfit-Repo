@@ -17,8 +17,8 @@ import {
   writeWorkoutInputSchema,
   writeWorkoutSchema,
 } from "@/lib/ai/suggestions";
-import { today } from "@/lib/program-dates";
 import { createClient } from "@/lib/supabase/server";
+import { getToday } from "@/lib/time-zone";
 import { formatDate, toKg, type Units } from "@/lib/units";
 import { Whiteboard } from "@/app/(app)/programs/workouts/whiteboard";
 
@@ -76,7 +76,7 @@ export default async function SuggestionPage({ params }: Props) {
       ...movement,
       load_kg: load == null ? null : toKg(load, units),
     })) ?? [];
-  const todayValue = today();
+  const todayValue = await getToday();
   const [athleteResult, targetResult] = await Promise.all([
     suggestion.athlete_id
       ? supabase.from("athletes").select("id, first_name, last_name").eq("id", suggestion.athlete_id).maybeSingle()
