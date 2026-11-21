@@ -23,6 +23,8 @@ export const adjustMacrosSchema = z.object({
 
 type SuggestionRequest = { input: Json; system: string; prompt: string };
 type AppliedTarget = { target_table: string; target_id: string };
+export class ApprovalError extends Error {}
+
 type SuggestionEntry = {
   label: string;
   proposalSchema: z.ZodType;
@@ -157,13 +159,26 @@ async function applyMacroSuggestion(
 ): Promise<AppliedTarget> {
   const parsed = adjustMacrosSchema.parse(final);
   if (!suggestion.athlete_id) throw new Error("This suggestion has no athlete.");
+  const startDate = today();
+  const { data: openTarget, error: targetError } = await supabase
+    .from("nutrition_targets")
+    .select("start_date")
+    .eq("athlete_id", suggestion.athlete_id)
+    .is("end_date", null)
+    .maybeSingle();
+  if (targetError) throw targetError;
+  if (openTarget && openTarget.start_date > startDate)
+    throw new ApprovalError(
+      `This athlete already has a target scheduled to start on ${openTarget.start_date}. Change that target on the nutrition page first, then approve.`,
+    );
+
   const result = await applyTarget(supabase, {
     athlete_id: suggestion.athlete_id,
     calories: parsed.calories,
     protein_g: parsed.protein_g,
     carbs_g: parsed.carbs_g,
     fat_g: parsed.fat_g,
-    start_date: today(),
+    start_date: startDate,
     notes: `AI suggestion: ${parsed.rationale}`.slice(0, 500),
   });
   if ("error" in result) throw new Error(result.error);

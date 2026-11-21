@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database, Tables } from "@/lib/supabase/database.types";
 
-import { SUGGESTION_REGISTRY } from "./suggestions";
+import { ApprovalError, SUGGESTION_REGISTRY } from "./suggestions";
 
 export async function approveSuggestionWithClient(
   supabase: SupabaseClient<Database>,
@@ -31,12 +31,17 @@ export async function approveSuggestionWithClient(
   let target: { target_table: string; target_id: string };
   try {
     target = await entry.apply(supabase, claimed, finalResult.data);
-  } catch {
+  } catch (error) {
     await supabase
       .from("ai_suggestions")
       .update({ status: "pending", final: null, decided_at: null })
       .eq("id", suggestion.id);
-    return { error: "Couldn't approve this suggestion. Please try again." };
+    return {
+      error:
+        error instanceof ApprovalError
+          ? error.message
+          : "Couldn't approve this suggestion. Please try again.",
+    };
   }
 
   try {
