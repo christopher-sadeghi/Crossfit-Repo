@@ -9,6 +9,7 @@ import { formatDate } from "@/lib/units";
 
 import { foodAverages, trainingVolume, weightTrend } from "./athlete-context";
 import { ApprovalError } from "./errors";
+import { joinProgressNote } from "./progress-note";
 
 export const NOTES_MAX = 2000;
 export const GOAL_STATUSES = ["reached", "on_track", "behind", "no_data"] as const;
@@ -126,7 +127,8 @@ async function buildRequest(supabase: SupabaseClient<Database>, { athleteId }: {
     as_of: asOf,
     units,
     goals: goalInputs,
-    body_weight_last_8_weeks: trend && {
+    body_weight_trend: trend && {
+      weeks_between_first_and_latest: trend.weeks_between,
       first: `${formatGoalValue(trend.first.kg, "kg", units)} on ${trend.first.date}`,
       latest: `${formatGoalValue(trend.latest.kg, "kg", units)} on ${trend.latest.date}`,
       change_kg: trend.change_kg,
@@ -149,16 +151,20 @@ function validate(proposal: unknown, input: Json) {
   if (parsed.goals.some(({ goal_id }) => !ids.has(goal_id))) throw new Error("unknown goal id");
 }
 
-/** The text appended to the athlete's coach notes. */
-export function progressNote(summary: ProgressSummary, input: Json) {
+/** Header and goal lines that wrap the summary in the athlete's coach notes. */
+export function progressNoteParts(summary: ProgressSummary, input: Json) {
   const parsed = progressSummaryInputSchema.safeParse(input);
   const titles = new Map((parsed.success ? parsed.data.goals : []).map(({ id, title }) => [id, title]));
-  const lines = [
-    `Progress summary (${parsed.success ? formatDate(parsed.data.as_of) : "AI"}):`,
-    summary.summary,
-    ...summary.goals.map((goal) => `- ${titles.get(goal.goal_id) ?? "Goal"} — ${GOAL_STATUS_LABELS[goal.status]}: ${goal.note}`),
-  ];
-  return lines.join("\n");
+  return {
+    header: `Progress summary (${parsed.success ? formatDate(parsed.data.as_of) : "AI"}):`,
+    goalLines: summary.goals.map((goal) => `- ${titles.get(goal.goal_id) ?? "Goal"} — ${GOAL_STATUS_LABELS[goal.status]}: ${goal.note}`),
+  };
+}
+
+/** The text appended to the athlete's coach notes. */
+export function progressNote(summary: ProgressSummary, input: Json) {
+  const { header, goalLines } = progressNoteParts(summary, input);
+  return joinProgressNote(header, summary.summary, goalLines);
 }
 
 async function apply(supabase: SupabaseClient<Database>, suggestion: Tables<"ai_suggestions">, final: unknown) {

@@ -35,6 +35,7 @@ export function weightTrend(weights: { measured_on: string; weight_kg: number | 
   return {
     first: { date: first.measured_on, kg: Number(first.weight_kg) },
     latest: { date: latest.measured_on, kg: Number(latest.weight_kg) },
+    weeks_between: Math.round((days / 7) * 10) / 10,
     change_kg: Math.round(change * 10) / 10,
     change_kg_per_week: days >= 7 ? Math.round((change / (days / 7)) * 100) / 100 : null,
   };

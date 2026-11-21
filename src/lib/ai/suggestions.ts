@@ -125,6 +125,7 @@ Rules:
 - More or harder training generally supports more carbohydrate; fewer sessions supports less.
 - If the food log shows the athlete is far from their current target, say so. The fix may be adherence, not new numbers.
 - If data is thin (few weigh-ins or food days), say so and keep changes small.
+- Describe time spans from the dates given (e.g. body_weight_trend.weeks_between), not from the size of the lookback window.
 - This is general fitness guidance, not medical advice. Never diagnose or give medical or clinical nutrition advice.
 - Write the rationale for the coach in 2–4 short, plain-English sentences, citing the numbers you relied on (goal, weight trend, intake, training).`;
 
@@ -204,7 +205,7 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
     },
     current_target: target,
     food_log_last_14_days: foodAverages(food ?? []),
-    body_weight_trend_last_8_weeks: weightTrend(weights ?? []),
+    body_weight_trend: weightTrend(weights ?? []),
     body_weight_kg_last_8_weeks: (weights ?? []).map((row) => ({ date: row.measured_on, kg: row.weight_kg })),
     training_last_4_weeks: training,
     active_goals: goals ?? [],

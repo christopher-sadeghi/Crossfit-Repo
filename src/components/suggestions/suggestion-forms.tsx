@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { joinProgressNote } from "@/lib/ai/progress-note";
 import type { FormState } from "@/lib/auth/form-state";
 import {
   approveSuggestion,
@@ -256,7 +257,17 @@ export function ApproveWorkoutSuggestionForm({
   );
 }
 
-export function ApproveProgressSummaryForm({ id, summary }: { id: string; summary: string }) {
+export function ApproveProgressSummaryForm({
+  id,
+  summary,
+  header,
+  goalLines,
+}: {
+  id: string;
+  summary: string;
+  header: string;
+  goalLines: string[];
+}) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(
     async (previous, formData) => approveSuggestion(previous, formData),
     {},
@@ -284,6 +295,10 @@ export function ApproveProgressSummaryForm({ id, summary }: { id: string; summar
           onChange={(event) => setValue(event.target.value)}
         />
       </div>
+      <details className="text-sm">
+        <summary className="cursor-pointer text-muted-foreground">Preview the note</summary>
+        <pre className="mt-2 font-sans whitespace-pre-wrap">{joinProgressNote(header, value.trim(), goalLines)}</pre>
+      </details>
       <Message state={state} />
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={pending}>{pending ? "Saving…" : "Save to athlete notes"}</Button>

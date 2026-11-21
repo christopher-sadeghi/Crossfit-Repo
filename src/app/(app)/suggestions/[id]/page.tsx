@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { friendlySuggestionError } from "@/lib/ai/service-core";
-import { GOAL_STATUS_LABELS, progressNote, progressSummaryInputSchema, progressSummarySchema } from "@/lib/ai/progress-summary";
+import { GOAL_STATUS_LABELS, progressNoteParts, progressSummaryInputSchema, progressSummarySchema } from "@/lib/ai/progress-summary";
 import {
   adjustMacrosSchema,
   MACRO_DISCLAIMER,
@@ -302,11 +302,11 @@ export default async function SuggestionPage({ params }: Props) {
             </p>
           </CardHeader>
           <CardContent className="grid gap-5">
-            <details className="text-sm">
-              <summary className="cursor-pointer text-muted-foreground">Preview the note</summary>
-              <pre className="mt-2 font-sans whitespace-pre-wrap">{progressNote(shownSummary, suggestion.input)}</pre>
-            </details>
-            <ApproveProgressSummaryForm id={suggestion.id} summary={shownSummary.summary} />
+            <ApproveProgressSummaryForm
+              id={suggestion.id}
+              summary={shownSummary.summary}
+              {...progressNoteParts(shownSummary, suggestion.input)}
+            />
             <div className="border-t pt-4">
               <RejectSuggestionForm id={suggestion.id} />
             </div>
