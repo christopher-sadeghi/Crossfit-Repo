@@ -69,7 +69,7 @@ async function buildRequest(supabase: SupabaseClient<Database>, { athleteId }: {
       .eq("athlete_id", athleteId)
       .or(`status.eq.active,and(status.eq.achieved,achieved_at.gte.${addDays(asOf, -90)})`)
       .order("target_date", { nullsFirst: false }),
-    supabase.from("body_metrics").select("measured_on, weight_kg, body_fat_pct").eq("athlete_id", athleteId).order("measured_on").order("created_at", { ascending: false }),
+    supabase.from("body_metrics").select("measured_on, weight_kg, body_fat_pct").eq("athlete_id", athleteId).order("measured_on").order("created_at"),
     supabase
       .from("workout_results")
       .select("performed_on, load_kg, reps, rounds, workouts(workout_type, workout_movements(movement_id))")
@@ -97,7 +97,8 @@ async function buildRequest(supabase: SupabaseClient<Database>, { athleteId }: {
 
   const units = coach.units;
   const allMetrics = metrics ?? [];
-  const progressData = { metrics: allMetrics, results: results ?? [] };
+  // Newest first, like the progress page, so `latestMetric` picks the newest same-day reading.
+  const progressData = { metrics: [...allMetrics].reverse(), results: results ?? [] };
   const goalInputs = (goals ?? []).map((goal) => {
     const progress = goalProgress(goal, progressData);
     const value = (v: number | null) => (v == null ? null : formatGoalValue(Number(v), goal.unit, units));
