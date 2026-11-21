@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Plus, Search } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
+import { RequestWorkoutSuggestionForm } from "@/components/suggestions/suggestion-forms";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -49,6 +50,17 @@ export default async function WorkoutsPage({ searchParams }: Props) {
         </Button>
       </div>
       <ProgramsNav active="/programs/workouts" />
+      <Card className="mb-4">
+        <CardContent className="grid gap-4 pt-6 md:grid-cols-[minmax(0,1fr)_minmax(20rem,0.8fr)] md:items-start">
+          <div>
+            <h2 className="font-semibold">Ask AI to write a WOD</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Describe the workout you want. Nothing is saved until you review and approve it.
+            </p>
+          </div>
+          <RequestWorkoutSuggestionForm />
+        </CardContent>
+      </Card>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <form className="relative w-72" role="search">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
