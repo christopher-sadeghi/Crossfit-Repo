@@ -40,3 +40,10 @@ Emails for confirming sign-up and resetting a password link to `/auth/callback`.
 
 - `http://localhost:3000/**` for local development.
 - Your production domain and this project's own preview pattern, for example `https://fitcoach-*-<your-vercel-team>.vercel.app/**`, once deploys are set up. Never allow all of `https://*.vercel.app/**`: anyone can deploy there, so reset links could be sent to someone else's site.
+
+Then open **Authentication > Emails** and make the links verify on our server instead of relying on a cookie from the browser that requested them (otherwise a reset link opened on another device or browser fails). Replace the link in these two templates:
+
+- **Confirm signup**: `<a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email">Confirm your email</a>`
+- **Reset Password**: `<a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=recovery">Reset your password</a>`
+
+`{{ .RedirectTo }}` is the `/auth/callback?next=...` URL the app sends, so it must be in the redirect list above.

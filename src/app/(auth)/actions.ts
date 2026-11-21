@@ -44,7 +44,7 @@ export async function signup(_: FormState, formData: FormData): Promise<FormStat
     password: parsed.data.password,
     options: {
       data: { full_name: parsed.data.full_name },
-      emailRedirectTo: `${await getOrigin()}/auth/callback`,
+      emailRedirectTo: `${await getOrigin()}/auth/callback?next=/`,
     },
   });
   if (error) return failure(formData, error.message);
