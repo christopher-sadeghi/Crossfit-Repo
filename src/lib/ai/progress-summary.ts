@@ -43,7 +43,7 @@ const SYSTEM = `You help a CrossFit coach write a short progress note about one 
 Rules:
 - Use only the data provided. Do not invent numbers.
 - Return one entry per goal in the goals list, using its id. Status: "reached" if achieved or the target is met; "on_track" if the current value and pace look likely to hit the target by its date; "behind" if not; "no_data" if there is no current value or start value to judge from.
-- Each goal note is one plain-English sentence that cites the numbers (start, current, target, date) exactly as given.
+- Each goal note is one plain-English sentence that cites the numbers (start, current, target, date) exactly as given. If a value is null, say it hasn't been logged yet; never write "null".
 - The summary is 2–4 short sentences for the coach about overall progress, including training consistency, body weight trend, and nutrition adherence when there is data. If there are no goals, say so and summarise the rest.
 - Values are already formatted in the coach's units; repeat them as given.
 - Keep the whole note (summary plus all goal notes) under 1,500 characters; with many goals, keep each goal note very short.
