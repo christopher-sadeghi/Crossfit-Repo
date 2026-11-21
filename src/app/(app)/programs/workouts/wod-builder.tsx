@@ -44,7 +44,7 @@ const emptyRow = (): Row => ({
 
 const num = (v: string) => (v.trim() === "" ? null : Number(v));
 const toDisplay = (kg: number | null, units: Units) =>
-  kg == null ? "" : String(Math.round((units === "lb" ? kg * LB_PER_KG : kg) * 10) / 10);
+  kg == null ? "" : String(Math.round((units === "lb" ? kg * LB_PER_KG : kg) * 100) / 100);
 const toKg = (v: string, units: Units) => {
   const n = num(v);
   return n == null ? null : Math.round((units === "lb" ? n / LB_PER_KG : n) * 100) / 100;
