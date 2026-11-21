@@ -23,7 +23,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
     supabase
       .from("programs")
       .select(
-        "id, name, description, weeks, athlete_id, source_program_id, athletes(id, first_name, last_name), source_program:programs!programs_source_program_id_fkey(id, name), workouts(id, title, workout_type, time_cap_seconds, rounds, week_number, day_number), program_assignments(id, start_date, athletes(id, first_name, last_name))",
+        "id, name, description, weeks, athlete_id, source_program_id, athletes(id, first_name, last_name), workouts(id, title, workout_type, time_cap_seconds, rounds, week_number, day_number), program_assignments(id, start_date, athletes(id, first_name, last_name))",
       )
       .eq("id", id)
       .order("title", { referencedTable: "workouts" })
@@ -34,9 +34,11 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
   ]);
   if (!program) notFound();
 
+  const { data: sourceProgram } = program.source_program_id
+    ? await supabase.from("programs").select("id, name").eq("id", program.source_program_id).maybeSingle()
+    : { data: null };
   const assignments = program.program_assignments;
   const isPersonal = Boolean(program.athlete_id);
-  const sourceProgram = program.source_program?.[0];
   const assigned = new Set(assignments.map((a) => a.athletes?.id));
   const starts = new Set(assignments.map((a) => a.start_date));
   // Show real dates on the calendar only when every athlete starts on the same day.
