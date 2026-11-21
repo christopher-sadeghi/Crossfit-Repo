@@ -979,6 +979,16 @@ export type Database = {
         };
         Returns: string;
       };
+      save_scaled_workout: {
+        Args: {
+          p_athlete_id: string;
+          p_movements: Json;
+          p_scheduled_on: string;
+          p_source_workout_id: string;
+          p_workout: Json;
+        };
+        Returns: string;
+      };
       claim_athlete_invite: {
         Args: { p_token: string };
         Returns: undefined;

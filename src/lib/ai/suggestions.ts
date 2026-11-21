@@ -89,9 +89,60 @@ export const writeWorkoutInputSchema = z.object({
     .optional(),
 });
 
+export const scaleWorkoutSchema = writeWorkoutSchema.extend({
+  movements: z
+    .array(writeWorkoutSchema.shape.movements.element.extend({ movement_name: z.string().max(200) }))
+    .min(1)
+    .max(15),
+  changes: z
+    .array(
+      z.object({
+        change: z.string().min(1).max(200),
+        reason: z.string().min(1).max(300),
+      }),
+    )
+    .max(15),
+});
+
+const workoutSnapshotSchema = z.object({
+  title: z.string(),
+  workout_type: z.enum(WORKOUT_TYPES),
+  time_cap_seconds: z.number().nullable(),
+  rounds: z.number().nullable(),
+  description: z.string().nullable(),
+  notes: z.string().nullable(),
+  movements: z.array(
+    z.object({
+      movement_id: z.string(),
+      name: z.string(),
+      sets: z.number().nullable(),
+      reps: z.number().nullable(),
+      load: z.number().nullable(),
+      distance_m: z.number().nullable(),
+      calories: z.number().nullable(),
+      duration_seconds: z.number().nullable(),
+      notes: z.string().nullable(),
+    }),
+  ),
+});
+
+export const scaleWorkoutInputSchema = z.object({
+  workout_id: z.string().uuid(),
+  scheduled_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  request: z.string().nullable(),
+  units: z.enum(["lb", "kg"]),
+  library: writeWorkoutInputSchema.shape.library,
+  current_workout: workoutSnapshotSchema,
+});
+
 type SuggestionRequest = { input: Json; system: string; prompt: string };
 type AppliedTarget = { target_table: string; target_id: string };
-type SuggestionParams = { athleteId: string | null; workoutId?: string | null; request?: string | null };
+type SuggestionParams = {
+  athleteId: string | null;
+  workoutId?: string | null;
+  request?: string | null;
+  scheduledOn?: string | null;
+};
 export type SuggestionApplyOptions = { saveAs?: "update" | "new" };
 export class ApprovalError extends Error {}
 
@@ -100,6 +151,7 @@ type SuggestionEntry = {
   proposalSchema: z.ZodType;
   buildRequest?: (supabase: SupabaseClient<Database>, params: SuggestionParams) => Promise<SuggestionRequest>;
   validate?: (proposal: unknown, input: Json) => void;
+  normalize?: (proposal: unknown, input: Json) => unknown;
   apply?: (
     supabase: SupabaseClient<Database>,
     suggestion: Tables<"ai_suggestions">,
@@ -402,6 +454,175 @@ async function applyMacroSuggestion(
   return { target_table: "nutrition_targets", target_id: result.id };
 }
 
+const SCALE_WORKOUT_SYSTEM = `You help a CrossFit coach scale one WOD for one athlete. The coach reviews every suggestion before anything changes.
+Rules:
+- Use ONLY movements from the provided library list. Copy each movement_id exactly from the library and set movement_name to that library entry's exact name. Never invent movements.
+- Keep the WOD's intent, format and time domain. Change only what this athlete needs.
+- Base loads on the athlete's recent results and experience level. Loads are in the coach's preferred units (<units>).
+- Work around injuries: substitute movements that load an injured area, and never make the WOD harder because of an injury.
+- If the athlete has no recent results, scale conservatively for their experience level.
+- List every change you made in "changes" (one short line each, e.g. "Box jumps → box step-ups") with a short reason that cites the athlete data. If nothing needs to change, return the WOD as is with an empty list.
+- Do not add "(scaled)" or the athlete's name to the title.
+- Write the overall rationale for the coach in 2–4 short, plain-English sentences.`;
+
+async function buildScaleRequest(supabase: SupabaseClient<Database>, params: SuggestionParams): Promise<SuggestionRequest> {
+  const { athleteId, workoutId, scheduledOn } = params;
+  if (!athleteId) throw new Error("Athlete not found.");
+  if (!workoutId) throw new Error("Workout not found.");
+  if (!scheduledOn) throw new Error("A date is required.");
+
+  const [
+    { data: coach, error: coachError },
+    { data: library, error: libraryError },
+    { data: athlete, error: athleteError },
+    { data: workout, error: workoutError },
+    { data: results, error: resultsError },
+  ] = await Promise.all([
+    supabase.from("coaches").select("units").maybeSingle(),
+    supabase.from("movements").select("id, name, category, measure").order("name"),
+    supabase
+      .from("athletes")
+      .select("first_name, sex, birth_date, experience_level, injuries, notes")
+      .eq("id", athleteId)
+      .maybeSingle(),
+    supabase
+      .from("workouts")
+      .select(
+        "id, title, workout_type, time_cap_seconds, rounds, description, notes, workout_movements(position, movement_id, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(name))",
+      )
+      .eq("id", workoutId)
+      .order("position", { referencedTable: "workout_movements" })
+      .maybeSingle(),
+    supabase
+      .from("workout_results")
+      .select("performed_on, time_seconds, rounds, reps, load_kg, is_rx, rpe, soreness, pain_notes, notes, workouts(title, workout_type)")
+      .eq("athlete_id", athleteId)
+      .order("performed_on", { ascending: false })
+      .limit(15),
+  ]);
+  if (coachError || !coach) throw coachError ?? new Error("Coach not found.");
+  if (libraryError) throw libraryError;
+  if (athleteError || !athlete) throw athleteError ?? new Error("Athlete not found.");
+  if (workoutError || !workout) throw workoutError ?? new Error("Workout not found.");
+  if (resultsError) throw resultsError;
+
+  const units = coach.units;
+  const input = {
+    workout_id: workout.id,
+    scheduled_on: scheduledOn,
+    request: params.request?.trim() || null,
+    units,
+    library: library ?? [],
+    current_workout: {
+      title: workout.title,
+      workout_type: workout.workout_type,
+      time_cap_seconds: workout.time_cap_seconds,
+      rounds: workout.rounds,
+      description: workout.description,
+      notes: workout.notes,
+      movements: workout.workout_movements.map((item) => ({
+        movement_id: item.movement_id,
+        name: item.movements?.name ?? "",
+        sets: item.sets,
+        reps: item.reps,
+        load: item.load_kg == null ? null : fromKgPrecise(item.load_kg, units),
+        distance_m: item.distance_m,
+        calories: item.calories,
+        duration_seconds: item.duration_seconds,
+        notes: item.notes,
+      })),
+    },
+  } satisfies Json;
+  const athleteContext = {
+    first_name: athlete.first_name,
+    sex: athlete.sex,
+    age: athlete.birth_date ? ageOn(athlete.birth_date, scheduledOn) : null,
+    experience_level: athlete.experience_level,
+    injuries: athlete.injuries,
+    coach_notes: athlete.notes,
+    recent_results: (results ?? []).map(({ workouts: resultWorkout, load_kg, ...result }) => ({
+      ...result,
+      workout: resultWorkout?.title ?? null,
+      workout_type: resultWorkout?.workout_type ?? null,
+      load: load_kg == null ? null : fromKgPrecise(load_kg, units),
+    })),
+  };
+
+  return {
+    input,
+    system: SCALE_WORKOUT_SYSTEM.replace("<units>", units),
+    prompt: `Athlete (JSON):\n${JSON.stringify(athleteContext, null, 2)}\n\nWOD and movement library (JSON):\n${JSON.stringify(input, null, 2)}\n\n${input.request ? `Coach note: ${input.request}\n\n` : ""}Return the scaled WOD for this athlete.`,
+  };
+}
+
+function normalizeScaleProposal(proposal: unknown, input: Json) {
+  const parsedProposal = scaleWorkoutSchema.parse(proposal);
+  const { library } = scaleWorkoutInputSchema.parse(input);
+  const ids = new Set(library.map(({ id }) => id));
+  const idsByName = new Map(library.map(({ id, name }) => [name.trim().toLowerCase(), id]));
+  return {
+    ...parsedProposal,
+    movements: parsedProposal.movements.map((movement) =>
+      ids.has(movement.movement_id)
+        ? movement
+        : { ...movement, movement_id: idsByName.get(movement.movement_name.trim().toLowerCase()) ?? movement.movement_id },
+    ),
+  };
+}
+
+function validateScaleProposal(proposal: unknown, input: Json) {
+  const parsedProposal = scaleWorkoutSchema.parse(proposal);
+  const parsedInput = scaleWorkoutInputSchema.parse(input);
+  const allowedMovementIds = new Set(parsedInput.library.map(({ id }) => id));
+  if (parsedProposal.movements.some(({ movement_id }) => !allowedMovementIds.has(movement_id)))
+    throw new Error("unknown movement id");
+}
+
+async function applyScaleSuggestion(
+  supabase: SupabaseClient<Database>,
+  suggestion: Tables<"ai_suggestions">,
+  final: unknown,
+): Promise<AppliedTarget> {
+  const parsed = scaleWorkoutSchema.parse(final);
+  validateScaleProposal(parsed, suggestion.input);
+  const input = scaleWorkoutInputSchema.safeParse(suggestion.input);
+  if (!input.success || !suggestion.athlete_id)
+    throw new ApprovalError("This suggestion is missing its workout details. Ask again.");
+
+  const { data: targetId, error } = await supabase.rpc("save_scaled_workout", {
+    p_source_workout_id: input.data.workout_id,
+    p_athlete_id: suggestion.athlete_id,
+    p_scheduled_on: input.data.scheduled_on,
+    p_workout: {
+      title: parsed.title,
+      workout_type: parsed.workout_type,
+      time_cap_seconds: parsed.time_cap_minutes == null ? null : parsed.time_cap_minutes * 60,
+      rounds: parsed.rounds,
+      description: parsed.description,
+      notes: parsed.notes,
+    },
+    p_movements: parsed.movements.map((movement) => ({
+      movement_id: movement.movement_id,
+      sets: movement.sets,
+      reps: movement.reps,
+      load_kg: movement.load == null ? null : toKg(movement.load, input.data.units),
+      distance_m: movement.distance_m,
+      calories: movement.calories,
+      duration_seconds: movement.duration_seconds,
+      notes: movement.notes,
+    })),
+  });
+  if (error) {
+    if (error.message.includes("workout_not_found"))
+      throw new ApprovalError("The original WOD no longer exists. Ask for a new suggestion.");
+    if (error.message.includes("athlete_not_found"))
+      throw new ApprovalError("This athlete is no longer on your roster.");
+    throw error;
+  }
+  if (!targetId) throw new Error("The scaled WOD could not be saved.");
+  return { target_table: "workouts", target_id: targetId };
+}
+
 export const SUGGESTION_REGISTRY: Record<Enums<"suggestion_type">, SuggestionEntry> = {
   movement_guide: movementGuideEntry,
   write_workout: {
@@ -411,7 +632,14 @@ export const SUGGESTION_REGISTRY: Record<Enums<"suggestion_type">, SuggestionEnt
     validate: validateWorkoutProposal,
     apply: applyWorkoutSuggestion,
   },
-  scale_workout: { label: SUGGESTION_LABELS.scale_workout, proposalSchema: z.unknown() },
+  scale_workout: {
+    label: SUGGESTION_LABELS.scale_workout,
+    proposalSchema: scaleWorkoutSchema,
+    buildRequest: buildScaleRequest,
+    validate: validateScaleProposal,
+    normalize: normalizeScaleProposal,
+    apply: applyScaleSuggestion,
+  },
   adjust_macros: {
     label: SUGGESTION_LABELS.adjust_macros,
     proposalSchema: adjustMacrosSchema,

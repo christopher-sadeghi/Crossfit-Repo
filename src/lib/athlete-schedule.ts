@@ -80,7 +80,15 @@ export async function loadAthleteSchedule<TWorkout extends ScheduleWorkout>(
     });
   }
 
-  for (const workout of (oneOffRows ?? []) as unknown as OneOffWorkout<TWorkout>[]) {
+  const oneOffs = (oneOffRows ?? []) as unknown as OneOffWorkout<TWorkout>[];
+  const scaledKeys = new Set(
+    oneOffs.filter((w) => w.source_workout_id && w.scheduled_on).map((w) => `${w.source_workout_id}|${w.scheduled_on}`),
+  );
+  const visibleItems = items.filter((item) => !scaledKeys.has(`${item.workout.id}|${item.date}`));
+  items.length = 0;
+  items.push(...visibleItems);
+
+  for (const workout of oneOffs) {
     if (!workout.scheduled_on) continue;
     items.push({
       workout,
@@ -94,7 +102,7 @@ export async function loadAthleteSchedule<TWorkout extends ScheduleWorkout>(
   return items.sort((a, b) => a.date.localeCompare(b.date) || a.workout.title.localeCompare(b.workout.title));
 }
 
-export function SCHEDULE_LABEL(item: Pick<AthleteScheduleItem, "source" | "programName">) {
-  if (item.source === "one_off") return "One-off";
+export function SCHEDULE_LABEL(item: Pick<AthleteScheduleItem, "source" | "programName" | "workout">) {
+  if (item.source === "one_off") return item.workout.source_workout_id ? "Scaled for you" : "One-off";
   return `${item.source === "group" ? "Group" : "Personal"} · ${item.programName ?? ""}`;
 }

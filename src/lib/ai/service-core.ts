@@ -14,6 +14,7 @@ export type SuggestionOptions<S extends z.ZodType> = {
   system: string;
   prompt: string;
   validate?: (proposal: unknown, input: Json) => void;
+  normalize?: (proposal: unknown, input: Json) => unknown;
   model?: LanguageModel;
 };
 
@@ -124,7 +125,8 @@ export async function runSuggestionWithClient<S extends z.ZodType>(
       maxRetries: 1,
       providerOptions: { openai: { reasoningEffort: "low" } },
     });
-    const proposal = opts.schema.parse(output);
+    const parsed = opts.schema.parse(output);
+    const proposal = opts.normalize ? opts.schema.parse(opts.normalize(parsed, opts.input)) : parsed;
     opts.validate?.(proposal, opts.input);
     const { error } = await supabase
       .from("ai_suggestions")

@@ -10,9 +10,11 @@ import type { FormState } from "@/lib/auth/form-state";
 import {
   approveSuggestion,
   rejectSuggestion,
+  requestScaleSuggestion,
   requestSuggestion,
   requestWorkoutSuggestion,
 } from "@/app/(app)/suggestions/actions";
+import { selectClass } from "@/app/(app)/programs/options";
 
 type TrackedState = FormState & { successes?: number };
 type MacroValues = { calories: number; protein_g: number; carbs_g: number; fat_g: number; rationale: string };
@@ -163,6 +165,77 @@ export function ApproveSuggestionForm({ id, values }: { id: string; values: Macr
   );
 }
 
+export function ScaleWorkoutForm({
+  workoutId,
+  athletes,
+  fallbackDate,
+}: {
+  workoutId: string;
+  athletes: { id: string; name: string; date: string | null }[];
+  fallbackDate: string;
+}) {
+  const [athleteId, setAthleteId] = useState(athletes.length === 1 ? athletes[0].id : "");
+  const [date, setDate] = useState(athletes.length === 1 ? (athletes[0].date ?? fallbackDate) : fallbackDate);
+  const [state, formAction, pending] = useActionState<FormState, FormData>(
+    async (previous, formData) => requestScaleSuggestion(previous, formData),
+    {},
+  );
+
+  if (!athletes.length) return <p className="text-sm text-muted-foreground">Add an active athlete to scale this WOD.</p>;
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        startTransition(() => formAction(new FormData(event.currentTarget)));
+      }}
+      className="grid gap-3"
+    >
+      <input type="hidden" name="workout_id" value={workoutId} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-1.5">
+          <Label htmlFor="scale-athlete">Athlete</Label>
+          <select
+            id="scale-athlete"
+            name="athlete_id"
+            required
+            value={athleteId}
+            onChange={(event) => {
+              setAthleteId(event.target.value);
+              const athlete = athletes.find(({ id }) => id === event.target.value);
+              if (athlete?.date) setDate(athlete.date);
+            }}
+            className={`${selectClass} w-full`}
+          >
+            <option value="" disabled>
+              Choose an athlete…
+            </option>
+            {athletes.map((athlete) => (
+              <option key={athlete.id} value={athlete.id}>
+                {athlete.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="scale-date">Date they&apos;ll do it</Label>
+          <Input id="scale-date" name="scheduled_on" type="date" required value={date} onChange={(event) => setDate(event.target.value)} />
+        </div>
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="scale-request">Anything else the AI should know? (optional)</Label>
+        <Input id="scale-request" name="request" maxLength={300} placeholder="Coming back from a week off" />
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="submit" disabled={pending}>
+          {pending ? "Asking the AI… (up to 45 s)" : "Scale for athlete…"}
+        </Button>
+        <Message state={state} />
+      </div>
+    </form>
+  );
+}
+
 export function ApproveWorkoutSuggestionForm({
   id,
   mode,
@@ -170,11 +243,11 @@ export function ApproveWorkoutSuggestionForm({
   resultCount,
 }: {
   id: string;
-  mode: "write" | "adjust";
-  defaultSaveAs: "update" | "new";
-  resultCount: number;
+  mode: "write" | "adjust" | "scale";
+  defaultSaveAs?: "update" | "new";
+  resultCount?: number;
 }) {
-  const [saveAs, setSaveAs] = useState(defaultSaveAs);
+  const [saveAs, setSaveAs] = useState(defaultSaveAs ?? "update");
   const [state, formAction, pending] = useActionState<FormState, FormData>(
     async (previous, formData) => approveSuggestion(previous, formData),
     {},
@@ -220,7 +293,7 @@ export function ApproveWorkoutSuggestionForm({
               </label>
             ))}
           </div>
-          {resultCount > 0 && (
+          {!!resultCount && (
             <p className="text-sm text-amber-700 dark:text-amber-300">
               This WOD has {resultCount} logged results; updating changes what they were scored against.
             </p>

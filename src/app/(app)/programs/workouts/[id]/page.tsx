@@ -5,11 +5,11 @@ import { ArrowLeft, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RequestWorkoutSuggestionForm } from "@/components/suggestions/suggestion-forms";
+import { RequestWorkoutSuggestionForm, ScaleWorkoutForm } from "@/components/suggestions/suggestion-forms";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getCoach } from "@/lib/coach";
 import { createClient } from "@/lib/supabase/server";
-import { today } from "@/lib/program-dates";
+import { programDate, today } from "@/lib/program-dates";
 import { compareScores } from "@/lib/results";
 import { formatDate, formatScore } from "@/lib/units";
 
@@ -25,7 +25,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
     getCoach(),
     supabase
       .from("workouts")
-      .select("id, title, workout_type, time_cap_seconds, rounds, description, notes, athlete_id, scheduled_on, week_number, day_number, program_id, athletes(id, first_name, last_name), programs(name), workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(id, name))")
+      .select("id, title, workout_type, time_cap_seconds, rounds, description, notes, athlete_id, scheduled_on, source_workout_id, week_number, day_number, program_id, athletes(id, first_name, last_name), programs(name), workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(id, name))")
       .eq("id", id)
       .order("position", { referencedTable: "workout_movements" })
       .maybeSingle(),
@@ -36,6 +36,33 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
     supabase.from("athletes").select("id, first_name, last_name").eq("status", "active").order("first_name").order("last_name"),
   ]);
   if (!workout) notFound();
+
+  const isScaledVersion = !!workout.source_workout_id && !!workout.athlete_id && !workout.program_id;
+  const [{ data: assignments }, { data: scaledVersions }, { data: sourceWorkout }] = await Promise.all([
+    workout.program_id && workout.week_number && workout.day_number
+      ? supabase.from("program_assignments").select("athlete_id, start_date").eq("program_id", workout.program_id)
+      : Promise.resolve({ data: [] }),
+    supabase
+      .from("workouts")
+      .select("id, scheduled_on, athletes(first_name, last_name)")
+      .eq("source_workout_id", workout.id)
+      .is("program_id", null)
+      .not("athlete_id", "is", null)
+      .order("scheduled_on", { ascending: false }),
+    isScaledVersion && workout.source_workout_id
+      ? supabase.from("workouts").select("id, title").eq("id", workout.source_workout_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+  const todayValue = today();
+  const programDates = new Map(
+    (assignments ?? []).map(({ athlete_id, start_date }) => [
+      athlete_id,
+      programDate(start_date, workout.week_number ?? 1, workout.day_number ?? 1),
+    ]),
+  );
+  const scaleAthletes = (athletes ?? [])
+    .filter((a) => !workout.athlete_id || a.id === workout.athlete_id)
+    .map((a) => ({ id: a.id, name: `${a.first_name} ${a.last_name}`, date: programDates.get(a.id) ?? workout.scheduled_on }));
 
   const units = coach?.units ?? "lb";
   const results = (resultRows ?? []).sort(compareScores(workout.workout_type));
@@ -55,7 +82,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
             <Badge variant="secondary">{WORKOUT_TYPE_LABELS[workout.workout_type]}</Badge>
             {workout.athlete_id && (
               <>
-                <Badge variant="outline">One-off</Badge>
+                <Badge variant="outline">{isScaledVersion ? "Scaled version" : "One-off"}</Badge>
                 {workout.athletes && (
                   <Link href={`/athletes/${workout.athletes.id}`} className="hover:underline">
                     {workout.athletes.first_name} {workout.athletes.last_name}
@@ -70,6 +97,14 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
               </Link>
             )}
             {workout.scheduled_on && <span>· {formatDate(workout.scheduled_on)}</span>}
+            {sourceWorkout && (
+              <span>
+                · Scaled from{" "}
+                <Link href={`/programs/workouts/${sourceWorkout.id}`} className="underline underline-offset-4">
+                  {sourceWorkout.title}
+                </Link>
+              </span>
+            )}
             <span>· {resultCount} results logged</span>
           </p>
         </div>
@@ -82,6 +117,35 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
           <WorkoutButtons id={workout.id} resultCount={resultCount} />
         </div>
       </div>
+      {!isScaledVersion && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Scale for athlete</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              The AI uses the athlete&apos;s experience, injuries and recent results to suggest substitutions and loads. Approving
+              saves a version just for them; this WOD stays the same for everyone else.
+            </p>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <ScaleWorkoutForm workoutId={workout.id} athletes={scaleAthletes} fallbackDate={workout.scheduled_on ?? todayValue} />
+            {!!scaledVersions?.length && (
+              <div className="grid gap-1 text-sm">
+                <p className="font-medium">Scaled versions</p>
+                <ul className="grid gap-1">
+                  {scaledVersions.map((version) => (
+                    <li key={version.id}>
+                      <Link href={`/programs/workouts/${version.id}`} className="underline underline-offset-4">
+                        {version.athletes ? `${version.athletes.first_name} ${version.athletes.last_name}` : "Athlete"}
+                      </Link>
+                      {version.scheduled_on && <span className="text-muted-foreground"> · {formatDate(version.scheduled_on)}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
       <Card className="mb-6">
         <CardHeader>
           <CardTitle>Ask AI to adjust</CardTitle>
@@ -104,7 +168,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
               workoutId={workout.id}
               workoutType={workout.workout_type}
               units={units}
-              today={today()}
+              today={todayValue}
               athletes={(athletes ?? []).map((a) => ({ id: a.id, name: `${a.first_name} ${a.last_name}` }))}
             />
           </CardContent>
