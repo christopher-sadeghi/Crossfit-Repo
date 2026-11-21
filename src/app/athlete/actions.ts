@@ -7,7 +7,7 @@ import { z } from "zod";
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { buildScore, feedbackFields, scoreFields } from "@/lib/result-score";
 import { createClient } from "@/lib/supabase/server";
-import { fromKgPrecise, toKg } from "@/lib/units";
+import { fromKgPrecise } from "@/lib/units";
 import { getViewer } from "@/lib/viewer";
 
 const resultSchema = z.object({
@@ -65,7 +65,7 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
     // Keep the stored load when the athlete didn't change the value the edit form showed.
     const { data: existing } = await supabase.from("workout_results").select("load_kg").eq("id", r.result_id).maybeSingle();
     const existingKg = existing?.load_kg == null ? null : Number(existing.load_kg);
-    if (existingKg != null && toKg(fromKgPrecise(existingKg, viewer.units), viewer.units) === score.load_kg)
+    if (existingKg != null && Number(formData.get("load")) === fromKgPrecise(existingKg, viewer.units))
       score.load_kg = existingKg;
   }
 
