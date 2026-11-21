@@ -23,6 +23,7 @@ The database schema lives in `supabase/migrations/` and is applied in filename o
 
 - `20261121000000_initial_schema.sql`: all tables, relationships, and row-level security (each coach only sees their own data).
 - `20261121000100_seed_movement_library.sql`: 62 starter movements shared by all coaches.
+- `20261121000200_demo_data.sql`: `load_demo_data(reset)` and `clear_demo_data()` for demo data.
 
 `supabase/tests/rls_isolation.sql` checks that one coach cannot read or change another coach's data. It runs in a transaction and rolls back.
 
@@ -47,3 +48,13 @@ Before launch, set up custom SMTP (for example Resend) under **Authentication > 
 - **Reset Password**: `<a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=recovery">Reset your password</a>`
 
 `{{ .RedirectTo }}` is the `/auth/callback?next=...` URL the app sends, so it must be in the redirect list above.
+
+## Demo data
+
+Log in, open **Settings**, and click **Load demo data** (or **Reset demo** to wipe and reload). This creates 12 athletes, an 8-week program, 6 weeks of results, weigh-ins, food logs, macro targets and goals.
+
+From the command line:
+
+```bash
+npm run demo:reset -- coach@example.com your-password
+```

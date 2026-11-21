@@ -801,7 +801,8 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      clear_demo_data: { Args: Record<PropertyKey, never>; Returns: undefined };
+      load_demo_data: { Args: { reset?: boolean }; Returns: Json };
     };
     Enums: {
       athlete_status: "active" | "archived";
