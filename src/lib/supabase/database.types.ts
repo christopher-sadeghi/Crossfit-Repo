@@ -828,6 +828,7 @@ export type Database = {
           program_id: string | null;
           rounds: number | null;
           scheduled_on: string | null;
+          source_workout_id: string | null;
           time_cap_seconds: number | null;
           title: string;
           updated_at: string;
@@ -846,6 +847,7 @@ export type Database = {
           program_id?: string | null;
           rounds?: number | null;
           scheduled_on?: string | null;
+          source_workout_id?: string | null;
           time_cap_seconds?: number | null;
           title: string;
           updated_at?: string;
@@ -863,6 +865,7 @@ export type Database = {
           program_id?: string | null;
           rounds?: number | null;
           scheduled_on?: string | null;
+          source_workout_id?: string | null;
           time_cap_seconds?: number | null;
           title?: string;
           updated_at?: string;
@@ -890,6 +893,13 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "programs";
             referencedColumns: ["id", "coach_id"];
+          },
+          {
+            foreignKeyName: "workouts_source_workout_id_fkey";
+            columns: ["source_workout_id"];
+            isOneToOne: false;
+            referencedRelation: "workouts";
+            referencedColumns: ["id"];
           },
         ];
       };

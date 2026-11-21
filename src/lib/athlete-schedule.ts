@@ -6,6 +6,7 @@ import { programDate } from "./program-dates";
 
 type ScheduleWorkout = {
   id: string;
+  source_workout_id: string | null;
   title: string;
   week_number: number | null;
   day_number: number | null;

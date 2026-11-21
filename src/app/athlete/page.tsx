@@ -14,6 +14,7 @@ import { formatHeadline, Whiteboard, type WhiteboardWorkout } from "../(app)/pro
 
 type TodayWorkout = WhiteboardWorkout & {
   id: string;
+  source_workout_id: string | null;
   week_number: number | null;
   day_number: number | null;
   workout_movements: {
@@ -44,7 +45,7 @@ export default async function AthleteTodayPage() {
     supabase,
     viewer.athleteId,
     { from: recentStartIso, to: "9999-12-31" },
-    "id, title, workout_type, time_cap_seconds, rounds, description, notes, week_number, day_number, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(name))",
+    "id, source_workout_id, title, workout_type, time_cap_seconds, rounds, description, notes, week_number, day_number, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(name))",
   );
 
   const todayWods = scheduled
@@ -57,7 +58,13 @@ export default async function AthleteTodayPage() {
     .filter((item) => item.date > currentDate)
     .slice(0, 5);
   const todayWorkoutIds = todayWods.map((item) => item.workout.id);
-  const workoutIds = [...new Set([...todayWods, ...recentWods].map((item) => item.workout.id))];
+  const workoutIds = [
+    ...new Set(
+      [...todayWods, ...recentWods].flatMap((item) =>
+        [item.workout.id, item.workout.source_workout_id].filter((id): id is string => Boolean(id)),
+      ),
+    ),
+  ];
   const [{ data: claims }, { data: athleteResults }] = workoutIds.length
     ? await Promise.all([
         supabase.auth.getClaims(),
@@ -82,7 +89,13 @@ export default async function AthleteTodayPage() {
       todayResultByWorkout.set(result.workout_id, result);
     }
   }
-  const recentWithoutResults = recentWods.filter((item) => !resultByWorkout.has(item.workout.id));
+  const resultForWorkout = (workout: TodayWorkout) =>
+    resultByWorkout.get(workout.id) ??
+    (workout.source_workout_id ? resultByWorkout.get(workout.source_workout_id) : undefined);
+  const todayResultForWorkout = (workout: TodayWorkout) =>
+    todayResultByWorkout.get(workout.id) ??
+    (workout.source_workout_id ? todayResultByWorkout.get(workout.source_workout_id) : undefined);
+  const recentWithoutResults = recentWods.filter((item) => !resultForWorkout(item.workout));
   const { data: scalings } = todayWorkoutIds.length
     ? await supabase
         .from("athlete_workout_scalings")
@@ -108,6 +121,7 @@ export default async function AthleteTodayPage() {
                 name: movement?.name ?? "",
               }));
             const scaling = scalingByWorkout.get(workout.id);
+            const result = todayResultForWorkout(workout);
 
             return (
               <div key={workout.id} className="grid gap-3">
@@ -116,12 +130,12 @@ export default async function AthleteTodayPage() {
                 <Button asChild>
                   <Link
                     href={
-                      todayResultByWorkout.has(workout.id)
-                        ? `/athlete/log/${workout.id}?result=${todayResultByWorkout.get(workout.id)?.id}`
+                      result
+                        ? `/athlete/log/${result.workout_id}?result=${result.id}`
                         : `/athlete/log/${workout.id}`
                     }
                   >
-                    {todayResultByWorkout.has(workout.id) ? "Edit result" : "Log result"}
+                    {result ? "Edit result" : "Log result"}
                   </Link>
                 </Button>
                 {scaling && (

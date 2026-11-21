@@ -30,6 +30,7 @@ const TABS = ["overview", "workouts", "nutrition", "goals", "ai"] as const;
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> };
 type ProfileScheduleWorkout = WhiteboardWorkout & {
   id: string;
+  source_workout_id: string | null;
   week_number: number | null;
   day_number: number | null;
 };
@@ -83,7 +84,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
       supabase,
       id,
       { from: scheduleFrom, to: scheduleTo },
-      "id, title, workout_type, time_cap_seconds, rounds, week_number, day_number",
+      "id, source_workout_id, title, workout_type, time_cap_seconds, rounds, week_number, day_number",
     ),
     supabase
       .from("athlete_invites")
@@ -237,7 +238,9 @@ export default async function AthletePage({ params, searchParams }: Props) {
                     </TableHeader>
                     <TableBody>
                       {scheduleItems.map((item) => {
-                        const logged = loggedWorkoutIds.has(item.workout.id);
+                        const logged =
+                          loggedWorkoutIds.has(item.workout.id) ||
+                          (item.workout.source_workout_id != null && loggedWorkoutIds.has(item.workout.source_workout_id));
                         return (
                           <TableRow key={`${item.source}-${item.programId ?? "one-off"}-${item.workout.id}`}>
                             <TableCell className="pl-4">{formatDate(item.date)}</TableCell>

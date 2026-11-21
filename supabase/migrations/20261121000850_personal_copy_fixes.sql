@@ -1,3 +1,8 @@
+alter table public.workouts
+  add column source_workout_id uuid references public.workouts (id) on delete set null;
+
+create index workouts_source_workout_id_idx on public.workouts (source_workout_id);
+
 create or replace function public.copy_program_for_athlete(
   p_program_id uuid,
   p_athlete_id uuid,
@@ -102,7 +107,8 @@ begin
       week_number,
       day_number,
       scheduled_on,
-      athlete_id
+      athlete_id,
+      source_workout_id
     )
     values (
       v_new_workout_id,
@@ -117,7 +123,8 @@ begin
       v_source_workout.week_number,
       v_source_workout.day_number,
       v_source_workout.scheduled_on,
-      v_source_workout.athlete_id
+      v_source_workout.athlete_id,
+      v_source_workout.id
     );
 
     insert into public.workout_movements (
