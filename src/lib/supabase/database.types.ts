@@ -714,13 +714,19 @@ export type Database = {
           created_at: string;
           id: string;
           is_rx: boolean;
+          energy: number | null;
           load_kg: number | null;
           logged_by: string | null;
           notes: string | null;
+          pain_notes: string | null;
           performed_on: string;
+          rpe: number | null;
           reps: number | null;
           rounds: number | null;
+          sleep_hours: number | null;
+          soreness: number | null;
           time_seconds: number | null;
+          updated_at: string | null;
           workout_id: string;
         };
         ComputedFields: never;
@@ -730,13 +736,19 @@ export type Database = {
           created_at?: string;
           id?: string;
           is_rx?: boolean;
+          energy?: number | null;
           load_kg?: number | null;
           logged_by?: string | null;
           notes?: string | null;
+          pain_notes?: string | null;
           performed_on?: string;
+          rpe?: number | null;
           reps?: number | null;
           rounds?: number | null;
+          sleep_hours?: number | null;
+          soreness?: number | null;
           time_seconds?: number | null;
+          updated_at?: string | null;
           workout_id: string;
         };
         Update: {
@@ -745,13 +757,19 @@ export type Database = {
           created_at?: string;
           id?: string;
           is_rx?: boolean;
+          energy?: number | null;
           load_kg?: number | null;
           logged_by?: string | null;
           notes?: string | null;
+          pain_notes?: string | null;
           performed_on?: string;
+          rpe?: number | null;
           reps?: number | null;
           rounds?: number | null;
+          sleep_hours?: number | null;
+          soreness?: number | null;
           time_seconds?: number | null;
+          updated_at?: string | null;
           workout_id?: string;
         };
         Relationships: [
@@ -850,6 +868,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      athlete_can_view_workout: {
+        Args: { p_workout_id: string };
+        Returns: boolean;
+      };
       claim_athlete_invite: {
         Args: { p_token: string };
         Returns: undefined;
@@ -873,6 +895,7 @@ export type Database = {
         }[];
       };
       load_demo_data: { Args: { reset?: boolean }; Returns: Json };
+      load_demo_data_unscored: { Args: { reset?: boolean }; Returns: Json };
     };
     Enums: {
       athlete_status: "active" | "archived";

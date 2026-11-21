@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { needsAttention } from "@/lib/feedback";
+import { today } from "@/lib/program-dates";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +20,10 @@ export default async function AthletesPage({ searchParams }: Props) {
   const { q = "", status: rawStatus } = await searchParams;
   const status = rawStatus === "archived" ? "archived" : "active";
   const supabase = await createClient();
+  const todayIso = today();
+  const sevenDaysAgo = new Date(`${todayIso}T00:00:00Z`);
+  sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 6);
+  const since = sevenDaysAgo.toISOString().slice(0, 10);
 
   let query = supabase
     .from("athletes")
@@ -32,15 +38,32 @@ export default async function AthletesPage({ searchParams }: Props) {
     const like = `ilike."%${word}%"`;
     query = query.or(`first_name.${like},last_name.${like},email.${like}`);
   }
-  const [{ data: athletes = [] }, { data: invites = [] }] = await Promise.all([
+  const [{ data: athletes = [] }, { data: invites = [] }, { data: results = [] }] = await Promise.all([
     query,
     supabase
       .from("athlete_invites")
       .select("athlete_id")
       .is("accepted_at", null)
       .is("revoked_at", null),
+    supabase
+      .from("workout_results")
+      .select("athlete_id, performed_on, rpe, pain_notes")
+      .gte("performed_on", since)
+      .lte("performed_on", todayIso)
+      .or("pain_notes.not.is.null,rpe.gte.9"),
   ]);
   const invitedAthletes = new Set((invites ?? []).map((invite) => invite.athlete_id));
+  const attentionResults = new Map<string, typeof results>();
+  for (const result of results ?? []) {
+    const rows = attentionResults.get(result.athlete_id) ?? [];
+    rows.push(result);
+    attentionResults.set(result.athlete_id, rows);
+  }
+  const attentionAthletes = new Set(
+    (athletes ?? [])
+      .filter((athlete) => needsAttention(attentionResults.get(athlete.id) ?? [], todayIso).flagged)
+      .map((athlete) => athlete.id),
+  );
 
   return (
     <>
@@ -91,9 +114,12 @@ export default async function AthletesPage({ searchParams }: Props) {
                 {athletes.map((a) => (
                   <TableRow key={a.id}>
                     <TableCell className="pl-4 font-medium">
-                      <Link href={`/athletes/${a.id}`} className="hover:underline">
-                        {a.first_name} {a.last_name}
-                      </Link>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link href={`/athletes/${a.id}`} className="hover:underline">
+                          {a.first_name} {a.last_name}
+                        </Link>
+                        {attentionAthletes.has(a.id) && <Badge variant="destructive">Needs attention</Badge>}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary">{LEVEL_LABELS[a.experience_level]}</Badge>

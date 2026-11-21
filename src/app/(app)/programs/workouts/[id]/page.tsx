@@ -30,7 +30,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
       .maybeSingle(),
     supabase
       .from("workout_results")
-      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, athletes(id, first_name, last_name)")
+      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, logged_by, athletes(id, first_name, last_name)")
       .eq("workout_id", id),
     supabase.from("athletes").select("id, first_name, last_name").eq("status", "active").order("first_name").order("last_name"),
   ]);
@@ -114,13 +114,16 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
                     <TableRow key={r.id}>
                       <TableCell className="pl-4 font-medium">{i + 1}</TableCell>
                       <TableCell className="font-medium">
-                        {r.athletes ? (
-                          <Link href={`/athletes/${r.athletes.id}?tab=workouts`} className="hover:underline">
-                            {name}
-                          </Link>
-                        ) : (
-                          name
-                        )}
+                        <div className="flex flex-wrap items-center gap-2">
+                          {r.athletes ? (
+                            <Link href={`/athletes/${r.athletes.id}?tab=workouts`} className="hover:underline">
+                              {name}
+                            </Link>
+                          ) : (
+                            name
+                          )}
+                          {r.logged_by !== coach?.id && <Badge variant="secondary">Athlete-logged</Badge>}
+                        </div>
                       </TableCell>
                       <TableCell>{formatScore(r, units)}</TableCell>
                       <TableCell>

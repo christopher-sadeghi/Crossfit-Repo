@@ -5,28 +5,14 @@ import { z } from "zod";
 
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { getCoach } from "@/lib/coach";
+import { buildScore, scoreFields } from "@/lib/result-score";
 import { createClient } from "@/lib/supabase/server";
-import { toKg } from "@/lib/units";
-
-const count = z
-  .string()
-  .trim()
-  .transform((v) => (v === "" ? null : Number(v)))
-  .refine((v) => v == null || (Number.isInteger(v) && v >= 0 && v <= 100_000), "Rounds and reps must be whole numbers.");
 
 const resultSchema = z.object({
   workout_id: z.string().uuid(),
   athlete_id: z.string().uuid("Choose an athlete."),
   performed_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a date."),
-  minutes: count,
-  seconds: count.refine((v) => v == null || v < 60, "Seconds must be 0–59."),
-  rounds: count,
-  reps: count,
-  load: z
-    .string()
-    .trim()
-    .transform((v) => (v === "" ? null : Number(v)))
-    .refine((v) => v == null || (Number.isFinite(v) && v > 0 && v < 2000), "Load must be a positive number."),
+  ...scoreFields,
   is_rx: z.enum(["rx", "scaled"], { message: "Choose Rx or Scaled." }),
   notes: z.string().trim().max(500).transform((v) => v || null),
 });
@@ -43,27 +29,14 @@ export async function logResult(_: FormState, formData: FormData): Promise<FormS
   ]);
   if (!workout) return failure(formData, "That WOD no longer exists.");
 
-  const time = r.minutes != null || r.seconds != null ? (r.minutes ?? 0) * 60 + (r.seconds ?? 0) : null;
-  const score = {
-    time_seconds: time || null,
-    rounds: r.rounds,
-    reps: r.reps,
-    load_kg: r.load == null ? null : toKg(r.load, coach?.units ?? "lb"),
-  };
-  const missing = {
-    for_time: !score.time_seconds && "Enter the finish time.",
-    amrap: score.rounds == null && score.reps == null && "Enter rounds and/or reps.",
-    emom: score.rounds == null && score.reps == null && "Enter rounds completed and/or reps.",
-    strength: score.load_kg == null && "Enter the load lifted.",
-    other: Object.values(score).every((v) => v == null) && "Enter a score.",
-  }[workout.workout_type];
-  if (missing) return failure(formData, missing);
+  const scoreResult = buildScore(r, workout.workout_type, coach?.units ?? "lb");
+  if ("error" in scoreResult) return failure(formData, scoreResult.error);
 
   const { error } = await supabase.from("workout_results").insert({
     workout_id: r.workout_id,
     athlete_id: r.athlete_id,
     performed_on: r.performed_on,
-    ...score,
+    ...scoreResult.score,
     is_rx: r.is_rx === "rx",
     notes: r.notes,
   });

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Pencil } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { SUGGESTION_LABELS } from "@/lib/ai/suggestions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCoach } from "@/lib/coach";
 import { getOrigin } from "@/lib/auth/redirect";
+import { feedbackSummary, needsAttention } from "@/lib/feedback";
 import { programDate, today } from "@/lib/program-dates";
 import { formatGoalValue, goalProgress, latestMetric } from "@/lib/progress";
 import { personalRecords } from "@/lib/results";
@@ -38,7 +39,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
     supabase.from("body_metrics").select("measured_on, weight_kg, body_fat_pct").eq("athlete_id", id).order("measured_on", { ascending: false }),
     supabase
       .from("workout_results")
-      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, workout_id, workouts(title, workout_type, workout_movements(movement_id))")
+      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, workout_id, logged_by, rpe, energy, sleep_hours, soreness, pain_notes, workouts(title, workout_type, workout_movements(movement_id))")
       .eq("athlete_id", id)
       .order("performed_on", { ascending: false })
       .order("created_at", { ascending: false }),
@@ -71,6 +72,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const latestWeight = latestMetric(metrics, "weight_kg");
   const results = resultsRes.data ?? [];
   const prs = personalRecords(results);
+  const attention = needsAttention(results, today());
   const target = targetRes.data;
   const invite = inviteRes.data;
   const inviteUrl = invite ? `${await getOrigin()}/join/${invite.token}` : null;
@@ -135,6 +137,28 @@ export default async function AthletePage({ params, searchParams }: Props) {
         </TabsList>
 
         <TabsContent value="overview" className="grid gap-4 md:grid-cols-3">
+          {attention.flagged && (
+            <Card className="border-amber-300/70 md:col-span-3">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-amber-900 dark:text-amber-100">
+                  <AlertTriangle className="size-4" />
+                  Needs attention
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="grid gap-2 text-sm">
+                  {attention.reasons.map((reason, index) => (
+                    <li key={`${reason.date}-${reason.kind}-${index}`} className="flex flex-wrap gap-x-2">
+                      <span className="font-medium">{formatDate(reason.date)}</span>
+                      <span>
+                        {reason.kind === "pain" ? "Pain noted" : "High effort"}: {reason.text}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
           <Stat label="Current weight" value={formatWeight(latestWeight?.weight_kg, units)} hint={latestWeight ? `as of ${formatDate(latestWeight.measured_on)}` : undefined} />
           <Stat label="Daily calories target" value={target ? `${target.calories} kcal` : "—"} hint={target ? `P ${target.protein_g}g · C ${target.carbs_g}g · F ${target.fat_g}g` : "No target set"} />
           <Stat label="Active goals" value={String(goals.filter((g) => g.status === "active").length)} hint={`${results.length} logged results · ${prs.length} PRs`} />
@@ -226,6 +250,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
                   <TableHead>Workout</TableHead>
                   <TableHead>Score</TableHead>
                   <TableHead>Rx / Scaled</TableHead>
+                  <TableHead>Feedback</TableHead>
                   <TableHead>Notes</TableHead>
                 </TableRow>
               </TableHeader>
@@ -234,13 +259,24 @@ export default async function AthletePage({ params, searchParams }: Props) {
                   <TableRow key={r.id}>
                     <TableCell className="pl-4">{formatDate(r.performed_on)}</TableCell>
                     <TableCell className="font-medium">
-                      <Link href={`/programs/workouts/${r.workout_id}`} className="hover:underline">
-                        {r.workouts?.title}
-                      </Link>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link href={`/programs/workouts/${r.workout_id}`} className="hover:underline">
+                          {r.workouts?.title}
+                        </Link>
+                        {r.logged_by !== coach?.id && <Badge variant="secondary">Athlete-logged</Badge>}
+                      </div>
                     </TableCell>
                     <TableCell>{formatScore(r, units)}</TableCell>
                     <TableCell>
                       <Badge variant={r.is_rx ? "default" : "outline"}>{r.is_rx ? "Rx" : "Scaled"}</Badge>
+                    </TableCell>
+                    <TableCell className="min-w-48">
+                      {feedbackSummary(r) && <p>{feedbackSummary(r)}</p>}
+                      {r.pain_notes && (
+                        <p className="mt-1 text-sm text-amber-800 dark:text-amber-200">
+                          Pain: {r.pain_notes}
+                        </p>
+                      )}
                     </TableCell>
                     <TableCell className="max-w-xs truncate text-muted-foreground">{r.notes ?? ""}</TableCell>
                   </TableRow>
