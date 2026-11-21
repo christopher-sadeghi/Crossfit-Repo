@@ -25,8 +25,12 @@ export default async function AthletesPage({ searchParams }: Props) {
     .eq("status", status)
     .order("first_name")
     .order("last_name");
-  const term = q.trim().replace(/[%_,().]/g, "");
-  if (term) query = query.or(`first_name.ilike.%${term}%,last_name.ilike.%${term}%,email.ilike.%${term}%`);
+  // Quoted values let PostgREST accept "." and "@"; strip only characters that would break the filter.
+  const term = q.trim().replace(/[",()\\%*]/g, "");
+  if (term) {
+    const like = `ilike."%${term}%"`;
+    query = query.or(`first_name.${like},last_name.${like},email.${like}`);
+  }
   const { data: athletes = [] } = await query;
 
   return (
