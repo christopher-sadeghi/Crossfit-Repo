@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SCHEDULE_LABEL, loadAthleteSchedule } from "@/lib/athlete-schedule";
-import { today } from "@/lib/program-dates";
+import { getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
 import { feedbackSummary } from "@/lib/feedback";
 import { formatDate, formatScore } from "@/lib/units";
@@ -42,7 +42,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
   if (viewer.kind === "none") redirect("/no-access");
 
   const supabase = await createClient();
-  const currentDate = today();
+  const currentDate = await getToday();
   const recentStart = new Date(`${currentDate}T00:00:00Z`);
   recentStart.setUTCDate(recentStart.getUTCDate() - 7);
   const recentStartIso = recentStart.toISOString().slice(0, 10);

@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { friendlySuggestionError } from "@/lib/ai/service-core";
 import { adjustMacrosSchema, SUGGESTION_LABELS } from "@/lib/ai/suggestions";
-import { today } from "@/lib/program-dates";
+import { getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/units";
 
@@ -35,7 +35,7 @@ export default async function SuggestionPage({ params }: Props) {
   const rationale = suggestion.status === "approved" || suggestion.status === "edited"
     ? (final?.success ? final.data.rationale : "")
     : (proposal?.success ? proposal.data.rationale : "");
-  const todayValue = today();
+  const todayValue = await getToday();
   const [athleteResult, targetResult] = await Promise.all([
     suggestion.athlete_id
       ? supabase.from("athletes").select("id, first_name, last_name").eq("id", suggestion.athlete_id).maybeSingle()

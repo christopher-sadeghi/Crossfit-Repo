@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { JOURNAL_LOOKBACK_DAYS } from "@/lib/journal";
-import { today } from "@/lib/program-dates";
+import { getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
 import { getViewer } from "@/lib/viewer";
 
@@ -50,7 +50,7 @@ export async function saveJournalEntry(_: FormState, formData: FormData): Promis
   const viewer = await getViewer();
   if (viewer?.kind !== "athlete") return failure(formData, "Only athletes can fill in a journal.");
 
-  const todayIso = today();
+  const todayIso = await getToday();
   const earliest = new Date(`${todayIso}T00:00:00Z`);
   earliest.setUTCDate(earliest.getUTCDate() - JOURNAL_LOOKBACK_DAYS);
   const entry = parsed.data;

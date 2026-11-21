@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getCoach } from "@/lib/coach";
 import { createClient } from "@/lib/supabase/server";
-import { today } from "@/lib/program-dates";
+import { getToday } from "@/lib/time-zone";
 import { compareScores } from "@/lib/results";
 import { formatDate, formatScore } from "@/lib/units";
 
@@ -92,7 +92,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
               workoutId={workout.id}
               workoutType={workout.workout_type}
               units={units}
-              today={today()}
+              today={await getToday()}
               athletes={(athletes ?? []).map((a) => ({ id: a.id, name: `${a.first_name} ${a.last_name}` }))}
             />
           </CardContent>

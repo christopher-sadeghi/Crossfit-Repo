@@ -13,7 +13,7 @@ import { getOrigin } from "@/lib/auth/redirect";
 import { SCHEDULE_LABEL, loadAthleteSchedule } from "@/lib/athlete-schedule";
 import { feedbackSummary, needsAttention } from "@/lib/feedback";
 import { JOURNAL_COLUMNS, journalSleepSummary, journalYesAnswers } from "@/lib/journal";
-import { today } from "@/lib/program-dates";
+import { getToday } from "@/lib/time-zone";
 import { formatGoalValue, goalProgress, latestMetric } from "@/lib/progress";
 import { personalRecords } from "@/lib/results";
 import { createClient } from "@/lib/supabase/server";
@@ -43,7 +43,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const units: Units = coach?.units ?? "lb";
 
   const since = new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
-  const now = today();
+  const now = await getToday();
   const scheduleFromDate = new Date(`${now}T00:00:00Z`);
   scheduleFromDate.setUTCDate(scheduleFromDate.getUTCDate() - 7);
   const scheduleToDate = new Date(`${now}T00:00:00Z`);
@@ -76,8 +76,8 @@ export default async function AthletePage({ params, searchParams }: Props) {
       .from("nutrition_targets")
       .select("*")
       .eq("athlete_id", id)
-      .lte("start_date", today())
-      .or(`end_date.is.null,end_date.gte.${today()}`)
+      .lte("start_date", await getToday())
+      .or(`end_date.is.null,end_date.gte.${await getToday()}`)
       .maybeSingle(),
     supabase.from("food_logs").select("logged_on, calories, protein_g, carbs_g, fat_g").eq("athlete_id", id).gte("logged_on", since),
     supabase.from("goals").select("id, title, goal_type, movement_id, metric, unit, start_value, target_value, target_date, status").eq("athlete_id", id).order("status").order("target_date"),
@@ -111,7 +111,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const latestWeight = latestMetric(metrics, "weight_kg");
   const results = resultsRes.data ?? [];
   const prs = personalRecords(results);
-  const attention = needsAttention(results, today());
+  const attention = needsAttention(results, await getToday());
   const target = targetRes.data;
   const invite = inviteRes.data;
   const inviteUrl = invite ? `${await getOrigin()}/join/${invite.token}` : null;

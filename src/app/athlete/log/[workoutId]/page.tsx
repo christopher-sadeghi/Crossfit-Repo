@@ -6,7 +6,7 @@ import { z } from "zod";
 import { Badge } from "@/components/ui/badge";
 import { getViewer } from "@/lib/viewer";
 import { createClient } from "@/lib/supabase/server";
-import { today } from "@/lib/program-dates";
+import { getToday } from "@/lib/time-zone";
 import { formatHeadline } from "@/app/(app)/programs/workouts/whiteboard";
 import type { Tables } from "@/lib/supabase/database.types";
 
@@ -72,7 +72,7 @@ export default async function AthleteLogResultPage({ params, searchParams }: Pro
     existingResult = data;
   }
 
-  const todayIso = today();
+  const todayIso = await getToday();
   const minDate = new Date(`${todayIso}T00:00:00Z`);
   minDate.setUTCDate(minDate.getUTCDate() - 14);
   const minDateIso = minDate.toISOString().slice(0, 10);

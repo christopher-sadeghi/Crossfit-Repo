@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { JOURNAL_COLUMNS, JOURNAL_LOOKBACK_DAYS, journalSleepSummary, journalYesAnswers } from "@/lib/journal";
-import { today } from "@/lib/program-dates";
+import { getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/units";
 import { getViewer } from "@/lib/viewer";
@@ -21,7 +21,7 @@ export default async function AthleteJournalPage({ searchParams }: { searchParam
   if (viewer.kind === "coach") redirect("/");
   if (viewer.kind === "none") redirect("/no-access");
 
-  const todayIso = today();
+  const todayIso = await getToday();
   const earliest = new Date(`${todayIso}T00:00:00Z`);
   earliest.setUTCDate(earliest.getUTCDate() - JOURNAL_LOOKBACK_DAYS);
   const earliestIso = earliest.toISOString().slice(0, 10);

@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { needsAttention } from "@/lib/feedback";
-import { today } from "@/lib/program-dates";
+import { getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 
@@ -20,7 +20,7 @@ export default async function AthletesPage({ searchParams }: Props) {
   const { q = "", status: rawStatus } = await searchParams;
   const status = rawStatus === "archived" ? "archived" : "active";
   const supabase = await createClient();
-  const todayIso = today();
+  const todayIso = await getToday();
   const sevenDaysAgo = new Date(`${todayIso}T00:00:00Z`);
   sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 6);
   const since = sevenDaysAgo.toISOString().slice(0, 10);
