@@ -921,7 +921,12 @@ export type Database = {
         Returns: string;
       };
       save_ai_workout: {
-        Args: { p_movements: Json; p_workout: Json; p_workout_id: string | null };
+        Args: {
+          p_expected_updated_at?: string | null;
+          p_movements: Json;
+          p_workout: Json;
+          p_workout_id: string | null;
+        };
         Returns: string;
       };
       claim_athlete_invite: {

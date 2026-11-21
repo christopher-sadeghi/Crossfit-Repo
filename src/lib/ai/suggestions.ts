@@ -316,6 +316,7 @@ async function applyWorkoutSuggestion(
   if (!input.success) throw new ApprovalError("This suggestion is missing its workout details. Ask again.");
 
   let workoutId: string | null = null;
+  let expectedUpdatedAt: string | null = null;
   if (input.data.mode === "adjust") {
     if (!input.data.workout_id || !input.data.workout_updated_at)
       throw new ApprovalError("This WOD no longer exists. Ask for a new suggestion.");
@@ -331,7 +332,10 @@ async function applyWorkoutSuggestion(
       currentWorkout.updated_at > input.data.workout_updated_at
     )
       throw new ApprovalError("This WOD was edited after the AI suggestion was made. Ask again or save as a new WOD.");
-    if (options?.saveAs !== "new") workoutId = input.data.workout_id;
+    if (options?.saveAs !== "new") {
+      workoutId = input.data.workout_id;
+      expectedUpdatedAt = input.data.workout_updated_at;
+    }
   }
 
   const workout = {
@@ -350,8 +354,11 @@ async function applyWorkoutSuggestion(
     p_workout_id: workoutId,
     p_workout: workout,
     p_movements: movements,
+    p_expected_updated_at: expectedUpdatedAt,
   });
   if (error) {
+    if (error.message.includes("workout_changed"))
+      throw new ApprovalError("This WOD was edited after the AI suggestion was made. Ask again or save as a new WOD.");
     if (error.message.includes("workout_not_found"))
       throw new ApprovalError("This WOD no longer exists. Ask for a new suggestion.");
     throw error;
