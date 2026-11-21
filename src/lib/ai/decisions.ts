@@ -28,19 +28,25 @@ export async function approveSuggestionWithClient(
 
   if (claimError || !claimed) return { error: "This suggestion was already decided." };
 
+  let target: { target_table: string; target_id: string };
   try {
-    const target = await entry.apply(supabase, claimed, finalResult.data);
-    const { error: targetError } = await supabase
-      .from("ai_suggestions")
-      .update({ target_table: target.target_table, target_id: target.target_id })
-      .eq("id", suggestion.id);
-    if (targetError) throw targetError;
+    target = await entry.apply(supabase, claimed, finalResult.data);
   } catch {
     await supabase
       .from("ai_suggestions")
       .update({ status: "pending", final: null, decided_at: null })
       .eq("id", suggestion.id);
     return { error: "Couldn't approve this suggestion. Please try again." };
+  }
+
+  try {
+    const { error: targetError } = await supabase
+      .from("ai_suggestions")
+      .update({ target_table: target.target_table, target_id: target.target_id })
+      .eq("id", suggestion.id);
+    if (targetError) console.error("Could not save AI suggestion target reference:", targetError);
+  } catch (error) {
+    console.error("Could not save AI suggestion target reference:", error);
   }
 
   return { status };
