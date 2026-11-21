@@ -30,7 +30,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const coach = await getCoach();
   const units: Units = coach?.units ?? "lb";
 
-  const since = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+  const since = new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
   const [athleteRes, metricsRes, resultsRes, targetRes, foodRes, goalsRes, aiRes] = await Promise.all([
     supabase.from("athletes").select("*").eq("id", id).maybeSingle(),
     supabase.from("body_metrics").select("measured_on, weight_kg").eq("athlete_id", id).order("measured_on", { ascending: false }).limit(8),
