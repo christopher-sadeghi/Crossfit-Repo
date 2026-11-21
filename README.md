@@ -41,7 +41,7 @@ Emails for confirming sign-up and resetting a password link to `/auth/callback`.
 - `http://localhost:3000/**` for local development.
 - Your production domain and this project's own preview pattern, for example `https://fitcoach-*-<your-vercel-team>.vercel.app/**`, once deploys are set up. Never allow all of `https://*.vercel.app/**`: anyone can deploy there, so reset links could be sent to someone else's site.
 
-Then open **Authentication > Emails** and make the links verify on our server instead of relying on a cookie from the browser that requested them (otherwise a reset link opened on another device or browser fails). Replace the link in these two templates:
+Before launch, set up custom SMTP (for example Resend) under **Authentication > Emails**: Supabase's built-in sender only emails your Supabase team members, a few per hour, and templates can't be edited without custom SMTP. Then make the links verify on our server instead of relying on a cookie from the browser that requested them (otherwise a reset link opened on another device or browser fails). Replace the link in these two templates:
 
 - **Confirm signup**: `<a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email">Confirm your email</a>`
 - **Reset Password**: `<a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=recovery">Reset your password</a>`
