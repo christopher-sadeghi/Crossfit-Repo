@@ -1,13 +1,18 @@
 "use client";
 
-import { startTransition, useActionState } from "react";
+import { startTransition, useActionState, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { FormState } from "@/lib/auth/form-state";
-import { approveSuggestion, rejectSuggestion, requestSuggestion } from "@/app/(app)/suggestions/actions";
+import {
+  approveSuggestion,
+  rejectSuggestion,
+  requestSuggestion,
+  requestWorkoutSuggestion,
+} from "@/app/(app)/suggestions/actions";
 
 type TrackedState = FormState & { successes?: number };
 type MacroValues = { calories: number; protein_g: number; carbs_g: number; fat_g: number; rationale: string };
@@ -34,6 +39,60 @@ export function RequestMacroSuggestionForm({ athleteId }: { athleteId: string })
     >
       <Button type="submit" disabled={pending}>
         {pending ? "Thinking… this can take up to 30 seconds" : "Ask AI to suggest new targets"}
+      </Button>
+      <Message state={state} />
+    </form>
+  );
+}
+
+export function RequestWorkoutSuggestionForm({ workoutId }: { workoutId?: string }) {
+  const [request, setRequest] = useState("");
+  const [state, formAction, pending] = useActionState<FormState, FormData>(
+    async (previous, formData) => requestWorkoutSuggestion(previous, formData),
+    {},
+  );
+  const quickRequests = ["Make it harder", "Make it easier", "Make it shorter", "No barbell"];
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        startTransition(() => formAction(new FormData(event.currentTarget)));
+      }}
+      className="grid justify-items-start gap-3"
+    >
+      {workoutId && <input type="hidden" name="workout_id" value={workoutId} />}
+      <div className="grid w-full gap-1.5">
+        <Label htmlFor="workout-ai-request">{workoutId ? "What should change?" : "What WOD should the AI write?"}</Label>
+        <Textarea
+          id="workout-ai-request"
+          name="request"
+          placeholder="20-minute AMRAP, no barbell, focus on engine"
+          minLength={3}
+          maxLength={500}
+          required
+          rows={3}
+          value={request}
+          onChange={(event) => setRequest(event.target.value)}
+        />
+      </div>
+      {workoutId && (
+        <div className="flex flex-wrap gap-2">
+          {quickRequests.map((quickRequest) => (
+            <Button
+              key={quickRequest}
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setRequest(quickRequest)}
+            >
+              {quickRequest}
+            </Button>
+          ))}
+        </div>
+      )}
+      <Button type="submit" disabled={pending}>
+        {pending ? "Asking the AI… (up to 45 s)" : workoutId ? "Ask AI to adjust" : "Ask AI to write a WOD"}
       </Button>
       <Message state={state} />
     </form>
@@ -99,6 +158,83 @@ export function ApproveSuggestionForm({ id, values }: { id: string; values: Macr
       <Message state={state} />
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={pending}>{pending ? "Approving…" : "Approve"}</Button>
+      </div>
+    </form>
+  );
+}
+
+export function ApproveWorkoutSuggestionForm({
+  id,
+  mode,
+  defaultSaveAs,
+  resultCount,
+}: {
+  id: string;
+  mode: "write" | "adjust";
+  defaultSaveAs: "update" | "new";
+  resultCount: number;
+}) {
+  const [saveAs, setSaveAs] = useState(defaultSaveAs);
+  const [state, formAction, pending] = useActionState<FormState, FormData>(
+    async (previous, formData) => approveSuggestion(previous, formData),
+    {},
+  );
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        const formData = new FormData(event.currentTarget);
+        const submitter = (event.nativeEvent as SubmitEvent).submitter;
+        if (submitter instanceof HTMLButtonElement && submitter.name === "intent")
+          formData.set("intent", submitter.value);
+        startTransition(() => formAction(formData));
+      }}
+      className="grid gap-4"
+    >
+      <input type="hidden" name="id" value={id} />
+      {mode === "adjust" && (
+        <fieldset className="grid gap-3">
+          <legend className="text-sm font-medium">Save the adjusted WOD as</legend>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {(
+              [
+                ["update", "Update this WOD"],
+                ["new", "Save as a new WOD"],
+              ] as const
+            ).map(([value, label]) => (
+              <label
+                key={value}
+                htmlFor={`${id}-save-as-${value}`}
+                className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm"
+              >
+                <input
+                  id={`${id}-save-as-${value}`}
+                  type="radio"
+                  name="save_as"
+                  value={value}
+                  checked={saveAs === value}
+                  onChange={() => setSaveAs(value)}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+          {resultCount > 0 && (
+            <p className="text-sm text-amber-700 dark:text-amber-300">
+              This WOD has {resultCount} logged results; updating changes what they were scored against.
+            </p>
+          )}
+        </fieldset>
+      )}
+      <Message state={state} />
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" name="intent" value="approve" disabled={pending}>
+          {pending ? "Approving…" : "Approve"}
+        </Button>
+        <Button type="submit" name="intent" value="edit" variant="outline" disabled={pending}>
+          {pending ? "Saving…" : "Approve and edit"}
+        </Button>
       </div>
     </form>
   );

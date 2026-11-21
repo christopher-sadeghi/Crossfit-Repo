@@ -1,16 +1,26 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { ApproveSuggestionForm, RejectSuggestionForm } from "@/components/suggestions/suggestion-forms";
+import {
+  ApproveSuggestionForm,
+  ApproveWorkoutSuggestionForm,
+  RejectSuggestionForm,
+} from "@/components/suggestions/suggestion-forms";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { friendlySuggestionError } from "@/lib/ai/service-core";
-import { adjustMacrosSchema, SUGGESTION_LABELS } from "@/lib/ai/suggestions";
-import { getToday } from "@/lib/time-zone";
+import {
+  adjustMacrosSchema,
+  SUGGESTION_LABELS,
+  writeWorkoutInputSchema,
+  writeWorkoutSchema,
+} from "@/lib/ai/suggestions";
 import { createClient } from "@/lib/supabase/server";
-import { formatDate } from "@/lib/units";
+import { getToday } from "@/lib/time-zone";
+import { formatDate, toKg, type Units } from "@/lib/units";
+import { Whiteboard } from "@/app/(app)/programs/workouts/whiteboard";
 
 type Props = { params: Promise<{ id: string }> };
 type MacroKey = "calories" | "protein_g" | "carbs_g" | "fat_g";
@@ -27,14 +37,44 @@ export default async function SuggestionPage({ params }: Props) {
   const { data: suggestion } = await supabase.from("ai_suggestions").select("*").eq("id", id).maybeSingle();
   if (!suggestion) notFound();
 
-  const entry = SUGGESTION_LABELS[suggestion.suggestion_type];
   const macrosType = suggestion.suggestion_type === "adjust_macros";
+  const workoutType = suggestion.suggestion_type === "write_workout";
   const proposal = macrosType ? adjustMacrosSchema.safeParse(suggestion.proposal) : null;
   const final = macrosType ? adjustMacrosSchema.safeParse(suggestion.final) : null;
   const shown = suggestion.status === "approved" || suggestion.status === "edited" ? (final?.success ? final.data : null) : proposal?.success ? proposal.data : null;
   const rationale = suggestion.status === "approved" || suggestion.status === "edited"
     ? (final?.success ? final.data.rationale : "")
     : (proposal?.success ? proposal.data.rationale : "");
+  const workoutProposal = workoutType ? writeWorkoutSchema.safeParse(suggestion.proposal) : null;
+  const workoutFinal = workoutType ? writeWorkoutSchema.safeParse(suggestion.final) : null;
+  const shownWorkout =
+    suggestion.status === "approved" || suggestion.status === "edited"
+      ? workoutFinal?.success
+        ? workoutFinal.data
+        : null
+      : workoutProposal?.success
+        ? workoutProposal.data
+        : null;
+  const workoutInput = workoutType ? writeWorkoutInputSchema.safeParse(suggestion.input) : null;
+  const workoutContext = workoutInput?.success ? workoutInput.data : null;
+  const entry =
+    workoutType && workoutContext?.mode === "adjust"
+      ? "Adjust workout"
+      : SUGGESTION_LABELS[suggestion.suggestion_type];
+  const units: Units = workoutContext?.units ?? "lb";
+  const libraryNames = new Map((workoutContext?.library ?? []).map((movement) => [movement.id, movement.name]));
+  const proposedMovements =
+    shownWorkout?.movements.map(({ movement_id, load, ...movement }) => ({
+      ...movement,
+      name: libraryNames.get(movement_id) ?? "Unknown movement",
+      load_kg: load == null ? null : toKg(load, units),
+    })) ?? [];
+  const currentWorkout = workoutContext?.current_workout;
+  const currentMovements =
+    currentWorkout?.movements.map(({ load, ...movement }) => ({
+      ...movement,
+      load_kg: load == null ? null : toKg(load, units),
+    })) ?? [];
   const todayValue = await getToday();
   const [athleteResult, targetResult] = await Promise.all([
     suggestion.athlete_id
@@ -54,6 +94,14 @@ export default async function SuggestionPage({ params }: Props) {
   ]);
   const athlete = athleteResult.data;
   const current = targetResult.data;
+  const resultCount =
+    workoutContext?.mode === "adjust" && workoutContext.workout_id
+      ? ((await supabase
+          .from("workout_results")
+          .select("id", { count: "exact", head: true })
+          .eq("workout_id", workoutContext.workout_id)).count ?? 0)
+      : 0;
+  const defaultSaveAs = resultCount > 0 ? "new" : "update";
   const statusVariant = suggestion.status === "failed" ? "destructive" : suggestion.status === "pending" ? "secondary" : "outline";
 
   return (
@@ -66,7 +114,7 @@ export default async function SuggestionPage({ params }: Props) {
         <p className="mt-1 text-muted-foreground">
           {athlete ? (
             <Link href={`/athletes/${athlete.id}`} className="hover:underline">{athlete.first_name} {athlete.last_name}</Link>
-          ) : "Athlete unavailable"}
+          ) : workoutType ? "Coach WOD request" : "Athlete unavailable"}
           {" · "}{formatDate(suggestion.created_at.slice(0, 10))}
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -117,6 +165,57 @@ export default async function SuggestionPage({ params }: Props) {
         </Card>
       )}
 
+      {workoutType && workoutContext && (
+        <Card className="mb-6">
+          <CardHeader><CardTitle>Coach request</CardTitle></CardHeader>
+          <CardContent className="whitespace-pre-wrap">{workoutContext.request}</CardContent>
+        </Card>
+      )}
+
+      {workoutType && shownWorkout && (
+        <div className={`mb-6 grid gap-4 ${workoutContext?.mode === "adjust" ? "xl:grid-cols-2" : ""}`}>
+          {workoutContext?.mode === "adjust" && currentWorkout && (
+            <section className="grid content-start gap-2">
+              <h2 className="font-semibold">Current WOD</h2>
+              <Whiteboard
+                workout={{
+                  title: currentWorkout.title,
+                  workout_type: currentWorkout.workout_type,
+                  time_cap_seconds: currentWorkout.time_cap_seconds,
+                  rounds: currentWorkout.rounds,
+                  description: currentWorkout.description,
+                  notes: currentWorkout.notes,
+                }}
+                movements={currentMovements}
+                units={units}
+              />
+            </section>
+          )}
+          <section className="grid content-start gap-2">
+            <h2 className="font-semibold">{workoutContext?.mode === "adjust" ? "Proposed WOD" : "WOD proposal"}</h2>
+            <Whiteboard
+              workout={{
+                title: shownWorkout.title,
+                workout_type: shownWorkout.workout_type,
+                time_cap_seconds: shownWorkout.time_cap_minutes == null ? null : shownWorkout.time_cap_minutes * 60,
+                rounds: shownWorkout.rounds,
+                description: shownWorkout.description,
+                notes: shownWorkout.notes,
+              }}
+              movements={proposedMovements}
+              units={units}
+            />
+          </section>
+        </div>
+      )}
+
+      {workoutType && shownWorkout?.rationale && (
+        <Card className="mb-6">
+          <CardHeader><CardTitle>Why this was suggested</CardTitle></CardHeader>
+          <CardContent className="whitespace-pre-line">{shownWorkout.rationale}</CardContent>
+        </Card>
+      )}
+
       {suggestion.status === "failed" && (
         <Card className="mb-6">
           <CardHeader><CardTitle>Suggestion unavailable</CardTitle></CardHeader>
@@ -141,6 +240,28 @@ export default async function SuggestionPage({ params }: Props) {
         </Card>
       )}
 
+      {suggestion.status === "pending" && workoutType && workoutProposal?.success && workoutContext && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Review and approve</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Review the proposed WOD. Nothing changes until you approve it.
+            </p>
+          </CardHeader>
+          <CardContent className="grid gap-5">
+            <ApproveWorkoutSuggestionForm
+              id={suggestion.id}
+              mode={workoutContext.mode}
+              defaultSaveAs={defaultSaveAs}
+              resultCount={resultCount}
+            />
+            <div className="border-t pt-4">
+              <RejectSuggestionForm id={suggestion.id} />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {(suggestion.status === "approved" || suggestion.status === "edited" || suggestion.status === "rejected") && (
         <Card>
           <CardHeader><CardTitle>Decision</CardTitle></CardHeader>
@@ -148,8 +269,16 @@ export default async function SuggestionPage({ params }: Props) {
             <p>Status: <span className="capitalize">{suggestion.status}</span></p>
             <p>Decided: {suggestion.decided_at ? formatDate(suggestion.decided_at.slice(0, 10)) : "—"}</p>
             {athlete && <p><Link href={`/nutrition/${athlete.id}`} className="underline underline-offset-4">Open athlete&apos;s nutrition page</Link></p>}
-            {suggestion.status === "rejected" && <p>This suggestion was rejected. No target was changed.</p>}
-            {suggestion.status !== "rejected" && shown && (
+            {suggestion.status === "rejected" && <p>This suggestion was rejected. No {workoutType ? "WOD" : "target"} was changed.</p>}
+            {workoutType && suggestion.status !== "rejected" && suggestion.target_id && (
+              <p>
+                WOD saved.{" "}
+                <Link href={`/programs/workouts/${suggestion.target_id}`} className="underline underline-offset-4">
+                  Open saved WOD
+                </Link>
+              </p>
+            )}
+            {macrosType && suggestion.status !== "rejected" && shown && (
               <p>
                 Final targets: {shown.calories} kcal · Protein {shown.protein_g}g · Carbs {shown.carbs_g}g · Fat {shown.fat_g}g
               </p>
@@ -158,7 +287,7 @@ export default async function SuggestionPage({ params }: Props) {
         </Card>
       )}
 
-      {!macrosType && <p className="text-sm text-muted-foreground">This suggestion type isn&apos;t ready yet.</p>}
+      {!macrosType && !workoutType && <p className="text-sm text-muted-foreground">This suggestion type isn&apos;t ready yet.</p>}
     </>
   );
 }

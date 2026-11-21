@@ -2,12 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database, Tables } from "@/lib/supabase/database.types";
 
-import { ApprovalError, SUGGESTION_REGISTRY } from "./suggestions";
+import { ApprovalError, SUGGESTION_REGISTRY, type SuggestionApplyOptions } from "./suggestions";
 
 export async function approveSuggestionWithClient(
   supabase: SupabaseClient<Database>,
   suggestion: Tables<"ai_suggestions">,
   finalInput: unknown,
+  options?: SuggestionApplyOptions,
 ): Promise<{ status: "approved" | "edited" } | { error: string }> {
   const entry = SUGGESTION_REGISTRY[suggestion.suggestion_type];
   if (!entry.apply) return { error: "This suggestion type isn't ready to approve yet." };
@@ -30,7 +31,7 @@ export async function approveSuggestionWithClient(
 
   let target: { target_table: string; target_id: string };
   try {
-    target = await entry.apply(supabase, claimed, finalResult.data);
+    target = await entry.apply(supabase, claimed, finalResult.data, options);
   } catch (error) {
     await supabase
       .from("ai_suggestions")

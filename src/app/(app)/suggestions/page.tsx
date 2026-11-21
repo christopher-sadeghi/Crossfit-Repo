@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { SUGGESTION_LABELS } from "@/lib/ai/suggestions";
+import { SUGGESTION_LABELS, writeWorkoutInputSchema } from "@/lib/ai/suggestions";
 import { PageHeader } from "@/components/layout/page-header";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/units";
@@ -25,7 +25,10 @@ export default async function Page({ searchParams }: Props) {
   const [{ count }, suggestionsResult] = await Promise.all([
     supabase.from("ai_suggestions").select("id", { count: "exact", head: true }).eq("status", "pending"),
     (() => {
-      let query = supabase.from("ai_suggestions").select("id, suggestion_type, status, athlete_id, created_at").order("created_at", { ascending: false });
+      let query = supabase
+        .from("ai_suggestions")
+        .select("id, suggestion_type, status, athlete_id, created_at, input")
+        .order("created_at", { ascending: false });
       if (status === "pending") query = query.eq("status", "pending");
       else if (status === "failed") query = query.eq("status", "failed");
       else query = query.in("status", ["approved", "edited", "rejected"]);
@@ -65,28 +68,36 @@ export default async function Page({ searchParams }: Props) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {suggestions.map((suggestion) => (
-                  <TableRow key={suggestion.id}>
-                    <TableCell className="pl-4 font-medium">
-                      <Link href={`/suggestions/${suggestion.id}`} className="hover:underline">
-                        {SUGGESTION_LABELS[suggestion.suggestion_type]}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      {suggestion.athlete_id && athleteNames.has(suggestion.athlete_id) ? (
-                        <Link href={`/athletes/${suggestion.athlete_id}`} className="hover:underline">
-                          {athleteNames.get(suggestion.athlete_id)}
-                        </Link>
-                      ) : "—"}
-                    </TableCell>
-                    <TableCell>{formatDate(suggestion.created_at.slice(0, 10))}</TableCell>
-                    <TableCell>
-                      <Badge variant={suggestion.status === "failed" ? "destructive" : suggestion.status === "pending" ? "secondary" : "outline"}>
-                        {suggestion.status}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {suggestions.map((suggestion) => {
+                  const workoutInput =
+                    suggestion.suggestion_type === "write_workout"
+                      ? writeWorkoutInputSchema.safeParse(suggestion.input)
+                      : null;
+                  const label =
+                    workoutInput?.success && workoutInput.data.mode === "adjust"
+                      ? "Adjust workout"
+                      : SUGGESTION_LABELS[suggestion.suggestion_type];
+                  return (
+                    <TableRow key={suggestion.id}>
+                      <TableCell className="pl-4 font-medium">
+                        <Link href={`/suggestions/${suggestion.id}`} className="hover:underline">{label}</Link>
+                      </TableCell>
+                      <TableCell>
+                        {suggestion.athlete_id && athleteNames.has(suggestion.athlete_id) ? (
+                          <Link href={`/athletes/${suggestion.athlete_id}`} className="hover:underline">
+                            {athleteNames.get(suggestion.athlete_id)}
+                          </Link>
+                        ) : "—"}
+                      </TableCell>
+                      <TableCell>{formatDate(suggestion.created_at.slice(0, 10))}</TableCell>
+                      <TableCell>
+                        <Badge variant={suggestion.status === "failed" ? "destructive" : suggestion.status === "pending" ? "secondary" : "outline"}>
+                          {suggestion.status}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           ) : (
