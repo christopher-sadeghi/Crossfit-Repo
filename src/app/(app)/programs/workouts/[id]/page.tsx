@@ -133,7 +133,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
                           ) : (
                             name
                           )}
-                          {r.logged_by != null && r.logged_by === r.athletes?.user_id && <Badge variant="secondary">Logged by athlete</Badge>}
+                          {r.logged_by != null && r.logged_by !== coach?.id && <Badge variant="secondary">Logged by athlete</Badge>}
                         </div>
                       </TableCell>
                       <TableCell>{formatScore(r, units)}</TableCell>
