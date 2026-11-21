@@ -8,6 +8,7 @@ import { WORKOUT_TYPES } from "@/app/(app)/programs/options";
 import { fromKgPrecise, toKg } from "@/lib/units";
 import type { Database, Enums, Json, Tables } from "@/lib/supabase/database.types";
 
+import { movementIdSchema } from "./movement-schema";
 export const SUGGESTION_LABELS: Record<Enums<"suggestion_type">, string> = {
   write_workout: "Write workout",
   scale_workout: "Scale workout",
@@ -23,6 +24,17 @@ export const adjustMacrosSchema = z.object({
   rationale: z.string().min(1).max(1000),
 });
 
+const writeWorkoutMovementSchema = z.object({
+  movement_id: z.string(),
+  sets: z.number().int().min(1).max(100).nullable(),
+  reps: z.number().int().min(1).max(1000).nullable(),
+  load: z.number().min(0).max(2000).nullable(),
+  distance_m: z.number().min(1).max(100_000).nullable(),
+  calories: z.number().int().min(1).max(1000).nullable(),
+  duration_seconds: z.number().int().min(1).max(7200).nullable(),
+  notes: z.string().max(200).nullable(),
+});
+
 export const writeWorkoutSchema = z.object({
   title: z.string().min(1).max(80),
   workout_type: z.enum(WORKOUT_TYPES),
@@ -31,18 +43,7 @@ export const writeWorkoutSchema = z.object({
   description: z.string().max(1000).nullable(),
   notes: z.string().max(1000).nullable(),
   movements: z
-    .array(
-      z.object({
-        movement_id: z.string(),
-        sets: z.number().int().min(1).max(100).nullable(),
-        reps: z.number().int().min(1).max(1000).nullable(),
-        load: z.number().min(0).max(2000).nullable(),
-        distance_m: z.number().min(1).max(100_000).nullable(),
-        calories: z.number().int().min(1).max(1000).nullable(),
-        duration_seconds: z.number().int().min(1).max(7200).nullable(),
-        notes: z.string().max(200).nullable(),
-      }),
-    )
+    .array(writeWorkoutMovementSchema)
     .min(1)
     .max(15),
   rationale: z.string().min(1).max(1000),
@@ -87,7 +88,7 @@ export const writeWorkoutInputSchema = z.object({
     .optional(),
 });
 
-type SuggestionRequest = { input: Json; system: string; prompt: string };
+type SuggestionRequest = { input: Json; system: string; prompt: string; schema?: z.ZodType };
 type AppliedTarget = { target_table: string; target_id: string };
 type SuggestionParams = { athleteId: string | null; workoutId?: string | null; request?: string | null };
 export type SuggestionApplyOptions = { saveAs?: "update" | "new" };
@@ -293,6 +294,12 @@ async function buildWorkoutRequest(
     input,
     system: WRITE_WORKOUT_SYSTEM.replace("<units>", units),
     prompt: `Request: ${request}\n\nProgram context (JSON):\n${JSON.stringify(input, null, 2)}\n\nReturn a complete WOD proposal.`,
+    schema: writeWorkoutSchema.extend({
+      movements: z
+        .array(writeWorkoutMovementSchema.extend({ movement_id: movementIdSchema((library ?? []).map(({ id }) => id)) }))
+        .min(1)
+        .max(15),
+    }),
   };
 }
 
