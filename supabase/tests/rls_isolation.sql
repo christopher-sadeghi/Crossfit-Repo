@@ -104,6 +104,8 @@ reset role;
 select set_config('request.jwt.claims', '', true);
 insert into auth.users (id, email, raw_user_meta_data) values
   ('00000000-0000-0000-0000-00000000000c', 'athlete-a1@test.local', '{"full_name": "Alex Athlete"}');
+-- Without invite metadata handle_new_user makes a coach profile; real athlete signups don't have one.
+delete from public.coaches where id = '00000000-0000-0000-0000-00000000000c';
 update public.athletes set user_id = '00000000-0000-0000-0000-00000000000c'
 where id = '00000000-0000-0000-0000-0000000000a1';
 
