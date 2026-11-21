@@ -102,7 +102,8 @@ export function goalProgress(goal: GoalLike, data: { metrics: MetricRow[]; resul
   // Without a start value, assume lifts go up and body fat goes down; body weight could go either way.
   const increasing =
     start != null && target != null ? target >= start : tracking === "body_fat" ? false : tracking === "body_weight" ? null : true;
-  const reached = current != null && target != null && increasing != null && (increasing ? current >= target : current <= target);
+  const reached =
+    current != null && target != null && (increasing == null ? current === target : increasing ? current >= target : current <= target);
   let pct: number | null = null;
   if (goal.status === "achieved") pct = 100;
   else if (reached) pct = 100;
