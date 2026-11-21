@@ -33,7 +33,7 @@ export default async function MovementPage({ params }: { params: Promise<{ id: s
     <div className="mx-auto grid max-w-4xl gap-6">
       <Link href="/programs/movements" className="text-sm underline">← Movements</Link>
       <h1 className="text-2xl font-semibold">How to {movement.name}</h1>
-      <HowTo name={movement.name} videoUrl={guide?.video_url ?? movement.demo_video_url} guide={guide} />
+      <HowTo name={movement.name} videoUrl={guide?.video_url ?? movement.demo_video_url} guide={guide} emptyMessage="Not written yet. Ask AI or add it below." />
       {!hasGuideText(guide) && !pending && <RequestGuideForm movementId={id} />}
       {pending && (
         <Card>
@@ -45,7 +45,7 @@ export default async function MovementPage({ params }: { params: Promise<{ id: s
       )}
       <Card>
         <CardHeader><CardTitle>Edit published how-to</CardTitle></CardHeader>
-        <CardContent><GuideForm key={guide?.updated_at ?? "new"} movementId={id} values={guide} videoUrl={guide?.video_url} /></CardContent>
+        <CardContent><GuideForm key={guide?.updated_at ?? "new"} movementId={id} values={guide} videoUrl={guide?.video_url} libraryVideoUrl={movement.demo_video_url} /></CardContent>
       </Card>
     </div>
   );

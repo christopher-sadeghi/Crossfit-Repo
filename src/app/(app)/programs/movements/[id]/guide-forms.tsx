@@ -31,8 +31,8 @@ export function RequestGuideForm({ movementId }: { movementId: string }) {
   );
 }
 
-export function GuideForm({ movementId, values, videoUrl, suggestionId }: {
-  movementId: string; values: GuideText | null; videoUrl?: string | null; suggestionId?: string;
+export function GuideForm({ movementId, values, videoUrl, libraryVideoUrl, suggestionId }: {
+  movementId: string; values: GuideText | null; videoUrl?: string | null; libraryVideoUrl?: string | null; suggestionId?: string;
 }) {
   const [state, action, pending] = useActionState(suggestionId ? decideMovementGuide : saveMovementGuide, {});
   const prefix = suggestionId ?? movementId;
@@ -50,7 +50,9 @@ export function GuideForm({ movementId, values, videoUrl, suggestionId }: {
         <div className="grid gap-1.5">
           <Label htmlFor={`${prefix}-video`}>Video URL</Label>
           <Input id={`${prefix}-video`} name="video_url" type="url" maxLength={2048} defaultValue={submitted?.video_url ?? videoUrl ?? ""} placeholder="https://…" />
-          <p className="text-sm text-muted-foreground">Leave blank to use the library demo. YouTube and Vimeo embed; other https links open separately.</p>
+          <p className="text-sm text-muted-foreground">
+            {libraryVideoUrl ? <>Leave blank to use the library video: <a href={libraryVideoUrl} target="_blank" rel="noopener noreferrer" className="break-all underline underline-offset-4">{libraryVideoUrl}</a></> : "Leave blank for text only."}
+          </p>
         </div>
       )}
       <p className="text-sm text-muted-foreground">One item per line, up to 200 characters each.{suggestionId && " Review and edit this draft before approving."}</p>

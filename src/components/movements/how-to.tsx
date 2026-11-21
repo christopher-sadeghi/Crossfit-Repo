@@ -1,6 +1,8 @@
 import { demoEmbedUrl, guideSections, videoUrlSchema, type GuideText } from "@/lib/movement-guides";
 
-export function HowTo({ name, videoUrl, guide }: { name: string; videoUrl: string | null; guide: GuideText | null }) {
+export function HowTo({ name, videoUrl, guide, emptyMessage = "Your coach hasn't added this yet. Ask them for guidance." }: {
+  name: string; videoUrl: string | null; guide: GuideText | null; emptyMessage?: string;
+}) {
   const safeUrl = videoUrl && videoUrlSchema.safeParse(videoUrl).success ? videoUrl : null;
   const embed = safeUrl ? demoEmbedUrl(safeUrl) : null;
   return (
@@ -21,7 +23,7 @@ export function HowTo({ name, videoUrl, guide }: { name: string; videoUrl: strin
               <ol className="list-decimal space-y-2 pl-5">{guide[key].map((text, i) => <li key={i}>{text}</li>)}</ol>
             ) : (
               <ul className="list-disc space-y-2 pl-5">{guide[key].map((text, i) => <li key={i}>{text}</li>)}</ul>
-            ) : <p className="text-sm text-muted-foreground">Your coach hasn&apos;t added this yet. Ask them for guidance.</p>}
+            ) : <p className="text-sm text-muted-foreground">{emptyMessage}</p>}
           </section>
         ))}
       </div>

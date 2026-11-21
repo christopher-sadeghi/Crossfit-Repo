@@ -75,6 +75,11 @@ test("HowTo renders embeds, external links, empty placeholders and escaped cues"
   const empty = render(null);
   assert.match(empty, /No demo video yet/);
   assert.equal((empty.match(/hasn&#x27;t added this yet/g) ?? []).length, 4);
+  const coachEmpty = renderToStaticMarkup(createElement(HowTo, {
+    name: "Thruster", videoUrl: null, guide: null, emptyMessage: "Not written yet. Ask AI or add it below.",
+  }));
+  assert.equal((coachEmpty.match(/Not written yet\. Ask AI or add it below\./g) ?? []).length, 4);
+  assert.doesNotMatch(coachEmpty, /Your coach/);
   const embedded = render("https://youtu.be/L219ltL15zk", { ...valid, cues: ["<script>bad</script>"] });
   assert.match(embedded, /youtube-nocookie.com\/embed\/L219ltL15zk/);
   assert.match(embedded, /title="Thruster demo video"/);
