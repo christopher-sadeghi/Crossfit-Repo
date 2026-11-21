@@ -51,7 +51,16 @@ export default async function AthleteJournalPage({ searchParams }: { searchParam
         </div>
         <Card>
           <CardContent className="pt-6">
-            <JournalForm key={entryOn} entryOn={entryOn} entry={entry} />
+            <JournalForm
+              key={entryOn}
+              entryOn={entryOn}
+              entry={entry}
+              habitsLegend={
+                entryOn === todayIso
+                  ? "Yesterday and today, did you…"
+                  : `On ${formatDate(entryOn)} and the day before, did you…`
+              }
+            />
           </CardContent>
         </Card>
         <form action="/athlete/journal" className="flex items-end gap-2">

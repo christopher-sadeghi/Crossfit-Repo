@@ -13,7 +13,15 @@ import { saveJournalEntry } from "./actions";
 
 type Tracked = FormState & { successes?: number };
 
-export function JournalForm({ entryOn, entry }: { entryOn: string; entry: JournalEntry | null }) {
+export function JournalForm({
+  entryOn,
+  entry,
+  habitsLegend,
+}: {
+  entryOn: string;
+  entry: JournalEntry | null;
+  habitsLegend: string;
+}) {
   const [state, formAction, pending] = useActionState<Tracked, FormData>(async (prev, data) => {
     const next = await saveJournalEntry(prev, data);
     return { ...next, successes: (prev.successes ?? 0) + (next.error ? 0 : 1) };
@@ -61,7 +69,7 @@ export function JournalForm({ entryOn, entry }: { entryOn: string; entry: Journa
         </div>
       </fieldset>
       <fieldset className="grid gap-2">
-        <legend className="mb-1 text-sm font-medium">Yesterday and today, did you…</legend>
+        <legend className="mb-1 text-sm font-medium">{habitsLegend}</legend>
         {JOURNAL_QUESTIONS.map((q) => (
           <label key={q.key} className="flex min-h-11 items-center justify-between gap-3 rounded-md border px-3 text-sm">
             {q.label}
