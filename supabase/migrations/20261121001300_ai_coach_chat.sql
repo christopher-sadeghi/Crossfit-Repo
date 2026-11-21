@@ -19,6 +19,7 @@ create policy "Coaches manage their own rows" on public.ai_chat_messages
   using (coach_id = (select auth.uid())) with check (coach_id = (select auth.uid()));
 
 -- Clearing only hides messages so they still count toward the daily AI cap.
+revoke all on public.ai_chat_messages from anon, authenticated;
 grant select, insert on public.ai_chat_messages to authenticated;
 grant update (cleared) on public.ai_chat_messages to authenticated;
 grant all on public.ai_chat_messages to service_role;
