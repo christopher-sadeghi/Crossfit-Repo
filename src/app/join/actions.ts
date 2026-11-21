@@ -59,6 +59,34 @@ export async function acceptInvite(
   if (error) {
     const message = error.message.toLowerCase();
     if (
+      error.code === "user_already_exists" ||
+      message.includes("already registered")
+    ) {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: invite.email,
+        password: parsed.data.password,
+      });
+
+      if (signInError) {
+        return failure(
+          formData,
+          "This email already has an account. Enter that account's password, or use Forgot password on the login page.",
+        );
+      }
+
+      const { error: claimError } = await supabase.rpc("claim_athlete_invite", {
+        p_token: parsed.data.invite_token,
+      });
+
+      if (claimError) {
+        await supabase.auth.signOut();
+        return failure(formData, INVALID_INVITE);
+      }
+
+      redirect("/athlete");
+    }
+
+    if (
       (error.status ?? 0) >= 500 ||
       message.includes("invalid_invite") ||
       message.includes("database error")

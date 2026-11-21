@@ -850,6 +850,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      claim_athlete_invite: {
+        Args: { p_token: string };
+        Returns: undefined;
+      };
       clear_demo_data: { Args: Record<PropertyKey, never>; Returns: undefined };
       current_athlete_coach_id: {
         Args: Record<PropertyKey, never>;
