@@ -154,7 +154,7 @@ export default async function AthleteTodayPage() {
                   </p>
                 </div>
                 <Button asChild size="sm">
-                  <Link href={`/athlete/log/${workout.id}`}>Log result</Link>
+                  <Link href={`/athlete/log/${workout.id}?date=${workout.date}`}>Log result</Link>
                 </Button>
               </CardContent>
             </Card>

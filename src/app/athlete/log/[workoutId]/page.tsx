@@ -14,7 +14,7 @@ import { AthleteResultForm } from "./result-form";
 
 type Props = {
   params: Promise<{ workoutId: string }>;
-  searchParams: Promise<{ result?: string }>;
+  searchParams: Promise<{ result?: string; date?: string }>;
 };
 
 type EditableResult = Pick<
@@ -37,7 +37,7 @@ type EditableResult = Pick<
 >;
 
 export default async function AthleteLogResultPage({ params, searchParams }: Props) {
-  const [{ workoutId }, { result: resultId }] = await Promise.all([params, searchParams]);
+  const [{ workoutId }, { result: resultId, date: requestedDate }] = await Promise.all([params, searchParams]);
   const viewer = await getViewer();
   if (!viewer) redirect("/login");
   if (viewer.kind === "coach") redirect("/");
@@ -77,6 +77,19 @@ export default async function AthleteLogResultPage({ params, searchParams }: Pro
   const todayIso = today();
   const minDate = new Date(`${todayIso}T00:00:00Z`);
   minDate.setUTCDate(minDate.getUTCDate() - 14);
+  const minDateIso = minDate.toISOString().slice(0, 10);
+  const requestedDateValue =
+    typeof requestedDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)
+      ? new Date(`${requestedDate}T00:00:00Z`)
+      : null;
+  const defaultDate =
+    requestedDateValue &&
+    !Number.isNaN(requestedDateValue.getTime()) &&
+    requestedDateValue.toISOString().slice(0, 10) === requestedDate &&
+    requestedDate >= minDateIso &&
+    requestedDate <= todayIso
+      ? requestedDate
+      : todayIso;
 
   return (
     <div className="grid gap-4">
@@ -95,6 +108,7 @@ export default async function AthleteLogResultPage({ params, searchParams }: Pro
         workoutType={workout.workout_type}
         today={todayIso}
         minDate={minDate.toISOString().slice(0, 10)}
+        defaultDate={defaultDate}
         units={viewer.units}
         existingResult={existingResult}
       />

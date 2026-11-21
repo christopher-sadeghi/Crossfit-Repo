@@ -39,6 +39,7 @@ export function AthleteResultForm({
   workoutType,
   today,
   minDate,
+  defaultDate,
   units,
   existingResult,
 }: {
@@ -46,6 +47,7 @@ export function AthleteResultForm({
   workoutType: Enums<"workout_type">;
   today: string;
   minDate: string;
+  defaultDate: string;
   units: Units;
   existingResult: WorkoutResult | null;
 }) {
@@ -56,7 +58,7 @@ export function AthleteResultForm({
   const fields = FIELDS[workoutType];
   const initialValues: Record<string, string> = {
     result_id: existingResult?.id ?? "",
-    performed_on: existingResult?.performed_on ?? today,
+    performed_on: existingResult?.performed_on ?? defaultDate ?? today,
     minutes: existingResult?.time_seconds == null ? "" : String(Math.floor(existingResult.time_seconds / 60)),
     seconds: existingResult?.time_seconds == null ? "" : String(existingResult.time_seconds % 60),
     rounds: existingResult?.rounds == null ? "" : String(existingResult.rounds),
