@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import {
+  ApproveProgressSummaryForm,
   ApproveSuggestionForm,
   ApproveWorkoutSuggestionForm,
   RejectSuggestionForm,
@@ -11,8 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { friendlySuggestionError } from "@/lib/ai/service-core";
+import { GOAL_STATUS_LABELS, progressNote, progressSummaryInputSchema, progressSummarySchema } from "@/lib/ai/progress-summary";
 import {
   adjustMacrosSchema,
+  MACRO_DISCLAIMER,
   SUGGESTION_LABELS,
   writeWorkoutInputSchema,
   writeWorkoutSchema,
@@ -45,6 +48,12 @@ export default async function SuggestionPage({ params }: Props) {
   const rationale = suggestion.status === "approved" || suggestion.status === "edited"
     ? (final?.success ? final.data.rationale : "")
     : (proposal?.success ? proposal.data.rationale : "");
+  const summaryType = suggestion.suggestion_type === "progress_summary";
+  const decided = suggestion.status === "approved" || suggestion.status === "edited";
+  const summaryParsed = summaryType ? progressSummarySchema.safeParse(decided ? suggestion.final : suggestion.proposal) : null;
+  const shownSummary = summaryParsed?.success ? summaryParsed.data : null;
+  const summaryInput = summaryType ? progressSummaryInputSchema.safeParse(suggestion.input) : null;
+  const goalTitles = new Map((summaryInput?.success ? summaryInput.data.goals : []).map((goal) => [goal.id, goal.title]));
   const workoutProposal = workoutType ? writeWorkoutSchema.safeParse(suggestion.proposal) : null;
   const workoutFinal = workoutType ? writeWorkoutSchema.safeParse(suggestion.final) : null;
   const shownWorkout =
@@ -162,7 +171,47 @@ export default async function SuggestionPage({ params }: Props) {
       {macrosType && rationale && (
         <Card className="mb-6">
           <CardHeader><CardTitle>Why this was suggested</CardTitle></CardHeader>
-          <CardContent className="whitespace-pre-line">{rationale}</CardContent>
+          <CardContent className="grid gap-3">
+            <p className="whitespace-pre-line">{rationale}</p>
+            <p className="text-xs text-muted-foreground">{MACRO_DISCLAIMER}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {summaryType && shownSummary && (
+        <Card className="mb-6 pb-0">
+          <CardHeader>
+            <CardTitle>{decided ? "Saved summary" : "Summary"}</CardTitle>
+            <p className="whitespace-pre-line">{shownSummary.summary}</p>
+          </CardHeader>
+          <CardContent className="p-0">
+            {shownSummary.goals.length ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="pl-4">Goal</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>How it&apos;s tracking</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {shownSummary.goals.map((goal) => (
+                    <TableRow key={goal.goal_id}>
+                      <TableCell className="pl-4 font-medium">{goalTitles.get(goal.goal_id) ?? "Goal"}</TableCell>
+                      <TableCell>
+                        <Badge variant={goal.status === "behind" ? "destructive" : goal.status === "no_data" ? "outline" : "secondary"}>
+                          {GOAL_STATUS_LABELS[goal.status]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="whitespace-normal">{goal.note}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : (
+              <p className="px-4 pb-4 text-sm text-muted-foreground">This athlete has no active goals.</p>
+            )}
+          </CardContent>
         </Card>
       )}
 
@@ -243,6 +292,28 @@ export default async function SuggestionPage({ params }: Props) {
         </Card>
       )}
 
+      {suggestion.status === "pending" && summaryType && shownSummary && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Review and save</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              You can edit the summary first. Saving adds it, with the goal lines above, to the end of the athlete&apos;s coach notes.
+              Nothing is saved until you click save.
+            </p>
+          </CardHeader>
+          <CardContent className="grid gap-5">
+            <details className="text-sm">
+              <summary className="cursor-pointer text-muted-foreground">Preview the note</summary>
+              <pre className="mt-2 font-sans whitespace-pre-wrap">{progressNote(shownSummary, suggestion.input)}</pre>
+            </details>
+            <ApproveProgressSummaryForm id={suggestion.id} summary={shownSummary.summary} />
+            <div className="border-t pt-4">
+              <RejectSuggestionForm id={suggestion.id} />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {suggestion.status === "pending" && workoutType && workoutProposal?.success && workoutContext && (
         <Card className="mb-6">
           <CardHeader>
@@ -271,8 +342,16 @@ export default async function SuggestionPage({ params }: Props) {
           <CardContent className="grid gap-3 text-sm">
             <p>Status: <span className="capitalize">{suggestion.status}</span></p>
             <p>Decided: {suggestion.decided_at ? formatDate(suggestion.decided_at.slice(0, 10)) : "—"}</p>
-            {athlete && <p><Link href={`/nutrition/${athlete.id}`} className="underline underline-offset-4">Open athlete&apos;s nutrition page</Link></p>}
-            {suggestion.status === "rejected" && <p>This suggestion was rejected. No {workoutType ? "WOD" : "target"} was changed.</p>}
+            {athlete && macrosType && <p><Link href={`/nutrition/${athlete.id}`} className="underline underline-offset-4">Open athlete&apos;s nutrition page</Link></p>}
+            {athlete && summaryType && suggestion.status !== "rejected" && (
+              <p>
+                Saved to the athlete&apos;s notes.{" "}
+                <Link href={`/athletes/${athlete.id}`} className="underline underline-offset-4">Open athlete profile</Link>
+              </p>
+            )}
+            {suggestion.status === "rejected" && (
+              <p>This suggestion was rejected. No {workoutType ? "WOD" : summaryType ? "note" : "target"} was changed.</p>
+            )}
             {workoutType && suggestion.status !== "rejected" && suggestion.target_id && (
               <p>
                 WOD saved.{" "}
@@ -292,7 +371,7 @@ export default async function SuggestionPage({ params }: Props) {
 
       {suggestion.suggestion_type === "movement_guide" && suggestion.input && typeof suggestion.input === "object" && !Array.isArray(suggestion.input) && typeof suggestion.input.movement_id === "string" ? (
         <Link href={`/programs/movements/${encodeURIComponent(suggestion.input.movement_id)}`} className="underline underline-offset-4">Review on the movement page</Link>
-      ) : !macrosType && !workoutType && <p className="text-sm text-muted-foreground">This suggestion type isn&apos;t ready yet.</p>}
+      ) : !macrosType && !workoutType && !summaryType && <p className="text-sm text-muted-foreground">This suggestion type isn&apos;t ready yet.</p>}
     </>
   );
 }

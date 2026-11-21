@@ -1,8 +1,11 @@
 import { z } from "zod";
+import { ApprovalError } from "./errors";
+import { foodAverages, trainingVolume, weightTrend } from "./athlete-context";
 import { movementGuideEntry } from "./movement-guides";
+import { progressSummaryEntry } from "./progress-summary";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { addDays, totals } from "@/lib/nutrition";
+import { addDays } from "@/lib/nutrition";
 import { applyTarget } from "@/lib/nutrition-targets";
 import { today } from "@/lib/program-dates";
 import { WORKOUT_TYPES } from "@/app/(app)/programs/options";
@@ -89,11 +92,12 @@ export const writeWorkoutInputSchema = z.object({
     .optional(),
 });
 
+export { ApprovalError };
+
 type SuggestionRequest = { input: Json; system: string; prompt: string };
 type AppliedTarget = { target_table: string; target_id: string };
 type SuggestionParams = { athleteId: string | null; workoutId?: string | null; request?: string | null };
 export type SuggestionApplyOptions = { saveAs?: "update" | "new" };
-export class ApprovalError extends Error {}
 
 type SuggestionEntry = {
   label: string;
@@ -108,14 +112,21 @@ type SuggestionEntry = {
   ) => Promise<AppliedTarget>;
 };
 
+export const MACRO_DISCLAIMER =
+  "AI suggestions are general fitness guidance, not medical or dietetic advice. Check with a doctor or registered dietitian for athletes with medical conditions, eating disorders, pregnancy, or other health concerns.";
+
 const ADJUST_MACROS_SYSTEM = `You help a CrossFit coach set daily macro targets for one athlete. The coach reviews every suggestion before anything changes.
 Rules:
 - Use only the data provided. Do not invent measurements.
+- Consider the athlete's goals, body weight trend, recent food intake, and training volume together.
 - Base protein on body weight: 1.6–2.2 g per kg unless the data clearly calls for something else.
 - Keep calories consistent with the macros: protein×4 + carbs×4 + fat×9 must be within 5% of calories.
 - If there is a current target, change calories by no more than 15% from it.
+- More or harder training generally supports more carbohydrate; fewer sessions supports less.
 - If the food log shows the athlete is far from their current target, say so. The fix may be adherence, not new numbers.
-- Write the rationale for the coach in 2–4 short, plain-English sentences, citing the numbers you relied on.`;
+- If data is thin (few weigh-ins or food days), say so and keep changes small.
+- This is general fitness guidance, not medical advice. Never diagnose or give medical or clinical nutrition advice.
+- Write the rationale for the coach in 2–4 short, plain-English sentences, citing the numbers you relied on (goal, weight trend, intake, training).`;
 
 function ageOn(birthDate: string, asOf: string) {
   const birth = new Date(`${birthDate}T00:00:00Z`);
@@ -139,6 +150,7 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
     { data: food, error: foodError },
     { data: weights, error: weightsError },
     { data: goals, error: goalsError },
+    training,
   ] = await Promise.all([
     supabase
       .from("athletes")
@@ -169,10 +181,10 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
       .order("measured_on", { ascending: true }),
     supabase
       .from("goals")
-      .select("title, metric, unit, start_value, target_value, target_date")
+      .select("title, goal_type, metric, unit, start_value, target_value, target_date")
       .eq("athlete_id", athleteId)
-      .eq("goal_type", "body_composition")
       .eq("status", "active"),
+    trainingVolume(supabase, athleteId, asOf),
   ]);
 
   if (athleteError || !athlete) throw athleteError ?? new Error("Athlete not found.");
@@ -181,23 +193,6 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
   if (weightsError) throw weightsError;
   if (goalsError) throw goalsError;
 
-  const loggedDays = new Map<string, typeof food>();
-  for (const row of food ?? []) {
-    const day = loggedDays.get(row.logged_on) ?? [];
-    day.push(row);
-    loggedDays.set(row.logged_on, day);
-  }
-  const dailyTotals = [...loggedDays.values()].map((rows) => totals(rows));
-  const total = dailyTotals.reduce(
-    (sum, day) => ({
-      calories: sum.calories + day.calories,
-      protein: sum.protein + day.protein,
-      carbs: sum.carbs + day.carbs,
-      fat: sum.fat + day.fat,
-    }),
-    { calories: 0, protein: 0, carbs: 0, fat: 0 },
-  );
-  const daysLogged = dailyTotals.length;
   const input = {
     athlete: {
       first_name: athlete.first_name,
@@ -208,15 +203,11 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
       injuries: athlete.injuries,
     },
     current_target: target,
-    food_log_last_14_days: {
-      days_logged: daysLogged,
-      avg_calories: daysLogged ? Math.round(total.calories / daysLogged) : null,
-      avg_protein_g: daysLogged ? Math.round(total.protein / daysLogged) : null,
-      avg_carbs_g: daysLogged ? Math.round(total.carbs / daysLogged) : null,
-      avg_fat_g: daysLogged ? Math.round(total.fat / daysLogged) : null,
-    },
+    food_log_last_14_days: foodAverages(food ?? []),
+    body_weight_trend_last_8_weeks: weightTrend(weights ?? []),
     body_weight_kg_last_8_weeks: (weights ?? []).map((row) => ({ date: row.measured_on, kg: row.weight_kg })),
-    active_body_composition_goals: goals ?? [],
+    training_last_4_weeks: training,
+    active_goals: goals ?? [],
   } satisfies Json;
 
   return {
@@ -418,5 +409,5 @@ export const SUGGESTION_REGISTRY: Record<Enums<"suggestion_type">, SuggestionEnt
     buildRequest: buildMacroRequest,
     apply: applyMacroSuggestion,
   },
-  progress_summary: { label: SUGGESTION_LABELS.progress_summary, proposalSchema: z.unknown() },
+  progress_summary: progressSummaryEntry,
 };

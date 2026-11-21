@@ -23,9 +23,17 @@ function Message({ state }: { state: FormState }) {
   return null;
 }
 
-export function RequestMacroSuggestionForm({ athleteId }: { athleteId: string }) {
+function RequestAthleteSuggestionForm({
+  athleteId,
+  type,
+  label,
+}: {
+  athleteId: string;
+  type: "adjust_macros" | "progress_summary";
+  label: string;
+}) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(
-    async () => requestSuggestion("adjust_macros", athleteId),
+    async () => requestSuggestion(type, athleteId),
     {},
   );
 
@@ -38,11 +46,19 @@ export function RequestMacroSuggestionForm({ athleteId }: { athleteId: string })
       className="grid justify-items-start gap-3"
     >
       <Button type="submit" disabled={pending}>
-        {pending ? "Thinking… this can take up to 30 seconds" : "Ask AI to suggest new targets"}
+        {pending ? "Thinking… this can take up to 30 seconds" : label}
       </Button>
       <Message state={state} />
     </form>
   );
+}
+
+export function RequestMacroSuggestionForm({ athleteId }: { athleteId: string }) {
+  return <RequestAthleteSuggestionForm athleteId={athleteId} type="adjust_macros" label="Suggest macros" />;
+}
+
+export function RequestProgressSummaryForm({ athleteId }: { athleteId: string }) {
+  return <RequestAthleteSuggestionForm athleteId={athleteId} type="progress_summary" label="Summarize progress" />;
 }
 
 export function RequestWorkoutSuggestionForm({ workoutId }: { workoutId?: string }) {
@@ -235,6 +251,42 @@ export function ApproveWorkoutSuggestionForm({
         <Button type="submit" name="intent" value="edit" variant="outline" disabled={pending}>
           {pending ? "Saving…" : "Approve and edit"}
         </Button>
+      </div>
+    </form>
+  );
+}
+
+export function ApproveProgressSummaryForm({ id, summary }: { id: string; summary: string }) {
+  const [state, formAction, pending] = useActionState<FormState, FormData>(
+    async (previous, formData) => approveSuggestion(previous, formData),
+    {},
+  );
+  const [value, setValue] = useState(summary);
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        startTransition(() => formAction(new FormData(event.currentTarget)));
+      }}
+      className="grid gap-4"
+    >
+      <input type="hidden" name="id" value={id} />
+      <div className="grid gap-1.5">
+        <Label htmlFor={`${id}-summary`}>Summary</Label>
+        <Textarea
+          id={`${id}-summary`}
+          name="summary"
+          rows={4}
+          maxLength={800}
+          required
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+        />
+      </div>
+      <Message state={state} />
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" disabled={pending}>{pending ? "Saving…" : "Save to athlete notes"}</Button>
       </div>
     </form>
   );

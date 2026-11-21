@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { approveSuggestionWithClient, rejectSuggestionWithClient } from "@/lib/ai/decisions";
 import { runSuggestion } from "@/lib/ai/service";
+import { progressSummarySchema } from "@/lib/ai/progress-summary";
 import { SUGGESTION_REGISTRY } from "@/lib/ai/suggestions";
 import type { SuggestionApplyOptions } from "@/lib/ai/suggestions";
 import { failure, type FormState } from "@/lib/auth/form-state";
@@ -21,6 +22,7 @@ function revalidateSuggestion(id: string, athleteId?: string | null) {
   if (athleteId) {
     revalidatePath(`/nutrition/${athleteId}`);
     revalidatePath(`/athletes/${athleteId}`);
+    revalidatePath(`/athletes/${athleteId}/progress`);
   }
 }
 
@@ -103,9 +105,16 @@ export async function approveSuggestion(_: FormState, formData: FormData): Promi
   const entry = SUGGESTION_REGISTRY[suggestion.suggestion_type];
   if (!entry.apply) return failure(formData, "This suggestion type isn't ready to approve yet.");
   const isWorkout = suggestion.suggestion_type === "write_workout";
+  const isSummary = suggestion.suggestion_type === "progress_summary";
   let finalInput: unknown;
   let applyOptions: SuggestionApplyOptions | undefined;
-  if (isWorkout) {
+  if (isSummary) {
+    const proposal = progressSummarySchema.safeParse(suggestion.proposal);
+    if (!proposal.success) return failure(formData, "Couldn't save this summary. Please ask for a new one.");
+    const final = progressSummarySchema.safeParse({ ...proposal.data, summary: formData.get("summary") });
+    if (!final.success) return failure(formData, "Enter a summary of up to 800 characters.");
+    finalInput = final.data;
+  } else if (isWorkout) {
     const proposal = entry.proposalSchema.safeParse(suggestion.proposal);
     if (!proposal.success) return failure(formData, "Couldn't approve this suggestion. Please ask for a new WOD.");
     finalInput = proposal.data;
@@ -143,6 +152,7 @@ export async function approveSuggestion(_: FormState, formData: FormData): Promi
     }
     return { message: "WOD saved." };
   }
+  if (isSummary) return { message: "Saved to the athlete's notes." };
   return { message: result.status === "edited" ? "Your edited targets are approved." : "Targets approved." };
 }
 

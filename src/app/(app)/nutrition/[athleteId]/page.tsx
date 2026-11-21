@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RequestMacroSuggestionForm } from "@/components/suggestions/suggestion-forms";
+import { MACRO_DISCLAIMER } from "@/lib/ai/suggestions";
 import { addDays, MEALS, onTarget, targetOn, totals, type Macros } from "@/lib/nutrition";
 import { today } from "@/lib/program-dates";
 import { createClient } from "@/lib/supabase/server";
@@ -106,10 +107,13 @@ export default async function AthleteNutritionPage({ params, searchParams }: Pro
       <Card className="mb-6">
         <CardHeader>
           <CardTitle>AI macro suggestion</CardTitle>
-          <p className="text-sm text-muted-foreground">Review any suggested targets before they change.</p>
+          <p className="text-sm text-muted-foreground">
+            The AI looks at goals, body weight trend, recent food logs and training volume. Nothing changes until you approve.
+          </p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="grid gap-3">
           <RequestMacroSuggestionForm athleteId={athlete.id} />
+          <p className="text-xs text-muted-foreground">{MACRO_DISCLAIMER}</p>
         </CardContent>
       </Card>
 
