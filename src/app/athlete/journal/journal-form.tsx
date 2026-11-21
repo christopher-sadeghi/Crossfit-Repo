@@ -44,14 +44,14 @@ export function JournalForm({ entryOn, entry }: { entryOn: string; entry: Journa
       <fieldset className="grid gap-1.5">
         <legend className="text-sm font-medium">Sleep quality</legend>
         <div className="flex flex-wrap gap-1.5">
-          {SLEEP_QUALITY_LABELS.map((label, index) => (
+          {["Not rated", ...SLEEP_QUALITY_LABELS].map((label, index) => (
             <label key={label} className="cursor-pointer">
               <input
                 className="peer sr-only"
                 type="radio"
                 name="sleep_quality"
-                value={index + 1}
-                defaultChecked={Number(values.sleep_quality) === index + 1}
+                value={index === 0 ? "" : index}
+                defaultChecked={(Number(values.sleep_quality) || 0) === index}
               />
               <span className="flex min-h-11 items-center justify-center rounded-md border px-3 text-sm peer-checked:border-primary peer-checked:bg-primary peer-checked:text-primary-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-ring">
                 {label}
