@@ -21,7 +21,7 @@ export default async function AthletesPage({ searchParams }: Props) {
 
   let query = supabase
     .from("athletes")
-    .select("id, first_name, last_name, email, experience_level, injuries")
+    .select("id, first_name, last_name, email, experience_level, injuries, user_id")
     .eq("status", status)
     .order("first_name")
     .order("last_name");
@@ -32,7 +32,15 @@ export default async function AthletesPage({ searchParams }: Props) {
     const like = `ilike."%${word}%"`;
     query = query.or(`first_name.${like},last_name.${like},email.${like}`);
   }
-  const { data: athletes = [] } = await query;
+  const [{ data: athletes = [] }, { data: invites = [] }] = await Promise.all([
+    query,
+    supabase
+      .from("athlete_invites")
+      .select("athlete_id")
+      .is("accepted_at", null)
+      .is("revoked_at", null),
+  ]);
+  const invitedAthletes = new Set((invites ?? []).map((invite) => invite.athlete_id));
 
   return (
     <>
@@ -76,6 +84,7 @@ export default async function AthletesPage({ searchParams }: Props) {
                   <TableHead>Level</TableHead>
                   <TableHead>Injuries / limitations</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead>App</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -93,6 +102,15 @@ export default async function AthletesPage({ searchParams }: Props) {
                       {a.injuries ? <Badge variant="destructive">{a.injuries}</Badge> : "—"}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{a.email ?? "—"}</TableCell>
+                    <TableCell>
+                      {a.user_id ? (
+                        <Badge>Joined</Badge>
+                      ) : invitedAthletes.has(a.id) ? (
+                        <Badge variant="secondary">Invited</Badge>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
