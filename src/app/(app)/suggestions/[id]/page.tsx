@@ -343,8 +343,25 @@ export default async function SuggestionPage({ params }: Props) {
           <CardContent className="grid gap-3 text-sm">
             <p>Status: <span className="capitalize">{suggestion.status}</span></p>
             <p>Decided: {suggestion.decided_at ? formatDate(suggestion.decided_at.slice(0, 10)) : "—"}</p>
-            {athlete && <p><Link href={`/nutrition/${athlete.id}`} className="underline underline-offset-4">Open athlete&apos;s nutrition page</Link></p>}
-            {suggestion.status === "rejected" && <p>This suggestion was rejected. No {workoutType ? "WOD" : "target"} was changed.</p>}
+            {macrosType && athlete && <p><Link href={`/nutrition/${athlete.id}`} className="underline underline-offset-4">Open athlete&apos;s nutrition page</Link></p>}
+            {suggestion.status === "rejected" && (
+              <p>
+                {scaleType
+                  ? "No scaled version was saved."
+                  : workoutType
+                    ? "No WOD was changed."
+                    : macrosType
+                      ? "No target was changed."
+                      : "No change was made."}
+              </p>
+            )}
+            {scaleType && suggestion.status === "rejected" && scaleContext?.workout_id && (
+              <p>
+                <Link href={`/programs/workouts/${scaleContext.workout_id}`} className="underline underline-offset-4">
+                  Open the WOD
+                </Link>
+              </p>
+            )}
             {workoutType && suggestion.status !== "rejected" && suggestion.target_id && (
               <p>
                 WOD saved.{" "}
