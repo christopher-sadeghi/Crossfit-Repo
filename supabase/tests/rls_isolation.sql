@@ -15,7 +15,8 @@ insert into public.athletes (id, first_name, last_name)
 values ('00000000-0000-0000-0000-0000000000a1', 'Alex', 'Athlete');
 insert into public.workouts (id, title, workout_type)
 values ('00000000-0000-0000-0000-0000000000a2', 'Fran', 'for_time');
-insert into public.movements (name, category) values ('Coach A Custom Move', 'other');
+insert into public.movements (id, name, category)
+values ('00000000-0000-0000-0000-0000000000a3', 'Coach A Custom Move', 'other');
 
 do $$
 begin
@@ -58,6 +59,30 @@ begin
     raise exception 'coach B logged a result against coach A data';
   exception when foreign_key_violation then null;
   end;
+
+  begin
+    insert into public.goals (athlete_id, title, goal_type, movement_id)
+    values (gen_random_uuid(), 'x', 'performance', '00000000-0000-0000-0000-0000000000a3');
+    raise exception 'coach B referenced coach A custom movement in a goal';
+  exception when insufficient_privilege or foreign_key_violation then null;
+  end;
+end $$;
+
+-- Coach B cannot use coach A's custom movement in their own workout.
+insert into public.workouts (id, title, workout_type)
+values ('00000000-0000-0000-0000-0000000000b2', 'Coach B WOD', 'for_time');
+
+do $$
+begin
+  begin
+    insert into public.workout_movements (workout_id, movement_id)
+    values ('00000000-0000-0000-0000-0000000000b2', '00000000-0000-0000-0000-0000000000a3');
+    raise exception 'coach B referenced coach A custom movement in a workout';
+  exception when insufficient_privilege then null;
+  end;
+
+  insert into public.workout_movements (workout_id, movement_id)
+  select '00000000-0000-0000-0000-0000000000b2', id from public.movements where coach_id is null limit 1;
 end $$;
 
 select 'rls_isolation: all checks passed' as result;

@@ -361,3 +361,21 @@ begin
   end loop;
 end;
 $$;
+
+-- Foreign keys bypass RLS, so block references to another coach's custom movements.
+do $$
+declare
+  t text;
+  movement_visible text := 'movement_id is null or exists (select 1 from public.movements m '
+    'where m.id = movement_id and (m.coach_id is null or m.coach_id = (select auth.uid())))';
+begin
+  foreach t in array array['workout_movements', 'goals'] loop
+    execute format(
+      'create policy "Only library or own movements (insert)" on public.%I as restrictive '
+      'for insert to authenticated with check (%s)', t, movement_visible);
+    execute format(
+      'create policy "Only library or own movements (update)" on public.%I as restrictive '
+      'for update to authenticated using (true) with check (%s)', t, movement_visible);
+  end loop;
+end;
+$$;
