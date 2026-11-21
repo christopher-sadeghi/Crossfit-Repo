@@ -10,11 +10,13 @@ import { SUGGESTION_LABELS } from "@/lib/ai/suggestions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCoach } from "@/lib/coach";
 import { programDate, today } from "@/lib/program-dates";
+import { formatGoalValue, goalProgress, latestMetric } from "@/lib/progress";
 import { personalRecords } from "@/lib/results";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatScore, formatWeight, type Units } from "@/lib/units";
 
 import { ArchiveButton } from "../archive-button";
+import { GoalBar } from "./progress/goal-bar";
 import { formatHeadline } from "../../programs/workouts/whiteboard";
 import { LEVEL_LABELS } from "../options";
 
@@ -31,10 +33,10 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const since = new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
   const [athleteRes, metricsRes, resultsRes, targetRes, foodRes, goalsRes, aiRes, assignmentsRes] = await Promise.all([
     supabase.from("athletes").select("*").eq("id", id).maybeSingle(),
-    supabase.from("body_metrics").select("measured_on, weight_kg").eq("athlete_id", id).order("measured_on", { ascending: false }).limit(8),
+    supabase.from("body_metrics").select("measured_on, weight_kg, body_fat_pct").eq("athlete_id", id).order("measured_on", { ascending: false }),
     supabase
       .from("workout_results")
-      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, workout_id, workouts(title, workout_type)")
+      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, workout_id, workouts(title, workout_type, workout_movements(movement_id))")
       .eq("athlete_id", id)
       .order("performed_on", { ascending: false })
       .order("created_at", { ascending: false }),
@@ -46,7 +48,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
       .or(`end_date.is.null,end_date.gte.${today()}`)
       .maybeSingle(),
     supabase.from("food_logs").select("logged_on, calories, protein_g, carbs_g, fat_g").eq("athlete_id", id).gte("logged_on", since),
-    supabase.from("goals").select("id, title, goal_type, metric, unit, start_value, target_value, target_date, status").eq("athlete_id", id).order("status").order("target_date"),
+    supabase.from("goals").select("id, title, goal_type, movement_id, metric, unit, start_value, target_value, target_date, status").eq("athlete_id", id).order("status").order("target_date"),
     supabase.from("ai_suggestions").select("id, suggestion_type, status, created_at, decided_at").eq("athlete_id", id).order("created_at", { ascending: false }),
     supabase
       .from("program_assignments")
@@ -57,6 +59,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const athlete = athleteRes.data;
   if (!athlete) notFound();
   const metrics = metricsRes.data ?? [];
+  const latestWeight = latestMetric(metrics, "weight_kg");
   const results = resultsRes.data ?? [];
   const prs = personalRecords(results);
   const target = targetRes.data;
@@ -121,7 +124,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
         </TabsList>
 
         <TabsContent value="overview" className="grid gap-4 md:grid-cols-3">
-          <Stat label="Current weight" value={formatWeight(metrics[0]?.weight_kg, units)} hint={metrics[0] && `as of ${formatDate(metrics[0].measured_on)}`} />
+          <Stat label="Current weight" value={formatWeight(latestWeight?.weight_kg, units)} hint={latestWeight ? `as of ${formatDate(latestWeight.measured_on)}` : undefined} />
           <Stat label="Daily calories target" value={target ? `${target.calories} kcal` : "—"} hint={target ? `P ${target.protein_g}g · C ${target.carbs_g}g · F ${target.fat_g}g` : "No target set"} />
           <Stat label="Active goals" value={String(goals.filter((g) => g.status === "active").length)} hint={`${results.length} logged results · ${prs.length} PRs`} />
           <Card className="md:col-span-3">
@@ -259,34 +262,42 @@ export default async function AthletePage({ params, searchParams }: Props) {
           </ListCard>
         </TabsContent>
 
-        <TabsContent value="goals">
+        <TabsContent value="goals" className="grid gap-4">
+          <Button variant="outline" className="justify-self-start" asChild>
+            <Link href={`/athletes/${athlete.id}/progress`}>Open progress, goals & charts</Link>
+          </Button>
           <ListCard empty="No goals yet." show={goals.length > 0}>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="pl-4">Goal</TableHead>
                   <TableHead>Type</TableHead>
-                  <TableHead>Start → target</TableHead>
+                  <TableHead>Start → now → target</TableHead>
+                  <TableHead className="w-48">Progress</TableHead>
                   <TableHead>Target date</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {goals.map((g) => (
-                  <TableRow key={g.id}>
-                    <TableCell className="pl-4 font-medium">{g.title}</TableCell>
-                    <TableCell className="capitalize">{g.goal_type.replace("_", " ")}</TableCell>
-                    <TableCell>
-                      {g.start_value ?? "—"} → {g.target_value ?? "—"} {g.unit}
-                    </TableCell>
-                    <TableCell>{g.target_date ? formatDate(g.target_date) : "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant={g.status === "achieved" ? "default" : "secondary"} className="capitalize">
-                        {g.status}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {goals.map((g) => {
+                  const p = goalProgress(g, { metrics, results });
+                  return (
+                    <TableRow key={g.id}>
+                      <TableCell className="pl-4 font-medium">{g.title}</TableCell>
+                      <TableCell className="capitalize">{g.goal_type.replace("_", " ")}</TableCell>
+                      <TableCell>
+                        {formatGoalValue(g.start_value, g.unit, units)} → <strong>{formatGoalValue(p.current, g.unit, units)}</strong> → {formatGoalValue(g.target_value, g.unit, units)}
+                      </TableCell>
+                      <TableCell>{p.pct == null ? <span className="text-muted-foreground">—</span> : <GoalBar pct={p.pct} label={g.title} />}</TableCell>
+                      <TableCell>{g.target_date ? formatDate(g.target_date) : "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant={g.status === "achieved" ? "default" : "secondary"} className="capitalize">
+                          {g.status === "abandoned" ? "Closed" : g.status}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </ListCard>

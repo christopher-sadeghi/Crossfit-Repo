@@ -36,3 +36,8 @@ export function formatDate(date: string) {
     year: "numeric",
   });
 }
+
+/** A stored kg value in the coach's units, rounded for form inputs. */
+export function fromKg(kg: number, units: Units) {
+  return Math.round((units === "lb" ? kg * LB_PER_KG : kg) * 10) / 10;
+}
