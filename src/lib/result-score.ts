@@ -44,15 +44,6 @@ export const feedbackFields = {
       .transform((v) => (v === "" ? null : Number(v)))
       .refine((v) => v == null || (Number.isInteger(v) && v >= 1 && v <= 5), "Energy must be between 1 and 5."),
   ),
-  sleep_hours: z.preprocess(
-    (v) => v ?? "",
-    z
-      .string()
-      .trim()
-      .transform((v) => (v === "" ? null : Number(v)))
-      .refine((v) => v == null || (Number.isFinite(v) && v >= 0 && v <= 24), "Sleep must be between 0 and 24 hours.")
-      .transform((v) => (v == null ? null : Math.round(v * 10) / 10)),
-  ),
   soreness: z.preprocess(
     (v) => v ?? "",
     z
@@ -60,10 +51,6 @@ export const feedbackFields = {
       .trim()
       .transform((v) => (v === "" ? null : Number(v)))
       .refine((v) => v == null || (Number.isInteger(v) && v >= 1 && v <= 5), "Soreness must be between 1 and 5."),
-  ),
-  pain_notes: z.preprocess(
-    (v) => v ?? "",
-    z.string().trim().max(500, "Pain notes must be 500 characters or fewer.").transform((v) => v || null),
   ),
 };
 

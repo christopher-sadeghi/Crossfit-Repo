@@ -27,9 +27,7 @@ type WorkoutResult = Pick<
   | "notes"
   | "rpe"
   | "energy"
-  | "sleep_hours"
   | "soreness"
-  | "pain_notes"
   | "logged_by"
 >;
 type Tracked = FormState & { successes?: number };
@@ -71,9 +69,7 @@ export function AthleteResultForm({
     notes: existingResult?.notes ?? "",
     rpe: existingResult?.rpe == null ? "" : String(existingResult.rpe),
     energy: existingResult?.energy == null ? "" : String(existingResult.energy),
-    sleep_hours: existingResult?.sleep_hours == null ? "" : String(existingResult.sleep_hours),
     soreness: existingResult?.soreness == null ? "" : String(existingResult.soreness),
-    pain_notes: existingResult?.pain_notes ?? "",
   };
   const values = state.error ? state.values ?? {} : initialValues;
 
@@ -175,22 +171,6 @@ export function AthleteResultForm({
           />
         </div>
       </fieldset>
-      <div className="grid gap-1.5">
-        <Label htmlFor={id("sleep_hours")}>Sleep hours</Label>
-        <Input
-          id={id("sleep_hours")}
-          name="sleep_hours"
-          type="number"
-          min="0"
-          max="24"
-          step="0.5"
-          defaultValue={values.sleep_hours}
-        />
-      </div>
-      <div className="grid gap-1.5">
-        <Label htmlFor={id("pain_notes")}>Pain or discomfort</Label>
-        <Textarea id={id("pain_notes")} name="pain_notes" rows={3} maxLength={500} defaultValue={values.pain_notes} />
-      </div>
       {state.error && (
         <p role="alert" className="text-sm text-destructive">
           {state.error}

@@ -30,9 +30,7 @@ type EditableResult = Pick<
   | "notes"
   | "rpe"
   | "energy"
-  | "sleep_hours"
   | "soreness"
-  | "pain_notes"
   | "logged_by"
 >;
 
@@ -63,7 +61,7 @@ export default async function AthleteLogResultPage({ params, searchParams }: Pro
     const { data } = await supabase
       .from("workout_results")
       .select(
-        "id, workout_id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, rpe, energy, sleep_hours, soreness, pain_notes, logged_by",
+        "id, workout_id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, rpe, energy, soreness, logged_by",
       )
       .eq("id", parsedId.data)
       .eq("workout_id", workout.id)

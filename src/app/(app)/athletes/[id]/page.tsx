@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCoach } from "@/lib/coach";
 import { getOrigin } from "@/lib/auth/redirect";
 import { feedbackSummary, needsAttention } from "@/lib/feedback";
+import { JOURNAL_COLUMNS, journalSleepSummary, journalYesAnswers } from "@/lib/journal";
 import { programDate, today } from "@/lib/program-dates";
 import { formatGoalValue, goalProgress, latestMetric } from "@/lib/progress";
 import { personalRecords } from "@/lib/results";
@@ -34,7 +35,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const units: Units = coach?.units ?? "lb";
 
   const since = new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
-  const [athleteRes, metricsRes, resultsRes, targetRes, foodRes, goalsRes, aiRes, assignmentsRes, inviteRes] = await Promise.all([
+  const [athleteRes, metricsRes, resultsRes, targetRes, foodRes, goalsRes, aiRes, assignmentsRes, inviteRes, journalRes] = await Promise.all([
     supabase.from("athletes").select("*").eq("id", id).maybeSingle(),
     supabase.from("body_metrics").select("measured_on, weight_kg, body_fat_pct").eq("athlete_id", id).order("measured_on", { ascending: false }),
     supabase
@@ -64,6 +65,12 @@ export default async function AthletePage({ params, searchParams }: Props) {
       .is("accepted_at", null)
       .is("revoked_at", null)
       .maybeSingle(),
+    supabase
+      .from("athlete_journal_entries")
+      .select(JOURNAL_COLUMNS)
+      .eq("athlete_id", id)
+      .order("entry_on", { ascending: false })
+      .limit(30),
   ]);
 
   const athlete = athleteRes.data;
@@ -78,6 +85,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const inviteUrl = invite ? `${await getOrigin()}/join/${invite.token}` : null;
   const goals = goalsRes.data ?? [];
   const suggestions = aiRes.data ?? [];
+  const journal = journalRes.data ?? [];
 
   const days = new Map<string, { calories: number; protein: number; carbs: number; fat: number }>();
   for (const f of foodRes.data ?? []) {
@@ -131,6 +139,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
         <TabsList className="mb-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="workouts">Workouts</TabsTrigger>
+          <TabsTrigger value="journal">Journal</TabsTrigger>
           <TabsTrigger value="nutrition">Nutrition</TabsTrigger>
           <TabsTrigger value="goals">Goals</TabsTrigger>
           <TabsTrigger value="ai">AI History</TabsTrigger>
@@ -279,6 +288,39 @@ export default async function AthletePage({ params, searchParams }: Props) {
                       )}
                     </TableCell>
                     <TableCell className="max-w-xs truncate text-muted-foreground">{r.notes ?? ""}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </ListCard>
+        </TabsContent>
+
+        <TabsContent value="journal" className="grid gap-4">
+          <ListCard title="Daily journal" empty="No journal entries yet. Athletes fill these in from their Journal tab." show={journal.length > 0}>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="pl-4">Date</TableHead>
+                  <TableHead>Sleep</TableHead>
+                  <TableHead>Habits</TableHead>
+                  <TableHead>Notes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {journal.map((e) => (
+                  <TableRow key={e.entry_on}>
+                    <TableCell className="pl-4">{formatDate(e.entry_on)}</TableCell>
+                    <TableCell>{journalSleepSummary(e) || "—"}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1.5">
+                        {journalYesAnswers(e).map((label) => (
+                          <Badge key={label} variant="secondary">
+                            {label}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-xs whitespace-normal text-muted-foreground">{e.notes ?? ""}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

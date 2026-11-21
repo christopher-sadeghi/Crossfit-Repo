@@ -32,7 +32,7 @@ export function needsAttention(results: AttentionResult[], todayIso: string) {
 export function feedbackSummary(result: {
   rpe: number | null;
   energy: number | null;
-  sleep_hours: number | null;
+  sleep_hours?: number | null;
   soreness: number | null;
 }) {
   return [

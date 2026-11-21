@@ -155,6 +155,56 @@ begin
   assert n = 1, 'athlete should be able to delete their own result';
 end $$;
 
+-- Daily journal: athletes manage only their own entries; only their coach can read them.
+do $$
+declare
+  n integer;
+begin
+  insert into public.athlete_journal_entries (athlete_id, coach_id, sleep_hours, sleep_quality, alcohol)
+  values ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-00000000000a', 7.5, 4, true);
+
+  update public.athlete_journal_entries set high_stress = true where athlete_id = '00000000-0000-0000-0000-0000000000a1';
+  get diagnostics n = row_count;
+  assert n = 1, 'athlete should be able to update their own journal';
+
+  begin
+    insert into public.athlete_journal_entries (athlete_id, coach_id, sleep_hours)
+    values ('00000000-0000-0000-0000-0000000000a6', '00000000-0000-0000-0000-00000000000a', 8);
+    raise exception 'athlete wrote a journal entry for another athlete';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+
+reset role;
+insert into public.athlete_journal_entries (athlete_id, coach_id, sleep_hours)
+values ('00000000-0000-0000-0000-0000000000a6', '00000000-0000-0000-0000-00000000000a', 6);
+set local role authenticated;
+
+do $$
+declare
+  n integer;
+begin
+  assert (select count(*) from public.athlete_journal_entries) = 1, 'athlete must see only their own journal';
+  update public.athlete_journal_entries set notes = 'hacked' where athlete_id = '00000000-0000-0000-0000-0000000000a6';
+  get diagnostics n = row_count;
+  assert n = 0, 'athlete must not update another athlete''s journal';
+  delete from public.athlete_journal_entries where athlete_id = '00000000-0000-0000-0000-0000000000a6';
+  get diagnostics n = row_count;
+  assert n = 0, 'athlete must not delete another athlete''s journal';
+end $$;
+
+select set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-00000000000a", "role": "authenticated"}', true);
+do $$
+begin
+  assert (select count(*) from public.athlete_journal_entries) = 2, 'coach A should see their athletes'' journals';
+end $$;
+
+select set_config('request.jwt.claims', '{"sub": "00000000-0000-0000-0000-00000000000b", "role": "authenticated"}', true);
+do $$
+begin
+  assert (select count(*) from public.athlete_journal_entries) = 0, 'coach B must not see coach A athletes'' journals';
+end $$;
+
 select 'rls_isolation: all checks passed' as result;
 
 rollback;

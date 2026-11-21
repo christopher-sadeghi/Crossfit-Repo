@@ -91,6 +91,12 @@ export default async function AthleteTodayPage() {
         .eq("athlete_id", viewer.athleteId)
         .in("workout_id", todayWorkoutIds)
     : { data: [] };
+  const { data: todayJournal } = await supabase
+    .from("athlete_journal_entries")
+    .select("entry_on")
+    .eq("athlete_id", viewer.athleteId)
+    .eq("entry_on", currentDate)
+    .maybeSingle();
   const scalingByWorkout = new Map(
     (scalings ?? []).map((scaling) => [scaling.workout_id, scaling.modifications]),
   );
@@ -123,7 +129,7 @@ export default async function AthleteTodayPage() {
                   </Card>
                 )}
                 {todayResult ? (
-                  <Card>
+                  <Card id={`result-${workout.id}`} className="scroll-mt-4">
                     <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
                       <CardTitle className="text-sm">Your result</CardTitle>
                       <Button asChild size="sm" variant="outline">
@@ -173,6 +179,20 @@ export default async function AthleteTodayPage() {
           </Card>
         )}
       </section>
+
+      <Card>
+        <CardContent className="flex items-center justify-between gap-3 py-4">
+          <div className="min-w-0">
+            <p className="font-medium">Daily journal</p>
+            <p className="text-xs text-muted-foreground">
+              {todayJournal ? "Logged for today." : "Sleep and habits, about 30 seconds. Optional."}
+            </p>
+          </div>
+          <Button asChild size="sm" variant={todayJournal ? "outline" : "default"}>
+            <Link href="/athlete/journal">{todayJournal ? "Edit" : "Fill in"}</Link>
+          </Button>
+        </CardContent>
+      </Card>
 
       {recentWithoutResults.length > 0 && (
         <section className="grid gap-3">
