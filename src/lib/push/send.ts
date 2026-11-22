@@ -1,7 +1,7 @@
 import "server-only";
 import { sendNotification } from "web-push";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildPushPayload, PUSH_CATEGORIES, pushCategory } from "./payload";
+import { buildPushPayload, isAllowedPushEndpoint, PUSH_CATEGORIES, pushCategory } from "./payload";
 
 export function pushConfig() {
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY;
@@ -30,6 +30,11 @@ export async function pushNewNotifications({ athleteId, kind }: { athleteId: str
         if (subscriptions.error) throw subscriptions.error;
         for (const sub of subscriptions.data ?? []) {
           try {
+            if (!isAllowedPushEndpoint(sub.endpoint)) {
+              const result = await admin.from("push_subscriptions").delete().eq("id", sub.id);
+              if (result.error) console.error("Push subscription cleanup failed");
+              continue;
+            }
             await sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, JSON.stringify(buildPushPayload(row)), { TTL: 86400, vapidDetails: config });
             const result = await admin.from("push_subscriptions").update({ last_used_at: new Date().toISOString() }).eq("id", sub.id);
             if (result.error) throw result.error;

@@ -7,13 +7,17 @@ import ts from "typescript";
 function load(file, imports = {}, env = {}) {
   const exports = {};
   const source = ts.transpileModule(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
-  vm.runInNewContext(source, { exports, process: { env }, console: { error() {} }, require: (id) => {
+  vm.runInNewContext(source, { exports, URL, process: { env }, console: { error() {} }, require: (id) => {
     if (id in imports) return imports[id];
     throw new Error(`Unexpected import ${id}`);
   } });
   return exports;
 }
 const payload = load("src/lib/push/payload.ts");
+test("endpoints allow only trusted HTTPS push hosts without ports or credentials", () => {
+  for (const endpoint of ["https://fcm.googleapis.com/send/x", "https://updates.push.services.mozilla.com/wpush/x", "https://a.push.services.mozilla.com/x", "https://a.notify.windows.com/x", "https://web.push.apple.com/x", "https://a.push.apple.com/x"]) assert.equal(payload.isAllowedPushEndpoint(endpoint), true, endpoint);
+  for (const endpoint of ["", "not a URL", "http://fcm.googleapis.com/x", "https://127.0.0.1/x", "https://evil-fcm.googleapis.com.attacker.com/x", "https://fcm.googleapis.com.attacker.com/x", "https://evilpush.apple.com/x", "https://user@fcm.googleapis.com/x", "https://fcm.googleapis.com:443/x", "https://fcm.googleapis.com:8443/x", "https://notify.windows.com/x"]) assert.equal(payload.isAllowedPushEndpoint(endpoint), false, endpoint);
+});
 test("categories cover notification kinds and future alerts", () => {
   for (const [category, kinds] of Object.entries({ messages: ["message", "coach_message"], schedule: ["schedule_changed"], updates: ["suggestion_approved", "progress_report"], reminders: ["progress_check_in", "check_in_reminder"], alerts: ["result_logged", "workout_adjusted", "low_readiness", "missed_workouts", "future", ""] })) {
     for (const kind of kinds) assert.equal(payload.pushCategory(kind), category);
@@ -37,7 +41,13 @@ function sender({ rows = [], categories, subscriptions = [], status, claimError,
   return { ...helpers, calls, sends };
 }
 const row = { id: "notification", recipient_id: "user", kind: "message", title: "Hi", body: null, link: "/athlete" };
-const subscription = { id: "device", endpoint: "https://push.test/device", p256dh: "key", auth: "auth" };
+const subscription = { id: "device", endpoint: "https://fcm.googleapis.com/device", p256dh: "key", auth: "auth" };
+test("unsafe persisted endpoints are deleted without sending", async () => {
+  const f = sender({ rows: [row], subscriptions: [{ ...subscription, endpoint: "https://127.0.0.1/private" }] });
+  await f.pushNewNotifications({ athleteId: "a", kind: "message" });
+  assert.equal(f.sends.length, 0);
+  assert.ok(f.calls.some((c) => c[0] === "push_subscriptions" && c[1] === "delete"));
+});
 test("unconfigured push is a silent no-op and fallback key works", async () => {
   const f = sender({ env: {} }); await f.pushNewNotifications({ athleteId: "a", kind: "message" }); assert.equal(f.calls.length, 0);
   const fallback = sender({ env: { ...configured, NEXT_PUBLIC_VAPID_PUBLIC_KEY: "", VAPID_PUBLIC_KEY: "fallback" } }); assert.equal(fallback.pushConfig().publicKey, "fallback");

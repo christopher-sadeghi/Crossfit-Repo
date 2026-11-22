@@ -10,12 +10,14 @@ function fixture({ anonymous = false, error = null, found = true } = {}) {
   const calls = [];
   const query = { eq: (...args) => { calls.push(["eq", ...args]); return query; }, select: () => query, delete: () => query, upsert: (value) => { calls.push(["upsert", value]); return query; }, maybeSingle: async () => ({ data: found ? { id: "device" } : null, error }), then: (resolve) => resolve({ error }) };
   const client = { auth: { getClaims: async () => ({ data: { claims: { sub: anonymous ? null : "user" } } }) }, rpc: async (...args) => { calls.push(["rpc", ...args]); return { error }; }, from: (table) => { calls.push(["from", table]); return query; } };
+  const payloadExports = {};
+  vm.runInNewContext(ts.transpileModule(readFileSync(new URL("../src/lib/push/payload.ts", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports: payloadExports, URL });
   const exports = {};
   const source = ts.transpileModule(readFileSync(new URL("../src/app/push-actions.ts", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  vm.runInNewContext(source, { exports, require: (id) => id === "@/lib/supabase/server" ? { createClient: async () => client } : id === "@/lib/push/payload" ? { PUSH_CATEGORIES: ["messages", "schedule", "updates", "reminders", "alerts"] } : require(id) });
+  vm.runInNewContext(source, { exports, require: (id) => id === "@/lib/supabase/server" ? { createClient: async () => client } : id === "@/lib/push/payload" ? payloadExports : require(id) });
   return { ...exports, calls };
 }
-const sub = { endpoint: "https://push.test/device", keys: { p256dh: "key", auth: "auth" }, userAgent: "test" };
+const sub = { endpoint: "https://fcm.googleapis.com/device", keys: { p256dh: "key", auth: "auth" }, userAgent: "test" };
 test("subscription actions register with the RPC and restrict reads/deletes to current user", async () => {
   const f = fixture();
   assert.equal((await f.savePushSubscription(sub)).error, undefined);
@@ -38,6 +40,7 @@ test("malformed, unauthenticated and failed actions return errors", async () => 
   const f = fixture();
   for (const input of [null, {}, { ...sub, endpoint: "http://insecure.test" }, { ...sub, keys: {} }]) assert.ok((await f.savePushSubscription(input)).error);
   assert.ok((await f.deletePushSubscription("")).error);
+  assert.ok((await f.savePushSubscription({ ...sub, endpoint: "https://127.0.0.1/private" })).error);
   assert.ok((await f.hasPushSubscription("//evil.test")).error);
   assert.ok((await f.savePushCategories(["unknown"])).error);
   assert.equal(f.calls.length, 0);

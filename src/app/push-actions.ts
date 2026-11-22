@@ -2,11 +2,11 @@
 
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { PUSH_CATEGORIES } from "@/lib/push/payload";
+import { isAllowedPushEndpoint, PUSH_CATEGORIES } from "@/lib/push/payload";
 
 const endpointSchema = z.string().url().max(2000).startsWith("https://");
 const subscriptionSchema = z.object({
-  endpoint: endpointSchema,
+  endpoint: endpointSchema.refine(isAllowedPushEndpoint),
   keys: z.object({ p256dh: z.string().min(1).max(500), auth: z.string().min(1).max(500) }),
   userAgent: z.string().max(500),
 });
