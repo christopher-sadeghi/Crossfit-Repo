@@ -133,7 +133,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
     flagged: workoutAttention.flagged || checkAttention.flagged,
     reasons: [
       ...workoutAttention.reasons,
-      ...checkAttention.reasons.map((text) => ({ date: today, kind: "check-in" as const, text })),
+      ...checkAttention.reasons.map((reason) => ({ ...reason, kind: "check-in" as const })),
     ],
   };
   const target = targetRes.data;

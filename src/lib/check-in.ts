@@ -78,12 +78,12 @@ export function checkInAttention(checkIns: AttentionEntry[], todayIso: string) {
     .sort((a, b) => b.entry_on.localeCompare(a.entry_on));
   const latest = recent[0];
   const yesterday = addDays(todayIso, -1);
-  const reasons: string[] = [];
+  const reasons: { date: string; text: string }[] = [];
 
   if (latest && latest.entry_on >= yesterday && latest.readiness != null && latest.readiness < LOW_READINESS) {
-    reasons.push("Low readiness on the latest check-in");
+    reasons.push({ date: latest.entry_on, text: "Low readiness on the latest check-in" });
   }
-  const consecutiveSoreness = recent.some((later) =>
+  const consecutiveSoreness = recent.find((later) =>
     later.entry_on >= yesterday &&
     later.soreness != null &&
     later.soreness >= HIGH_SORENESS &&
@@ -93,7 +93,12 @@ export function checkInAttention(checkIns: AttentionEntry[], todayIso: string) {
       earlier.soreness >= HIGH_SORENESS,
     ),
   );
-  if (consecutiveSoreness) reasons.push("High soreness on two consecutive days");
+  if (consecutiveSoreness) {
+    reasons.push({
+      date: consecutiveSoreness.entry_on,
+      text: `High soreness (${consecutiveSoreness.soreness}/5) two days in a row`,
+    });
+  }
 
   return { flagged: reasons.length > 0, reasons };
 }

@@ -11,6 +11,7 @@ import { loadCheckInAttention } from "@/lib/check-in";
 import { needsAttention } from "@/lib/feedback";
 import { getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
+import { formatDate } from "@/lib/units";
 import { cn } from "@/lib/utils";
 
 import { LEVEL_LABELS } from "./options";
@@ -123,7 +124,16 @@ export default async function AthletesPage({ searchParams }: Props) {
                         <Link href={`/athletes/${a.id}`} className="hover:underline">
                           {a.first_name} {a.last_name}
                         </Link>
-                        {attentionAthletes.has(a.id) && <Badge variant="destructive">Needs attention</Badge>}
+                        {attentionAthletes.has(a.id) && (
+                          <Badge
+                            variant="destructive"
+                            title={checkInAttention.get(a.id)?.reasons
+                              .map((reason) => `${formatDate(reason.date)}: ${reason.text}`)
+                              .join("; ")}
+                          >
+                            Needs attention
+                          </Badge>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>

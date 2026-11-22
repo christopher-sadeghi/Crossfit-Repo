@@ -48,7 +48,9 @@ export function CheckInsTab({ entries, today }: { entries: CheckIn[]; today: str
           <CardContent>
             <ul className="grid gap-1 text-sm">
               {attention.reasons.map((reason) => (
-                <li key={reason}>{reason}</li>
+                <li key={`${reason.date}-${reason.text}`}>
+                  <span className="font-medium">{formatDate(reason.date)}</span>: {reason.text}
+                </li>
               ))}
             </ul>
           </CardContent>

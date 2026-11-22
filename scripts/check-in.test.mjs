@@ -54,6 +54,11 @@ test("coach check-in sections render empty states, readable dates and directiona
   assert.match(html, /Sleep quality/);
   const { formatDate } = load("src/lib/units.ts");
   assert.ok(html.includes(formatDate("2026-03-01")));
+  const yesterday = renderToStaticMarkup(createElement(CheckInsTab, {
+    today: "2026-03-01",
+    entries: [entry("2026-02-28", { readiness: 30 })],
+  }));
+  assert.ok(yesterday.includes(`${formatDate("2026-02-28")}</span>: Low readiness`));
 });
 test("readiness matches SQL sample, bounds, labels and incomplete cases", () => {
   assert.equal(readinessScore(sample), 78);
@@ -66,7 +71,7 @@ test("readiness matches SQL sample, bounds, labels and incomplete cases", () => 
 const row = (entry_on, readiness = 70, soreness = 1) => ({ entry_on, readiness, soreness });
 test("attention handles empty, stale, future, thresholds and consecutive local calendar dates", () => {
   const attention = (rows) => checkInAttention(rows, "2026-03-01");
-  assert.equal(attention([]).flagged, false);
+  assert.deepEqual(attention([]), { flagged: false, reasons: [] });
   assert.equal(attention([row("2026-02-27", 1)]).flagged, false);
   assert.equal(attention([row("2026-03-02", 1)]).flagged, false);
   assert.equal(attention([row("2026-02-28", 39)]).flagged, true);
@@ -77,6 +82,19 @@ test("attention handles empty, stale, future, thresholds and consecutive local c
   assert.equal(attention([row("2026-03-01"), row("2026-02-28", 70, 4), row("2026-02-27", 70, 5)]).flagged, true);
   assert.equal(attention([row("2026-03-01", 70, 4), row("2026-02-27", 70, 4)]).flagged, false);
   assert.equal(attention([row("2026-03-01", 39, 5), row("2026-02-28", 70, 4)]).reasons.length, 2);
+  assert.deepEqual(attention([row("2026-02-28", 39, 5), row("2026-02-27", 70, 4)]), {
+    flagged: true,
+    reasons: [
+      { date: "2026-02-28", text: "Low readiness on the latest check-in" },
+      { date: "2026-02-28", text: "High soreness (5/5) two days in a row" },
+    ],
+  });
+  assert.deepEqual(attention([
+    row("2026-02-27", 70, 4), row("2026-03-01", 70, 4), row("2026-02-28", 70, 5),
+  ]).reasons, [{ date: "2026-03-01", text: "High soreness (4/5) two days in a row" }]);
+  assert.deepEqual(attention([
+    row("2026-03-01"), row("2026-02-28", 70, 4), row("2026-02-27", 70, 5),
+  ]).reasons, [{ date: "2026-02-28", text: "High soreness (4/5) two days in a row" }]);
 });
 function client(data, error = null) {
   const calls = [];
@@ -99,6 +117,7 @@ test("attention loader uses one query, supports requested empty athletes and err
   const db = client([{ athlete_id: "a", ...row("2026-03-01", 30) }]);
   const map = await loadCheckInAttention(db, "2026-03-01", ["a", "b"]);
   assert.equal(map.get("a").flagged, true);
+  assert.deepEqual(map.get("a").reasons, [{ date: "2026-03-01", text: "Low readiness on the latest check-in" }]);
   assert.equal(map.get("b").flagged, false);
   assert.equal(db.calls.filter((c) => c[0] === "from").length, 1);
   const empty = client([]);

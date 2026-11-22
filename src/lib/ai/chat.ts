@@ -96,6 +96,7 @@ async function listAthletes(supabase: Supabase, today: string) {
       }
     }
     const soreness = [...week, ...days].flatMap((entry) => entry.soreness == null ? [] : [entry.soreness]);
+    const attention = checkInAttention(days, today);
     return {
       athlete_id: athlete.id,
       name: `${athlete.first_name} ${athlete.last_name}`,
@@ -112,7 +113,8 @@ async function listAthletes(supabase: Supabase, today: string) {
         max_soreness: soreness.length ? Math.max(...soreness) : null,
         average_readiness: average(days.map((j) => j.readiness)),
         latest_readiness: days[0]?.readiness ?? null,
-        needs_attention: checkInAttention(days, today).flagged,
+        needs_attention: attention.flagged,
+        attention_reasons: attention.reasons,
         pain_notes: week.filter((r) => r.pain_notes).map((r) => `${r.performed_on}: ${r.pain_notes}`),
         high_stress_days: days.filter((j) => (j.stress ?? 0) >= 4).length,
       },
