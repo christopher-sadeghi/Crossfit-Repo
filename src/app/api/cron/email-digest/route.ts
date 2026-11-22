@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
 import { emailDailyDigests } from "@/lib/email/notifications";
+import { siteOrigin } from "@/lib/email/origin";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const counts = await emailDailyDigests({ origin: new URL(request.url).origin });
+    const counts = await emailDailyDigests({ origin: siteOrigin() });
     return Response.json(counts);
   } catch {
     console.error("Email digest dispatch failed");

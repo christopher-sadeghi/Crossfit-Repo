@@ -35,7 +35,7 @@ export function buildNotificationEmail(notification: NotificationEmailInput, ori
   const body = notification.body ?? "";
   const url = absoluteLink(notification.link, origin);
   return {
-    subject: "A new FitCoach notification",
+    subject: `FitCoach: ${title}`.replace(/\s+/g, " ").trim().slice(0, 120).trimEnd(),
     text: `${title}${body ? `\n\n${body}` : ""}\n\n${url}\n\n${footer}`,
     html: `<h1>${escapeHtml(title)}</h1>${body ? `<p>${escapeHtml(body)}</p>` : ""}<p><a href="${escapeHtml(url)}">View notification</a></p><p>${footer}</p>`,
   };

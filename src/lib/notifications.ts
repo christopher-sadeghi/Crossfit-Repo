@@ -47,15 +47,8 @@ export async function notify(supabase: Client, input: NotificationInput): Promis
             })(),
             (async () => {
               try {
-                const [{ emailNewNotifications }, { getOrigin }] = await Promise.all([
-                  import("@/lib/email/notifications"),
-                  import("@/lib/auth/redirect"),
-                ]);
-                await emailNewNotifications({
-                  athleteId: input.athleteId,
-                  kind: input.kind,
-                  origin: await getOrigin(),
-                });
+                const { emailNewNotifications } = await import("@/lib/email/notifications");
+                await emailNewNotifications({ athleteId: input.athleteId, kind: input.kind });
               } catch { console.error("Email scheduling failed"); }
             })(),
           ]);

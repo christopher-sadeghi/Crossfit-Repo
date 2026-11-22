@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 
 import { buildDailyDigestEmail, buildNotificationEmail } from "./builders";
+import { siteOrigin } from "./origin";
 
 type AdminClient = SupabaseClient<Database>;
 type EmailMessage = { to: string; subject: string; text: string; html: string };
@@ -42,7 +43,7 @@ async function releaseClaim(admin: AdminClient, id: string, claimedAt: string) {
 }
 
 export async function emailNewNotifications(
-  { athleteId, kind, origin }: { athleteId: string; kind: string; origin: string },
+  { athleteId, kind }: { athleteId: string; kind: string },
   dependencies: Dependencies = {},
 ) {
   const counts = { emailed: 0, skipped: 0, failed: 0 };
@@ -106,7 +107,7 @@ export async function emailNewNotifications(
           continue;
         }
 
-        const result = await services.sendEmail({ to: email, ...buildNotificationEmail(claimed, origin) });
+        const result = await services.sendEmail({ to: email, ...buildNotificationEmail(claimed, siteOrigin()) });
         if (!result.sent) {
           await releaseClaim(services.admin, row.id, claimedAt);
           claimedAt = null;

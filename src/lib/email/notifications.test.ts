@@ -5,6 +5,7 @@ import { GET } from "@/app/api/cron/email-digest/route";
 
 import { buildDailyDigestEmail, buildInviteEmail, buildNotificationEmail } from "./builders";
 import { emailDailyDigests, emailNewNotifications } from "./notifications";
+import { siteOrigin } from "./origin";
 
 test("email builders escape user text and make relative links absolute", () => {
   const invite = buildInviteEmail({
@@ -24,6 +25,14 @@ test("email builders escape user text and make relative links absolute", () => {
   assert.match(notification.html, /href="https:\/\/fitcoach\.example\/athlete"/);
   assert.match(notification.text, /https:\/\/fitcoach\.example\/athlete/);
   assert.match(notification.text, /You can turn these emails off in FitCoach settings\./);
+  assert.equal(
+    buildNotificationEmail({ title: "  New\n\n  training\tupdate  " }, "https://fitcoach.example").subject,
+    "FitCoach: New training update",
+  );
+  assert.equal(
+    buildNotificationEmail({ title: "a".repeat(200) }, "https://fitcoach.example").subject.length,
+    120,
+  );
 });
 
 test("daily digest shows at most 20 notifications and reports the remainder", () => {
@@ -95,7 +104,7 @@ test("instant emails never claim daily or disabled users' notifications", async 
   });
 
   const result = await emailNewNotifications(
-    { athleteId: "athlete", kind: "message", origin: "https://fitcoach.example" },
+    { athleteId: "athlete", kind: "message" },
     {
       admin: admin as never,
       configured: () => true,
@@ -132,6 +141,27 @@ test("daily digest send failure leaves notifications unmarked", async () => {
 
   assert.deepEqual(result, { users: 1, emailed: 0, skipped: 0, failed: 1 });
   assert.equal(updates.count, 0);
+});
+
+test("site origin uses APP_ORIGIN, then the Vercel production URL, then localhost", () => {
+  const previousAppOrigin = process.env.APP_ORIGIN;
+  const previousVercelOrigin = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  try {
+    delete process.env.APP_ORIGIN;
+    delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
+    assert.equal(siteOrigin(), "http://localhost:3000");
+
+    process.env.VERCEL_PROJECT_PRODUCTION_URL = "fitcoach.example/";
+    assert.equal(siteOrigin(), "https://fitcoach.example");
+
+    process.env.APP_ORIGIN = "https://custom.fitcoach.example/";
+    assert.equal(siteOrigin(), "https://custom.fitcoach.example");
+  } finally {
+    if (previousAppOrigin === undefined) delete process.env.APP_ORIGIN;
+    else process.env.APP_ORIGIN = previousAppOrigin;
+    if (previousVercelOrigin === undefined) delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
+    else process.env.VERCEL_PROJECT_PRODUCTION_URL = previousVercelOrigin;
+  }
 });
 
 test("email digest cron rejects an invalid bearer token", async () => {

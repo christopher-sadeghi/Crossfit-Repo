@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { getOrigin } from "@/lib/auth/redirect";
 import { failure, type FormState } from "@/lib/auth/form-state";
+import { siteOrigin } from "@/lib/email/origin";
 import { ftInToCm } from "@/lib/height";
 import { createClient } from "@/lib/supabase/server";
 
@@ -191,7 +191,7 @@ export async function createAthleteInvite(
       const content = buildInviteEmail({
         coachName: coach?.full_name,
         link: `/join/${invite.token}`,
-        origin: await getOrigin(),
+        origin: siteOrigin(),
       });
       emailed = (await sendEmail({ to: email, ...content })).sent;
     }
