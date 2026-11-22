@@ -127,9 +127,9 @@ create trigger lock_athlete_assistant_suggestion before update on public.ai_sugg
   for each row execute function public.lock_athlete_assistant_suggestion();
 
 alter table public.notifications drop constraint notifications_kind_check;
+
 alter table public.notifications add constraint notifications_kind_check check (
-  kind in ('result_logged', 'workout_adjusted', 'low_readiness', 'message', 'missed_workouts',
-    'coach_message', 'schedule_changed', 'suggestion_approved', 'progress_report', 'progress_check_in', 'high_training_load', 'assistant_red_flag')
+  kind in ('result_logged', 'workout_adjusted', 'low_readiness', 'message', 'missed_workouts', 'coach_message', 'schedule_changed', 'suggestion_approved', 'progress_report', 'progress_check_in', 'high_training_load', 'form_check', 'assistant_red_flag', 'form_reviewed')
 );
 
 create or replace function public.create_notification(
@@ -149,14 +149,14 @@ begin
   select * into v_athlete from public.athletes where id = p_athlete_id;
   if not found then raise exception 'athlete_not_found'; end if;
   if v_athlete.user_id = auth.uid() and v_athlete.status = 'active' then
-    if p_kind not in ('result_logged', 'workout_adjusted', 'low_readiness', 'message', 'progress_check_in', 'high_training_load', 'assistant_red_flag') or p_kind is null then
+    if p_kind not in ('result_logged', 'workout_adjusted', 'low_readiness', 'message', 'progress_check_in', 'high_training_load', 'form_check', 'assistant_red_flag') or p_kind is null then
       raise exception 'invalid_notification_kind';
     end if;
     v_recipient := case when p_kind = 'progress_check_in' then v_athlete.user_id else v_athlete.coach_id end;
   elsif v_athlete.coach_id = auth.uid() then
     if p_kind in ('missed_workouts', 'high_training_load') then
       v_recipient := v_athlete.coach_id;
-    elsif p_kind in ('coach_message', 'schedule_changed', 'suggestion_approved', 'progress_report', 'progress_check_in') then
+    elsif p_kind in ('coach_message', 'schedule_changed', 'suggestion_approved', 'progress_report', 'progress_check_in', 'form_reviewed') then
       v_recipient := v_athlete.user_id;
     else
       raise exception 'invalid_notification_kind';
@@ -170,3 +170,7 @@ begin
   on conflict (recipient_id, dedupe_key) do nothing;
 end;
 $$;
+
+revoke all on function public.create_notification(uuid, text, text, text, text, text) from public, anon;
+
+grant execute on function public.create_notification(uuid, text, text, text, text, text) to authenticated, service_role;

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { after } from "next/server";
 
 import { loadAthleteSchedule } from "@/lib/athlete-schedule";
 import { loadDriftingAthletes } from "@/lib/consistency-data";
@@ -7,7 +8,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { getToday } from "@/lib/time-zone";
 
 type Client = SupabaseClient<Database>;
-export type NotificationKind = "result_logged" | "workout_adjusted" | "low_readiness" | "message" | "missed_workouts" | "coach_message" | "schedule_changed" | "suggestion_approved" | "progress_report" | "progress_check_in" | "high_training_load" | "assistant_red_flag";
+export type NotificationKind = "result_logged" | "workout_adjusted" | "low_readiness" | "message" | "missed_workouts" | "coach_message" | "schedule_changed" | "suggestion_approved" | "progress_report" | "progress_check_in" | "high_training_load" | "form_check" | "form_reviewed" | "assistant_red_flag";
 export type NotificationInput = {
   athleteId: string;
   kind: NotificationKind;
@@ -19,7 +20,7 @@ export type NotificationInput = {
 
 export async function notify(supabase: Client, input: NotificationInput): Promise<void> {
   try {
-    if (["result_logged", "workout_adjusted", "low_readiness", "message"].includes(input.kind)) {
+    if (["result_logged", "workout_adjusted", "low_readiness", "message", "form_check"].includes(input.kind)) {
       const { data: athlete } = await supabase.from("athletes").select("first_name, last_name").eq("id", input.athleteId).maybeSingle();
       const name = athlete ? `${athlete.first_name} ${athlete.last_name}` : "An athlete";
       const body = input.body?.replace(/Your athlete|your athlete/g, name);
@@ -34,6 +35,16 @@ export async function notify(supabase: Client, input: NotificationInput): Promis
       p_dedupe_key: input.dedupeKey ?? null,
     });
     if (error) console.error("Notification failed:", error);
+    else {
+      try {
+        after(async () => {
+          try {
+            const { pushNewNotifications } = await import("@/lib/push/send");
+            await pushNewNotifications({ athleteId: input.athleteId, kind: input.kind });
+          } catch { console.error("Push scheduling failed"); }
+        });
+      } catch { /* Outside a request, notification creation still succeeds. */ }
+    }
   } catch (error) {
     console.error("Notification failed:", error);
   }

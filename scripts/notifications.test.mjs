@@ -36,6 +36,7 @@ function fixture({ athletes = [], schedules = {}, results = [], drifting = [], d
     exports,
     console: { error: (...args) => errors.push(args) },
     require: (name) => {
+      if (name === "next/server") return { after: () => {} };
       if (name.endsWith("consistency-data")) return { loadDriftingAthletes: async (...args) => {
         driftCalls.push(args);
         if (driftError) throw driftError;
