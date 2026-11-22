@@ -10,40 +10,41 @@ import {
   YAxis,
 } from "recharts";
 import { fromKg, type Units } from "@/lib/units";
+import type { Enums } from "@/lib/supabase/database.types";
 
 type Point = {
   date: string;
   time_seconds: number | null;
   rounds: number | null;
   reps: number | null;
+  load_kg: number | null;
   estimatedOneRmKg: number | null;
   is_rx: boolean;
 };
 export function BenchmarkTrend({
   points,
   lift,
-  forTime,
+  workoutType,
   units,
 }: {
   points: Point[];
   lift: boolean;
-  forTime: boolean;
+  workoutType: Enums<"workout_type">;
   units: Units;
 }) {
-  const label = lift
-    ? `Estimated 1RM (${units}); higher is better`
-    : forTime
-      ? "Time (seconds); lower is better"
-      : "Rounds + reps (shown separately); higher is better";
+  const metrics = workoutType === "strength"
+    ? ["load_kg", "rounds", "reps", "time_seconds"] as const
+    : workoutType === "for_time"
+      ? ["time_seconds", "rounds", "reps", "load_kg"] as const
+      : ["rounds", "reps", "load_kg", "time_seconds"] as const;
+  const metric = lift ? "estimatedOneRmKg" : metrics.find((key) => points.some((p) => p[key] != null));
+  const names = { estimatedOneRmKg: `Est. 1RM (${units})`, load_kg: `Load (${units})`, time_seconds: "Time (seconds)", rounds: "Rounds + reps (shown separately)", reps: "Reps" };
+  const lowerIsBetter = metric === "time_seconds";
+  const label = metric ? `${names[metric]}; ${lowerIsBetter ? "lower" : "higher"} is better` : "No plottable scores yet";
   const rows = points.map((p) => ({
     ...p,
-    value: lift
-      ? p.estimatedOneRmKg == null
-        ? null
-        : fromKg(p.estimatedOneRmKg, units)
-      : forTime
-        ? p.time_seconds
-        : (p.rounds ?? 0),
+    value: metric == null || p[metric] == null ? null
+      : metric === "estimatedOneRmKg" || metric === "load_kg" ? fromKg(p[metric], units) : p[metric],
     classification: p.is_rx ? "Rx" : "Scaled",
   }));
   return (
@@ -63,20 +64,18 @@ export function BenchmarkTrend({
           >
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={30} />
-            <YAxis reversed={forTime} tick={{ fontSize: 10 }} width={45} />
+            <YAxis reversed={lowerIsBetter} tick={{ fontSize: 10 }} width={45} />
             <Tooltip />
             <Line
               dataKey="value"
-              name={
-                lift ? `Est. 1RM (${units})` : forTime ? "Seconds" : "Rounds"
-              }
+              name={metric === "rounds" ? "Rounds" : metric ? names[metric] : "Score"}
               stroke="var(--color-primary, #2563eb)"
               strokeWidth={2}
               connectNulls={false}
               dot={{ r: 3 }}
               isAnimationActive={false}
             />
-            {!lift && !forTime && (
+            {metric === "rounds" && points.some((p) => p.reps != null) && (
               <Line
                 dataKey="reps"
                 name="Additional reps"

@@ -125,7 +125,7 @@ export default async function BenchmarksTab({
             <BenchmarkTrend
               points={b.trendPoints}
               lift={b.kind === "lift"}
-              forTime={b.workout_type === "for_time"}
+              workoutType={b.workout_type}
               units={units}
             />
             <details>
