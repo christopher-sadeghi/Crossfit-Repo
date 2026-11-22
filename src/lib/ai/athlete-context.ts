@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { drifting } from "@/lib/consistency";
+import { drifting, type ConsistencyWindow } from "@/lib/consistency";
 import { loadConsistency } from "@/lib/consistency-data";
 import { addDays, totals } from "@/lib/nutrition";
 import type { Database } from "@/lib/supabase/database.types";
@@ -19,9 +19,19 @@ export async function consistencyContext(supabase: SupabaseClient<Database>, ath
   ]);
   if (coachError || !coach) throw coachError ?? new Error("Coach not found.");
   const drift = drifting(stats, { driftDays: coach.drift_days });
+  const labeledWindow = (window: ConsistencyWindow) => ({
+    scheduled_days: window.scheduled,
+    completed: window.completed,
+    partial: window.partial,
+    missed: window.missed,
+    completion_rate_percent: window.rate,
+  });
   return {
     as_of: asOf,
-    windows: stats.windows,
+    last_7_days: labeledWindow(stats.windows[7]),
+    last_30_days: labeledWindow(stats.windows[30]),
+    last_90_days: labeledWindow(stats.windows[90]),
+    previous_30_days: labeledWindow(stats.prev30),
     current_streak: stats.currentStreak,
     best_streak: stats.bestStreak,
     days_since_activity: stats.daysSinceActivity,

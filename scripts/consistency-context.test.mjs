@@ -40,8 +40,11 @@ test("compact context includes rates, counts, streaks and inclusive attendance b
   const f = fixture({ attendance: ["2026-10-23", "2026-10-24", asOf, asOf, "2026-11-23"].map((attended_on) => ({ attended_on, kind: "class" })),
     input: { scheduled: [{ date: "2026-11-21", workoutId: "a" }], results: [{ performed_on: "2026-11-21", workout_id: "a" }] } });
   const context = await f.run();
-  assert.deepEqual(context.windows, f.stats.windows);
-  assert.equal(context.windows[7].rate, 100);
+  assert.deepEqual(context.last_7_days, { scheduled_days: 1, completed: 1, partial: 0, missed: 0, completion_rate_percent: 100 });
+  assert.equal(context.last_30_days.completion_rate_percent, 100);
+  assert.equal(context.last_90_days.completion_rate_percent, 100);
+  assert.equal(context.previous_30_days.completion_rate_percent, null);
+  assert.ok(!("windows" in context));
   assert.equal(context.current_streak, 1);
   assert.equal(context.best_streak, 1);
   assert.equal(context.last_activity_date, asOf);
@@ -57,12 +60,24 @@ test("compact context includes rates, counts, streaks and inclusive attendance b
 });
 test("empty history keeps missing rates and activity null without flagging drift", async () => {
   const context = await fixture().run();
-  for (const window of Object.values(context.windows)) assert.deepEqual(window, { scheduled: 0, completed: 0, partial: 0, missed: 0, rate: null });
+  for (const key of ["last_7_days", "last_30_days", "last_90_days", "previous_30_days"]) {
+    assert.deepEqual(context[key], { scheduled_days: 0, completed: 0, partial: 0, missed: 0, completion_rate_percent: null });
+  }
   assert.equal(context.days_since_activity, null);
   assert.equal(context.last_activity_date, null);
   assert.equal(context.attendance_count_last_30_days, 0);
   assert.equal(context.current_streak, 0);
   assert.equal(context.drifting, false);
+});
+test("named windows preserve distinct counts and separate the previous month", async () => {
+  const f = fixture({ input: {
+    scheduled: ["2026-11-21", "2026-11-10", "2026-11-09", "2026-10-10", "2026-09-10"].map((date) => ({ date, workoutId: date })),
+  } });
+  const context = await f.run();
+  assert.deepEqual(context.last_7_days, { scheduled_days: 1, completed: 0, partial: 0, missed: 1, completion_rate_percent: 0 });
+  assert.deepEqual(context.last_30_days, { scheduled_days: 3, completed: 0, partial: 0, missed: 3, completion_rate_percent: 0 });
+  assert.deepEqual(context.last_90_days, { scheduled_days: 5, completed: 0, partial: 0, missed: 5, completion_rate_percent: 0 });
+  assert.deepEqual(context.previous_30_days, { scheduled_days: 1, completed: 0, partial: 0, missed: 1, completion_rate_percent: 0 });
 });
 test("coach drift threshold is respected rather than the default", async () => {
   const input = { results: [{ performed_on: "2026-11-16", workout_id: "a" }] };
