@@ -98,6 +98,16 @@ do $$ declare g uuid; before_goal jsonb; begin
  assert (select title = 'Coach approved squat 205 lb' and target_value = 210 and target_date = '2027-01-01' from public.goals where id = g);
  raise notice 'PASS: coach-edited title/target survive resend and unchanged save; athlete edits patch only changed fields';
 end $$;
+do $$ declare g uuid; category text; begin
+ select (answers->'goal_ids'->>0)::uuid into g from public.athlete_intakes;
+ foreach category in array array['Strength','Conditioning','Competition'] loop
+   perform public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',3,
+     jsonb_build_object('goals',jsonb_build_array(jsonb_build_object('id',g,'category',category))),'2026-11-21');
+   assert (select answers->'goal_categories'->>g::text from public.athlete_intakes) = category;
+   assert (select title = 'Coach approved squat 205 lb' and target_value = 210 from public.goals where id = g);
+ end loop;
+ raise notice 'PASS: performance priorities persist per goal without changing canonical coach fields';
+end $$;
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',4,'{"injury_list":[{"area":"Knee","severity":"mild","notes":"Avoid jumping"}]}','2026-11-21');
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',4,'{"injury_list":[]}','2026-11-21');
 do $$ begin

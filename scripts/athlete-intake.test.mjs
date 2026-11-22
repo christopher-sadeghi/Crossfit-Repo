@@ -153,6 +153,19 @@ test("canonical coach goal edits survive resend and unchanged saves submit no fi
   await assert.rejects(saveIntakeStep(3, { goals: [retyped] }), /REDIRECT/);
   assert.deepEqual(writes[3].p_data.goals, [{ id: goal.id }]);
 });
+test("performance priorities round-trip independently of coach-edited titles", () => {
+  const { goalPrefill, goalPayload, goalInputSchema } = load("src/lib/athlete-intake.ts");
+  const goal = { id: "35000000-0000-4000-8000-000000000001", status: "active", title: "Coach approved squat 205 lb", goal_type: "performance", target_value: 205, target_date: null };
+  let previous = "Strength";
+  for (const category of ["Conditioning", "Competition", "Strength"]) {
+    const form = goalPrefill(goal, previous);
+    assert.equal(form.category, previous);
+    const payload = goalPayload(goalInputSchema.parse({ ...form, category }));
+    assert.deepEqual(payload, { id: goal.id, category });
+    assert.equal(goalPrefill(goal, category).category, category);
+    previous = category;
+  }
+});
 test("server action rejects invalid, empty, unauthorized, future and unknown benchmark input; reports database errors", async () => {
   const { saveIntakeStep, writes } = actionHarness();
   for (const [step, data] of [[0, {}], [1, {}], [1, { ...valid[0], birth_date: "2026-11-22" }], [2, { ...valid[1], benchmarks: [{ benchmark_id: "35000000-0000-0000-0000-000000000099", load: 100, time_seconds: "", rounds: "", reps: "" }] }]]) {

@@ -54,6 +54,7 @@ declare
   ids jsonb := '[]';
   record_id uuid;
   extra jsonb := '{}';
+  categories jsonb;
 begin
   select * into a from public.athletes where id = p_athlete_id and user_id = auth.uid() and status = 'active';
   if not found then raise exception 'Not your athlete' using errcode = '42501'; end if;
@@ -84,6 +85,7 @@ begin
     end loop;
     extra := extra || jsonb_build_object('benchmark_result_ids', ids);
   elsif p_step = 3 then
+    categories := coalesce(intake.answers->'goal_categories','{}');
     if jsonb_array_length(p_data->'goals') not between 1 and 3 then raise exception 'Choose 1–3 goals'; end if;
     for item in select * from jsonb_array_elements(p_data->'goals') loop
       record_id := null;
@@ -105,12 +107,19 @@ begin
           values (a.id, a.coach_id, item->>'title', (item->>'goal_type')::public.goal_type,
             (item->>'target_value')::numeric, (item->>'target_date')::date) returning id into record_id;
       end if;
+      if item ? 'category' then
+        if item->>'category' not in ('Strength','Conditioning','Body composition','Specific skill','Competition') or item->>'category' is null then
+          raise exception 'Invalid goal category';
+        end if;
+        categories := jsonb_set(categories, array[record_id::text], item->'category');
+      end if;
       ids := ids || to_jsonb(record_id);
     end loop;
     delete from public.goals where athlete_id = a.id and coach_id = a.coach_id and status <> 'achieved'
       and id in (select value::uuid from jsonb_array_elements_text(coalesce(intake.answers->'goal_ids','[]')))
       and id not in (select value::uuid from jsonb_array_elements_text(ids));
-    extra := jsonb_build_object('goal_ids', ids);
+    extra := jsonb_build_object('goal_ids', ids, 'goal_categories', coalesce((select jsonb_object_agg(key, value)
+      from jsonb_each(categories) where key in (select value from jsonb_array_elements_text(ids))), '{}'::jsonb));
   elsif p_step = 4 then
     extra := jsonb_build_object('injury_list', p_data->'injury_list', 'no_injuries', coalesce(p_data->'no_injuries', 'false'::jsonb));
     if jsonb_array_length(p_data->'injury_list') > 0 then
