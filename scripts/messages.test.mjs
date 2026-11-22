@@ -168,6 +168,26 @@ const threadCardMocks = {
   "@/lib/ai/inline-suggestion": { inlineSuggestion: (row) => ({ id: row.id }) },
 };
 
+test("Ask AI reply preserves coach edits after a failed send", () => {
+  let body, failed = false, isDraft = false;
+  const { AskAI } = loader({
+    react: {
+      useActionState: () => [isDraft ? (failed ? { error: "Offline" } : {}) : { draft: "AI text" }, () => {}, false],
+      useState: (initial) => [body ?? initial, (next) => { body = next; }],
+    },
+    "@/app/(app)/messages/[athleteId]/ask-ai-action": { askAthleteMessageAI() {}, sendAthleteAIDraft() {} },
+    "@/components/ui/button": { Button: "button" },
+    "@/components/ui/textarea": { Textarea: "textarea" },
+  })("src/components/messages/ask-ai.tsx");
+  const draft = treeNodes(AskAI({ athleteId, messageId: itemId })).find((node) => node.type.name === "ReplyDraft");
+  isDraft = true;
+  treeNodes(draft.type(draft.props)).find((node) => node.type === "textarea").props.onChange({ target: { value: "Coach's edit" } });
+  failed = true;
+  const nodes = treeNodes(draft.type(draft.props));
+  assert.equal(nodes.find((node) => node.type === "textarea").props.value, "Coach's edit");
+  assert.equal(nodes.find((node) => node.props.role === "alert").props.children, "Offline");
+});
+
 function treeNodes(node) {
   if (Array.isArray(node)) return node.flatMap(treeNodes);
   if (!node || typeof node !== "object") return [];
