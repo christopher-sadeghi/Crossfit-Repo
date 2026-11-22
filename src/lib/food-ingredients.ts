@@ -16,7 +16,7 @@ export function foodIngredients(entries: IngredientEntry[], limit: number): stri
       const start = marker.index;
       const content = start + marker[0].length;
       const next = markers[i + 1]?.index ?? raw.length;
-      const boundary = raw.slice(content, next).search(/[\r\n.;]/);
+      const boundary = raw.slice(content, next).search(/[.;]/);
       const end = boundary < 0 ? next : content + boundary;
       declarations.add(whitespace(raw.slice(start, end)));
       remaining += `${raw.slice(cursor, start)}; `;

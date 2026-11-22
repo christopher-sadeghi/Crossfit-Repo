@@ -53,3 +53,10 @@ test("keeps newline-delimited and inline allergen declarations before trimming",
     assert.deepEqual(matchedAllergies(ingredients, ["hazelnut", "almond", "walnut"]), ["hazelnut", "almond", "walnut"]);
   }
 });
+
+test("keeps wrapped phrases within allergen declarations", () => {
+  const ingredients = foodIngredients([{ name: "Snack", ingredients: "Sugar\nContains: tree\nnuts" }], 8000);
+  assert.ok(ingredients);
+  assert.ok(ingredients.includes("Contains: tree nuts"));
+  assert.deepEqual(matchedAllergies(ingredients, ["tree nuts"]), ["tree nuts"]);
+});
