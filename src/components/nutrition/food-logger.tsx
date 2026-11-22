@@ -70,8 +70,9 @@ export function FoodLogger({ athleteId, date, allergies, recent, saved, todayEnt
     const matches = hits(item);
     return matches.length ? <p role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs break-words text-amber-900">May contain {matches.join(", ")}. Check the label and ingredients before eating. You can still log this food.</p> : null;
   }
-  function favoriteRow(item: Candidate) {
-    return saved.find(row => item.savedId ? row.id === item.savedId : item.sourceId ? row.source === item.source && row.source_id === item.sourceId : row.name === item.name && row.serving_label === servingLabel(item.servings[0]).slice(0, 80) && row.source_id === null);
+  function favoriteRow(item: Candidate, serving = item.servings[0]) {
+    const macros = scaled(serving, 1);
+    return saved.find(row => item.savedId ? row.id === item.savedId : item.sourceId ? row.source === item.source && row.source_id === item.sourceId : row.name === item.name && row.serving_label === servingLabel(serving).slice(0, 80) && row.source_id === null && Number(row.calories) === macros.calories && Number(row.protein_g) === macros.protein_g && Number(row.carbs_g) === macros.carbs_g && Number(row.fat_g) === macros.fat_g);
   }
   function run(action: () => Promise<FormState>) {
     setState({});
@@ -88,12 +89,12 @@ export function FoodLogger({ athleteId, date, allergies, recent, saved, todayEnt
     run(() => logFood(athleteId, { date, meal, name: item.name.slice(0, 120), ingredients: [item.ingredients, item.allergens.length ? `Allergens: ${item.allergens.join(", ")}` : null].filter(Boolean).join("; ").slice(0, 2000) || null, serving: (amount === 1 ? servingLabel(serving) : `${amount} × ${servingLabel(serving)}`).slice(0, 120), ...scaled(serving, amount) }));
   }
   function toggleFavorite(item: Candidate, serving = item.servings[0]) {
-    const row = favoriteRow(item);
+    const row = favoriteRow(item, serving);
     if (row) run(() => setFavorite(row.id, !row.is_favorite));
     else run(() => saveFoodToLibrary(athleteId, { kind: "food", is_favorite: true, name: item.name.slice(0, 120), brand: item.brand?.slice(0, 120) ?? null, ingredients: [item.ingredients, item.allergens.length ? `Allergens: ${item.allergens.join(", ")}` : null].filter(Boolean).join("; ").slice(0, 2000) || null, serving_label: servingLabel(serving).slice(0, 80), ...scaled(serving, 1), source: item.source, source_id: item.sourceId }));
   }
   function star(item: Candidate, serving?: FoodServing) {
-    const on = favoriteRow(item)?.is_favorite ?? false;
+    const on = favoriteRow(item, serving)?.is_favorite ?? false;
     return <Button type="button" size="icon" variant="ghost" className="shrink-0" disabled={pending} aria-label={`${on ? "Unfavorite" : "Favorite"} ${item.name}`} aria-pressed={on} onClick={() => toggleFavorite(item, serving)}><Star className={on ? "fill-amber-400 text-amber-600" : ""} /></Button>;
   }
   async function lookup(url: string, barcode: boolean) {
