@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Pencil } from "lucide-react";
+import { z } from "zod";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,7 @@ import { SUGGESTION_LABELS } from "@/lib/ai/suggestions";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCoach } from "@/lib/coach";
 import { getOrigin } from "@/lib/auth/redirect";
-import { SCHEDULE_LABEL, loadAthleteSchedule } from "@/lib/athlete-schedule";
+import { loadAthleteSchedule } from "@/lib/athlete-schedule";
 import { feedbackSummary, needsAttention } from "@/lib/feedback";
 import { JOURNAL_COLUMNS, journalSleepSummary, journalYesAnswers } from "@/lib/journal";
 import { getToday } from "@/lib/time-zone";
@@ -23,12 +24,14 @@ import { ArchiveButton } from "../archive-button";
 import { AthleteAccessCard } from "../access-card";
 import { PersonalProgramCopyForm } from "./program-copy-form";
 import { GoalBar } from "./progress/goal-bar";
-import { formatHeadline, type WhiteboardWorkout } from "../../programs/workouts/whiteboard";
+import type { WhiteboardWorkout } from "../../programs/workouts/whiteboard";
+import { AthleteCalendar } from "./athlete-calendar";
+import { addDays, monday } from "./calendar-dates";
 import { LEVEL_LABELS } from "../options";
 
 const TABS = ["overview", "workouts", "journal", "nutrition", "goals", "ai"] as const;
 
-type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> };
+type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; week?: string; date?: string }> };
 type ProfileScheduleWorkout = WhiteboardWorkout & {
   id: string;
   source_workout_id: string | null;
@@ -37,7 +40,7 @@ type ProfileScheduleWorkout = WhiteboardWorkout & {
 };
 
 export default async function AthletePage({ params, searchParams }: Props) {
-  const [{ id }, { tab }] = await Promise.all([params, searchParams]);
+  const [{ id }, { tab, week, date }] = await Promise.all([params, searchParams]);
   const supabase = await createClient();
   const coach = await getCoach();
   const units: Units = coach?.units ?? "lb";
@@ -46,12 +49,10 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const sinceDate = new Date(`${now}T00:00:00Z`);
   sinceDate.setUTCDate(sinceDate.getUTCDate() - 6);
   const since = sinceDate.toISOString().slice(0, 10);
-  const scheduleFromDate = new Date(`${now}T00:00:00Z`);
-  scheduleFromDate.setUTCDate(scheduleFromDate.getUTCDate() - 7);
-  const scheduleToDate = new Date(`${now}T00:00:00Z`);
-  scheduleToDate.setUTCDate(scheduleToDate.getUTCDate() + 14);
-  const scheduleFrom = scheduleFromDate.toISOString().slice(0, 10);
-  const scheduleTo = scheduleToDate.toISOString().slice(0, 10);
+  const parsedWeek = z.string().date().safeParse(week);
+  const weekStart = monday(parsedWeek.success ? parsedWeek.data : now);
+  const parsedDate = z.string().date().safeParse(date);
+  const selectedDate = parsedDate.success ? parsedDate.data : now;
   const [
     athleteRes,
     metricsRes,
@@ -65,6 +66,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
     groupProgramsRes,
     athleteAssignmentsRes,
     journalRes,
+    libraryRes,
   ] = await Promise.all([
     supabase.from("athletes").select("*").eq("id", id).maybeSingle(),
     supabase.from("body_metrics").select("measured_on, weight_kg, body_fat_pct").eq("athlete_id", id).order("measured_on", { ascending: false }),
@@ -87,8 +89,9 @@ export default async function AthletePage({ params, searchParams }: Props) {
     loadAthleteSchedule<ProfileScheduleWorkout>(
       supabase,
       id,
-      { from: scheduleFrom, to: scheduleTo },
+      { from: weekStart, to: addDays(weekStart, 6) },
       "id, source_workout_id, title, workout_type, time_cap_seconds, rounds, week_number, day_number",
+      { includeRemoved: true },
     ),
     supabase
       .from("athlete_invites")
@@ -98,13 +101,14 @@ export default async function AthletePage({ params, searchParams }: Props) {
       .is("revoked_at", null)
       .maybeSingle(),
     supabase.from("programs").select("id, name").is("athlete_id", null).order("name"),
-    supabase.from("program_assignments").select("program_id").eq("athlete_id", id),
+    supabase.from("program_assignments").select("program_id, programs(id, name, athlete_id)").eq("athlete_id", id),
     supabase
       .from("athlete_journal_entries")
       .select(JOURNAL_COLUMNS)
       .eq("athlete_id", id)
       .order("entry_on", { ascending: false })
       .limit(30),
+    supabase.from("workouts").select("id, title").is("athlete_id", null).is("program_id", null).order("title"),
   ]);
 
   const athlete = athleteRes.data;
@@ -120,7 +124,6 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const goals = goalsRes.data ?? [];
   const suggestions = aiRes.data ?? [];
   const journal = journalRes.data ?? [];
-  const loggedWorkoutIds = new Set(results.map((result) => result.workout_id));
   const assignedProgramIds = new Set((athleteAssignmentsRes.data ?? []).map((assignment) => assignment.program_id));
   const groupPrograms = (groupProgramsRes.data ?? []).map((program) => ({
     ...program,
@@ -227,71 +230,18 @@ export default async function AthletePage({ params, searchParams }: Props) {
         </TabsContent>
 
         <TabsContent value="workouts" className="grid gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Schedule</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <div className="grid gap-3 lg:grid-cols-2">
-                <Button variant="outline" className="justify-self-start" asChild>
-                  <Link href={`/programs/workouts/new?athlete=${athlete.id}&date=${now}`}>Add one-off WOD</Link>
-                </Button>
-                <PersonalProgramCopyForm athleteId={athlete.id} programs={groupPrograms} defaultStart={now} />
-              </div>
-              {scheduleItems.length ? (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="pl-4">Date</TableHead>
-                        <TableHead>Workout</TableHead>
-                        <TableHead>Format</TableHead>
-                        <TableHead>Program</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {scheduleItems.map((item) => {
-                        const logged =
-                          loggedWorkoutIds.has(item.workout.id) ||
-                          (item.workout.source_workout_id != null && loggedWorkoutIds.has(item.workout.source_workout_id));
-                        return (
-                          <TableRow key={`${item.source}-${item.programId ?? "one-off"}-${item.workout.id}`}>
-                            <TableCell className="pl-4">{formatDate(item.date)}</TableCell>
-                            <TableCell className="font-medium">
-                              <Link href={`/programs/workouts/${item.workout.id}`} className="hover:underline">
-                                {item.workout.title}
-                              </Link>
-                            </TableCell>
-                            <TableCell>{formatHeadline(item.workout) || "—"}</TableCell>
-                            <TableCell>
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Badge variant="secondary">{SCHEDULE_LABEL(item)}</Badge>
-                                {item.programId && (
-                                  <Link href={`/programs/${item.programId}`} className="text-sm text-muted-foreground hover:underline">
-                                    {item.programName}
-                                  </Link>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              {item.date < now ? (
-                                <Badge variant={logged ? "default" : "outline"}>{logged ? "Logged" : "Not logged"}</Badge>
-                              ) : (
-                                "—"
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              ) : (
-                <p className="p-4 text-center text-muted-foreground">No WODs in this date range.</p>
-              )}
-            </CardContent>
-          </Card>
+          <AthleteCalendar
+            athleteId={athlete.id}
+            firstName={athlete.first_name}
+            today={now}
+            weekStart={weekStart}
+            selectedDate={selectedDate}
+            items={scheduleItems}
+            results={results.map(({ workout_id, performed_on }) => ({ workout_id, performed_on }))}
+            library={libraryRes.data ?? []}
+            programs={(athleteAssignmentsRes.data ?? []).flatMap((assignment) => assignment.programs ? [assignment.programs] : [])}
+          />
+          <PersonalProgramCopyForm athleteId={athlete.id} programs={groupPrograms} defaultStart={now} />
           <ListCard title="Personal records" empty="No results logged yet." show={prs.length > 0}>
             <Table>
               <TableHeader>

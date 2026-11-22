@@ -150,7 +150,7 @@ export async function saveWorkout(_: FormState, formData: FormData): Promise<For
   revalidatePath("/programs/workouts");
   if (oneOffAthleteId) {
     revalidatePath(`/athletes/${oneOffAthleteId}`);
-    redirect(`/athletes/${oneOffAthleteId}`);
+    redirect(`/athletes/${oneOffAthleteId}?tab=workouts`);
   }
   const programId = formData.get("program_id");
   if (!id && typeof programId === "string" && programId) {

@@ -34,6 +34,16 @@ export function CoachChat() {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    function openChat(event: Event) {
+      const detail = (event as CustomEvent<{ draft?: string }>).detail;
+      setOpen(true);
+      if (typeof detail?.draft === "string") setDraft(detail.draft);
+    }
+    window.addEventListener("open-coach-chat", openChat);
+    return () => window.removeEventListener("open-coach-chat", openChat);
+  }, []);
+
+  useEffect(() => {
     if (!open || messages) return;
     loadChat()
       .then(setMessages)

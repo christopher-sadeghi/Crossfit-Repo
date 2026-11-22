@@ -154,7 +154,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
 
             return (
               <div key={workout.id} className="grid gap-3">
-                <p className="text-sm text-muted-foreground">{SCHEDULE_LABEL(item)}</p>
+                <p className="text-sm text-muted-foreground">{SCHEDULE_LABEL(item, "athlete")}</p>
                 <Whiteboard workout={workout} movements={movements} units={viewer.units} howToHref={(id) => `/athlete/movements/${id}`} />
                 {scaling && (
                   <Card>
@@ -291,7 +291,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                   <p className="text-xs text-muted-foreground">{formatDate(item.date)}</p>
                   <p className="font-medium">{item.workout.title}</p>
                   <p className="text-xs text-muted-foreground">
-                    {SCHEDULE_LABEL(item)}
+                    {SCHEDULE_LABEL(item, "athlete")}
                     {formatHeadline(item.workout) ? ` · ${formatHeadline(item.workout)}` : ""}
                   </p>
                 </div>
@@ -315,7 +315,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                   <p className="text-xs text-muted-foreground">{formatDate(item.date)}</p>
                   <p className="font-medium">{item.workout.title}</p>
                   <p className="text-xs text-muted-foreground">
-                    {SCHEDULE_LABEL(item)}
+                    {SCHEDULE_LABEL(item, "athlete")}
                     {formatHeadline(item.workout) ? ` · ${formatHeadline(item.workout)}` : ""}
                   </p>
                 </div>
