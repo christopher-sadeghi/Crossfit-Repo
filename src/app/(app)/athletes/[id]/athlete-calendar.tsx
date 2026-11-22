@@ -81,7 +81,8 @@ function WorkoutChip({ item, athleteId, today, logged }: { item: AthleteSchedule
       <Link href={`/programs/workouts/${workoutId}`} className={`font-medium hover:underline ${item.removed ? "line-through" : ""}`}>{item.workout.title}</Link>
       <span className="text-muted-foreground">{formatHeadline(item.workout)}</span>
       <span className="text-[10px] text-muted-foreground">{label}</span>
-      {item.removed ? <span>Removed for this athlete</span> : item.date < today && <span>{logged ? "Logged" : "Not logged"}</span>}
+      {item.removed && <span>Removed for this athlete</span>}
+      {(logged || (!item.removed && item.date < today)) && <span>{logged ? "Logged" : "Not logged"}</span>}
       <div className="flex flex-wrap items-center gap-1">
         {item.removed ? (
           <button type="button" className={iconClass} disabled={pending} onClick={restore} aria-label="Restore program WOD" title="Restore program WOD"><RotateCcw className="size-3.5" /></button>

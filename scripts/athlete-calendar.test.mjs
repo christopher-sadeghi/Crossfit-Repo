@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
@@ -15,13 +15,15 @@ function createLoader(mocks = {}) {
     const loaded = { exports: {} };
     cache.set(filename, loaded);
     const js = ts.transpileModule(readFileSync(filename, "utf8"), {
-      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
       fileName: filename,
     }).outputText;
     const localRequire = (id) => {
       if (id in mocks) return mocks[id];
-      if (id.startsWith("@/")) return load(`src/${id.slice(2)}.ts`);
-      if (id.startsWith(".")) return load(path.resolve(path.dirname(filename), `${id}.ts`));
+      if (id.startsWith("@/") || id.startsWith(".")) {
+        const base = id.startsWith("@/") ? path.resolve(root, `src/${id.slice(2)}`) : path.resolve(path.dirname(filename), id);
+        return load(existsSync(`${base}.ts`) ? `${base}.ts` : `${base}.tsx`);
+      }
       return require(id);
     };
     new Function("require", "module", "exports", js)(localRequire, loaded, loaded.exports);
@@ -148,4 +150,39 @@ test("invalid input, schedule errors and generator errors return errors rather t
   const rejected = dayRequestHarness(fixtures, { result: { error: "AI unavailable" } });
   assert.equal((await rejected.submit()).error, "AI unavailable");
   assert.equal(rejected.calls.revalidated.length, 0);
+});
+
+test("calendar renders Logged for matching results on any date, including today's replacement", () => {
+  const { createElement } = require("react");
+  const { renderToStaticMarkup } = require("react-dom/server");
+  const actions = Object.fromEntries([
+    "addExistingWorkoutForAthlete", "deleteAthleteWorkout", "editWorkoutForAthlete", "moveAthleteWorkout",
+    "removeWorkoutForAthlete", "requestAthleteDayWorkout", "restoreWorkoutForAthlete",
+  ].map((name) => [name, async () => ({})]));
+  const { AthleteCalendar } = createLoader({ "./calendar-actions": actions })("src/app/(app)/athletes/[id]/athlete-calendar.tsx");
+  const today = "2026-12-02";
+  const render = (date, results, removed = false) => renderToStaticMarkup(createElement(AthleteCalendar, {
+    athleteId, firstName: "Alex", today, weekStart: "2026-11-30", selectedDate: today,
+    items: [{
+      workout: { ...workout("replacement", null), workout_type: "for_time", rounds: null, time_cap_seconds: null },
+      source: "one_off", programId: null, programName: null, date, removed,
+      overrides: { workoutId: "original", programId: "group", programName: "Shared plan", source: "group" },
+    }],
+    results, library: [], programs: [],
+  }));
+  for (const date of ["2026-12-01", today, "2026-12-03"]) {
+    for (const workoutId of ["replacement", "group-replacement", "original"]) {
+      assert.match(render(date, [{ workout_id: workoutId, performed_on: date }]), /<span>Logged<\/span>/, `${date}: ${workoutId}`);
+    }
+  }
+  assert.match(render(today, [{ workout_id: "replacement", performed_on: today }], true), /<span>Logged<\/span>/);
+  assert.match(render("2026-12-01", []), /<span>Not logged<\/span>/);
+  for (const date of [today, "2026-12-03"]) {
+    assert.doesNotMatch(render(date, []), /<span>(Logged|Not logged)<\/span>/);
+    for (const workoutId of ["group-replacement", "original"]) {
+      assert.doesNotMatch(render(date, [{ workout_id: workoutId, performed_on: "2026-11-01" }]), /<span>(Logged|Not logged)<\/span>/);
+    }
+    assert.doesNotMatch(render(date, [{ workout_id: "unrelated", performed_on: date }]), /<span>(Logged|Not logged)<\/span>/);
+  }
+  assert.doesNotMatch(render("2026-12-01", [], true), /<span>Not logged<\/span>/);
 });
