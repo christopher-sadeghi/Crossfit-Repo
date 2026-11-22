@@ -9,6 +9,7 @@ import { CHECK_WITH_COACH_MESSAGE } from "@/lib/ai/athlete-adjust-copy";
 import { effectiveScaling } from "@/lib/ai/athlete-adjust-schema";
 import { scaleWorkoutDetailsSchema } from "@/lib/ai/scale-workout";
 import { SCHEDULE_LABEL, loadAthleteSchedule } from "@/lib/athlete-schedule";
+import { CHECK_IN_COLUMNS } from "@/lib/check-in";
 import { getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
 import { feedbackSummary } from "@/lib/feedback";
@@ -18,6 +19,7 @@ import { getViewer } from "@/lib/viewer";
 import { formatHeadline, formatMovementLine, Whiteboard, type WhiteboardWorkout } from "../(app)/programs/workouts/whiteboard";
 import { AthleteResultForm } from "./log/[workoutId]/result-form";
 import { AdjustWorkoutForm } from "./adjust-form";
+import { CheckInForm } from "./check-in/check-in-form";
 import { ScrollIntoView } from "./scroll-into-view";
 
 type TodayWorkout = WhiteboardWorkout & {
@@ -116,7 +118,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
     : { data: [] };
   const { data: todayJournal } = await supabase
     .from("athlete_journal_entries")
-    .select("entry_on")
+    .select(CHECK_IN_COLUMNS)
     .eq("athlete_id", viewer.athleteId)
     .eq("entry_on", currentDate)
     .maybeSingle();
@@ -126,6 +128,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
 
   return (
     <div className="grid gap-6">
+      <CheckInForm key={currentDate} entry={todayJournal} today={currentDate} />
       <section className="grid gap-3">
         <h1 className="text-xl font-semibold tracking-tight">Today&apos;s WOD</h1>
         {todayWods.length ? (
@@ -266,21 +269,6 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
           </Card>
         )}
       </section>
-
-      <Card>
-        <CardContent className="flex items-center justify-between gap-3 py-4">
-          <div className="min-w-0">
-            <p className="font-medium">Daily journal</p>
-            <p className="text-xs text-muted-foreground">
-              {todayJournal ? "Logged for today." : "Sleep and habits, about 30 seconds. Optional."}
-            </p>
-          </div>
-          <Button asChild size="sm" variant={todayJournal ? "outline" : "default"}>
-            <Link href="/athlete/journal">{todayJournal ? "Edit" : "Fill in"}</Link>
-          </Button>
-        </CardContent>
-      </Card>
-
       {recentWithoutResults.length > 0 && (
         <section className="grid gap-3">
           <h2 className="text-lg font-semibold">Recent</h2>
