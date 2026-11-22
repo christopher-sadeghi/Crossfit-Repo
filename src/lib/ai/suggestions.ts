@@ -19,7 +19,7 @@ import {
   scaleWorkoutSchema,
   validateScaleProposal,
 } from "./scale-workout";
-import { ageOn, loadWorkoutContext } from "./workout-context";
+import { ageOn, loadWorkoutContext, workoutLibraryEntrySchema } from "./workout-context";
 import { movementIdSchema } from "./movement-schema";
 import { consistencyContext, foodAverages, trainingVolume, weightTrend } from "./athlete-context";
 import { progressSummaryEntry } from "./progress-summary";
@@ -78,14 +78,7 @@ export const writeWorkoutInputSchema = z.object({
   mode: z.enum(["write", "adjust"]),
   request: z.string(),
   units: z.enum(["lb", "kg"]),
-  library: z.array(
-    z.object({
-      id: z.string(),
-      name: z.string(),
-      category: z.string(),
-      measure: z.string(),
-    }),
-  ),
+  library: z.array(workoutLibraryEntrySchema),
   workout_id: z.string().uuid().optional(),
   workout_updated_at: z.string().optional(),
   athlete_id: z.string().uuid().optional(),
@@ -248,6 +241,7 @@ Rules:
 - ${LIFT_LOAD_RULE}
 - Use recent_check_ins: readiness, sleep, soreness areas, stress, energy and mood. Lower readiness or high soreness means scale down and avoid sore areas.
 - Use ONLY movements from the provided library list, referenced by movement_id. Never invent movements.
+- If substituting a movement, prefer its easier_movement_id or harder_movement_id in the intended direction when appropriate for the athlete, equipment, and workout stimulus.
 - Loads are in the coach's preferred units (<units>). Use realistic barbell, dumbbell, and kettlebell numbers (Rx loads for an intermediate athlete unless the request says otherwise).
 - Set fields that do not apply to null.
 - Match workout_type to the format: for_time (usually with a time cap), amrap (time_cap_minutes is the AMRAP length), emom (time_cap_minutes is total minutes; rounds optional), strength (sets and reps with load), or other.
@@ -337,7 +331,7 @@ async function buildWorkoutRequest(
     ...(athlete ? { lift_maxes: athlete.lift_maxes } : {}),
     request,
     units,
-    library: library ?? [],
+    library,
     ...(workoutId && workoutUpdatedAt && currentWorkout
       ? { workout_id: workoutId, workout_updated_at: workoutUpdatedAt, current_workout: currentWorkout }
       : {}),
@@ -349,7 +343,7 @@ async function buildWorkoutRequest(
     prompt: `Request: ${request}\n\n${athlete ? `Athlete this WOD is for, on ${params.scheduledOn} (JSON):\n${JSON.stringify(athlete, null, 2)}\n\n` : ""}Program context (JSON):\n${JSON.stringify(input, null, 2)}\n\nReturn a complete WOD proposal.`,
     schema: writeWorkoutSchema.extend({
       movements: z
-        .array(writeWorkoutMovementSchema.extend({ movement_id: movementIdSchema((library ?? []).map(({ id }) => id)) }))
+        .array(writeWorkoutMovementSchema.extend({ movement_id: movementIdSchema(library.map(({ id }) => id)) }))
         .min(1)
         .max(15),
     }),

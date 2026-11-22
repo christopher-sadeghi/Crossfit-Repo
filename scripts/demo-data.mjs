@@ -2,6 +2,8 @@
 // Usage: npm run demo:reset -- coach@example.com password
 import { createClient } from "@supabase/supabase-js";
 
+import { loadDemoDataWithClipCleanup } from "../src/lib/reset-demo-data.mjs";
+
 const [email, password] = process.argv.slice(2);
 if (!email || !password) {
   console.error("Usage: npm run demo:reset -- <coach-email> <password>");
@@ -20,9 +22,13 @@ if (loginError) {
 }
 
 const started = Date.now();
-const { data, error } = await supabase.rpc("load_demo_data", { reset: true });
+const { data, error, clipError } = await loadDemoDataWithClipCleanup(supabase, true);
 if (error) {
   console.error(`Loading demo data failed: ${error.message}`);
   process.exit(1);
 }
 console.log(`Demo data loaded in ${((Date.now() - started) / 1000).toFixed(1)}s:`, data);
+if (clipError) {
+  console.error("The demo was reset, but some uploaded movement clips couldn't be removed.");
+  process.exitCode = 1;
+}

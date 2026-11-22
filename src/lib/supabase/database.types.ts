@@ -1009,6 +1009,9 @@ export type Database = {
           coach_id: string;
           movement_id: string;
           video_url: string | null;
+          clip_path: string | null;
+          easier_movement_id: string | null;
+          harder_movement_id: string | null;
           cues: string[];
           common_mistakes: string[];
           easier_versions: string[];
@@ -1023,6 +1026,9 @@ export type Database = {
           coach_id?: string;
           movement_id: string;
           video_url?: string | null;
+          clip_path?: string | null;
+          easier_movement_id?: string | null;
+          harder_movement_id?: string | null;
           cues?: string[];
           common_mistakes?: string[];
           easier_versions?: string[];
@@ -1036,6 +1042,9 @@ export type Database = {
           coach_id?: string;
           movement_id?: string;
           video_url?: string | null;
+          clip_path?: string | null;
+          easier_movement_id?: string | null;
+          harder_movement_id?: string | null;
           cues?: string[];
           common_mistakes?: string[];
           easier_versions?: string[];
@@ -1047,6 +1056,8 @@ export type Database = {
         Relationships: [
           { foreignKeyName: "movement_guides_coach_id_fkey"; columns: ["coach_id"]; isOneToOne: false; referencedRelation: "coaches"; referencedColumns: ["id"] },
           { foreignKeyName: "movement_guides_movement_id_fkey"; columns: ["movement_id"]; isOneToOne: false; referencedRelation: "movements"; referencedColumns: ["id"] },
+          { foreignKeyName: "movement_guides_easier_movement_id_fkey"; columns: ["easier_movement_id"]; isOneToOne: false; referencedRelation: "movements"; referencedColumns: ["id"] },
+          { foreignKeyName: "movement_guides_harder_movement_id_fkey"; columns: ["harder_movement_id"]; isOneToOne: false; referencedRelation: "movements"; referencedColumns: ["id"] },
           { foreignKeyName: "movement_guides_ai_suggestion_id_fkey"; columns: ["ai_suggestion_id"]; isOneToOne: false; referencedRelation: "ai_suggestions"; referencedColumns: ["id"] },
         ];
       };
@@ -1058,6 +1069,10 @@ export type Database = {
           id: string;
           measure: Database["public"]["Enums"]["movement_measure"];
           demo_video_url: string | null;
+          demo_cues: string[];
+          demo_common_faults: string[];
+          easier_movement_id: string | null;
+          harder_movement_id: string | null;
           name: string;
         };
         ComputedFields: never;
@@ -1068,6 +1083,10 @@ export type Database = {
           id?: string;
           measure?: Database["public"]["Enums"]["movement_measure"];
           demo_video_url?: string | null;
+          demo_cues?: string[];
+          demo_common_faults?: string[];
+          easier_movement_id?: string | null;
+          harder_movement_id?: string | null;
           name: string;
         };
         Update: {
@@ -1077,6 +1096,10 @@ export type Database = {
           id?: string;
           measure?: Database["public"]["Enums"]["movement_measure"];
           demo_video_url?: string | null;
+          demo_cues?: string[];
+          demo_common_faults?: string[];
+          easier_movement_id?: string | null;
+          harder_movement_id?: string | null;
           name?: string;
         };
         Relationships: [
@@ -1087,6 +1110,8 @@ export type Database = {
             referencedRelation: "coaches";
             referencedColumns: ["id"];
           },
+          { foreignKeyName: "movements_easier_movement_id_fkey"; columns: ["easier_movement_id"]; isOneToOne: false; referencedRelation: "movements"; referencedColumns: ["id"] },
+          { foreignKeyName: "movements_harder_movement_id_fkey"; columns: ["harder_movement_id"]; isOneToOne: false; referencedRelation: "movements"; referencedColumns: ["id"] },
         ];
       };
       nutrition_targets: {
