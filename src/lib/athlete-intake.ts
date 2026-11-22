@@ -21,7 +21,7 @@ export const benchmarkInputSchema = z.object({
   rounds: optionalNumber.pipe(z.number().int().min(0).max(10000).nullable()),
   reps: optionalNumber.pipe(z.number().int().min(0).max(100000).nullable()),
 });
-export const goalInputSchema = z.object({ category: z.enum(GOAL_CATEGORIES), target: z.string().trim().max(200), target_value: optionalNumber, target_date: z.union([z.literal(""), z.string().date()]) });
+export const goalInputSchema = z.object({ id: z.string().uuid().optional(), category: z.enum(GOAL_CATEGORIES), target: z.string().trim().max(200), target_value: optionalNumber, target_date: z.union([z.literal(""), z.string().date()]) });
 export const intakeSchemas = [
   z.object({ birth_date: z.string().date(), sex: z.enum(["", "female", "male", "other"]), height_ft: z.coerce.number().int().min(3).max(8), height_in: z.coerce.number().min(0).lt(12), weight: z.coerce.number().positive().max(2000) })
     .refine((v) => { const cm = ftInToCm(v.height_ft, v.height_in); return cm >= 98.73 && cm <= 251.27; }, "Height must be between 3 ft 4 in and 8 ft 2 in."),

@@ -85,14 +85,25 @@ begin
     extra := extra || jsonb_build_object('benchmark_result_ids', ids);
   elsif p_step = 3 then
     if jsonb_array_length(p_data->'goals') not between 1 and 3 then raise exception 'Choose 1–3 goals'; end if;
-    delete from public.goals where athlete_id = a.id
-      and id in (select value::text::uuid from jsonb_array_elements_text(coalesce(intake.answers->'goal_ids','[]')));
     for item in select * from jsonb_array_elements(p_data->'goals') loop
-      insert into public.goals(athlete_id, coach_id, title, goal_type, target_value, target_date)
-        values (a.id, a.coach_id, item->>'title', (item->>'goal_type')::public.goal_type,
-          (item->>'target_value')::numeric, (item->>'target_date')::date) returning id into record_id;
+      record_id := null;
+      if item->>'id' is not null then
+        select id into record_id from public.goals where id = (item->>'id')::uuid and athlete_id = a.id and coach_id = a.coach_id
+          and id in (select value::uuid from jsonb_array_elements_text(coalesce(intake.answers->'goal_ids','[]'))) for update;
+        if record_id is null then raise exception 'Not an intake goal' using errcode = '42501'; end if;
+        update public.goals set title = item->>'title', goal_type = (item->>'goal_type')::public.goal_type,
+          target_value = (item->>'target_value')::numeric, target_date = (item->>'target_date')::date
+          where id = record_id and status <> 'achieved';
+      else
+        insert into public.goals(athlete_id, coach_id, title, goal_type, target_value, target_date)
+          values (a.id, a.coach_id, item->>'title', (item->>'goal_type')::public.goal_type,
+            (item->>'target_value')::numeric, (item->>'target_date')::date) returning id into record_id;
+      end if;
       ids := ids || to_jsonb(record_id);
     end loop;
+    delete from public.goals where athlete_id = a.id and coach_id = a.coach_id and status <> 'achieved'
+      and id in (select value::uuid from jsonb_array_elements_text(coalesce(intake.answers->'goal_ids','[]')))
+      and id not in (select value::uuid from jsonb_array_elements_text(ids));
     extra := jsonb_build_object('goal_ids', ids);
   elsif p_step = 4 then
     extra := jsonb_build_object('injury_list', p_data->'injury_list', 'no_injuries', coalesce(p_data->'no_injuries', 'false'::jsonb));

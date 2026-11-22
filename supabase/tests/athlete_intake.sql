@@ -57,7 +57,30 @@ do $$ declare b uuid; begin
 end $$;
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',2,'{"experience_level":"beginner","years_training":1,"crossfit_detail":"New","sports_background":"Running","benchmarks":[]}','2026-11-21');
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',3,'{"goal_ids":["35000000-0000-0000-0000-000000000021"],"goals":[{"title":"Strength: squat","goal_type":"performance","target_value":100,"target_date":"2027-01-01"}]}','2026-11-21');
-select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',3,'{"goals":[{"title":"Strength: squat","goal_type":"performance","target_value":110,"target_date":null}]}','2026-11-21');
+select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',3,
+ jsonb_build_object('goals', jsonb_build_array(
+   jsonb_build_object('id',(select answers->'goal_ids'->>0 from public.athlete_intakes),'title','Strength: squat','goal_type','performance','target_value',100),
+   jsonb_build_object('title','Conditioning','goal_type','performance'),
+   jsonb_build_object('title','Specific skill','goal_type','skill'))),'2026-11-21');
+reset role;
+update public.goals set movement_id = (select id from public.movements limit 1), metric = 'load', unit = 'kg', start_value = 50,
+ status = 'abandoned', achieved_at = '2026-01-01' where title = 'Strength: squat' and athlete_id = '35000000-0000-0000-0000-000000000011';
+update public.goals set status = 'achieved', achieved_at = '2026-01-02' where title = 'Specific skill' and athlete_id = '35000000-0000-0000-0000-000000000011';
+set local role authenticated;
+do $$ declare g uuid; begin
+ select (answers->'goal_ids'->>0)::uuid into g from public.athlete_intakes;
+ begin
+   perform public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',3,'{"goals":[{"id":"35000000-0000-0000-0000-000000000021","title":"Forged","goal_type":"performance"}]}','2026-11-21');
+   raise exception 'Coach goal accepted as intake goal';
+ exception when insufficient_privilege then null; end;
+ perform public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',3,
+   jsonb_build_object('goals',jsonb_build_array(jsonb_build_object('id',g,'title','Strength: squat','goal_type','performance','target_value',110))),'2026-11-21');
+ assert (select id from public.goals where title = 'Strength: squat') = g;
+ assert (select movement_id is not null and metric = 'load' and unit = 'kg' and start_value = 50 and status = 'abandoned' and achieved_at = '2026-01-01'::timestamptz from public.goals where id = g);
+ assert not exists (select 1 from public.goals where title = 'Conditioning');
+ assert (select status = 'achieved' and achieved_at = '2026-01-02'::timestamptz from public.goals where title = 'Specific skill');
+ raise notice 'PASS: goal ids remain stable, coach fields survive, only removed unfinished intake goals deleted';
+end $$;
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',4,'{"injury_list":[{"area":"Knee","severity":"mild","notes":"Avoid jumping"}]}','2026-11-21');
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',4,'{"injury_list":[]}','2026-11-21');
 do $$ begin
@@ -70,7 +93,7 @@ select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',7,
 do $$ begin
  assert (select status = 'completed' and completed_at is not null and current_step = 7 from public.athlete_intakes);
  assert (select injuries = 'None' and height_cm = 180 from public.athletes where id = '35000000-0000-0000-0000-000000000011');
- assert (select count(*) from public.goals) = 2;
+ assert (select count(*) from public.goals) = 3;
  assert (select title from public.goals where id = '35000000-0000-0000-0000-000000000021') = 'Coach goal';
  assert (select target_value from public.goals where title = 'Strength: squat') = 110;
  assert (select diet_type from public.athlete_food_preferences) = 'none';
