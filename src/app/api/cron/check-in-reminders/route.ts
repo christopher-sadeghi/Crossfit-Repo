@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
+import { CHECK_IN_COLUMNS, isCheckIn } from "@/lib/check-in";
 import { reminderDue } from "@/lib/check-in-reminders";
 import { pushNewNotifications } from "@/lib/push/send";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -42,11 +43,11 @@ export async function POST(request: Request) {
       for (const [localDate, dueRows] of byDate) {
         const ids = dueRows.map((row) => row.athlete_id);
         const [journals, skips] = await Promise.all([
-          admin.from("athlete_journal_entries").select("athlete_id").in("athlete_id", ids).eq("entry_on", localDate),
+          admin.from("athlete_journal_entries").select(CHECK_IN_COLUMNS).in("athlete_id", ids).eq("entry_on", localDate),
           admin.from("check_in_skips").select("athlete_id").in("athlete_id", ids).eq("skipped_on", localDate),
         ]);
         if (journals.error || skips.error) throw journals.error ?? skips.error;
-        const suppressed = new Set([...(journals.data ?? []), ...(skips.data ?? [])].map((row) => row.athlete_id));
+        const suppressed = new Set([...(journals.data ?? []).filter(isCheckIn), ...(skips.data ?? [])].map((row) => row.athlete_id));
         const eligible = dueRows.filter((row) => !suppressed.has(row.athlete_id));
         counts.suppressed += dueRows.length - eligible.length;
         if (!eligible.length) continue;
