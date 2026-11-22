@@ -113,9 +113,8 @@ export async function checkMissedWorkouts(supabase: Client, coach: { id: string 
     }
     await Promise.all(schedules.map(async ({ athlete, items }) => {
       if (items.length !== 3 || items.some(({ workout, date }) => {
-        const nextDate = items.find((item) => item.date > date)?.date;
         return [workout.id, workout.source_workout_id].some((id) => id &&
-          completed.get(`${athlete.id}:${id}`)?.some((performedOn) => performedOn >= date && (!nextDate || performedOn < nextDate)));
+          completed.get(`${athlete.id}:${id}`)?.some((performedOn) => performedOn >= date));
       })) return;
       await notify(supabase, {
         athleteId: athlete.id, kind: "missed_workouts", title: `${athlete.first_name} ${athlete.last_name}: Three scheduled WODs missed`,

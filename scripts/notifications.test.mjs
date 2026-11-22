@@ -184,8 +184,8 @@ test("no athletes, insufficient schedule, completed source workouts and query er
   }
 });
 
-test("missed-workout results must belong to the scheduled date window, including copied WOD sources", async () => {
-  for (const [index, performedOn, expected] of [[2, "2026-11-17", 1], [2, "2026-11-20", 0], [2, "2026-11-21", 0], [0, "2026-11-19", 1], [0, "2026-11-18", 0]]) {
+test("missed-workout results must be on or after the scheduled date, including late completions and copied WOD sources", async () => {
+  for (const [index, performedOn, expected] of [[2, "2026-11-17", 1], [2, "2026-11-20", 0], [2, "2026-11-21", 0], [0, "2026-11-19", 0], [0, "2026-11-20", 0], [0, "2026-11-18", 0]]) {
     for (const source of [false, true]) {
       const schedule = items.map((item, i) => i === index && source ? { ...item, workout: { ...item.workout, source_workout_id: "source" } } : item);
       const { helpers, client, calls } = fixture({
