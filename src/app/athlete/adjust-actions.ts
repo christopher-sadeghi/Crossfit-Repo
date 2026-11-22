@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { effectiveScaling } from "@/lib/ai/athlete-adjust-schema";
 import { athleteAdjustFeelingSchema, buildAthleteAdjustRequest, runAthleteAdjustment } from "@/lib/ai/athlete-adjust";
 import { loadAthleteSchedule } from "@/lib/athlete-schedule";
 import { createClient } from "@/lib/supabase/server";
@@ -34,7 +35,7 @@ export async function adjustTodaysWorkout(_: AdjustState, formData: FormData): P
     loadAthleteSchedule(supabase, viewer.athleteId, { from: currentDate, to: currentDate }, "id, source_workout_id, title, week_number, day_number"),
     supabase
       .from("athlete_workout_scalings")
-      .select("updated_at, modifications, details")
+      .select("updated_at, modifications, details, athlete_adjusted_at, coach_modifications, coach_details")
       .eq("athlete_id", viewer.athleteId)
       .eq("workout_id", workoutId.data)
       .maybeSingle(),
@@ -51,7 +52,11 @@ export async function adjustTodaysWorkout(_: AdjustState, formData: FormData): P
       scheduledOn: currentDate,
       feeling: feeling.data,
       units: viewer.units,
-      scaling,
+      scaling: scaling && {
+        updated_at: scaling.updated_at,
+        modifications: effectiveScaling(scaling, currentDate)?.modifications ?? null,
+        details: effectiveScaling(scaling, currentDate)?.details ?? null,
+      },
     });
     result = await runAthleteAdjustment(supabase, request);
   } catch (error) {

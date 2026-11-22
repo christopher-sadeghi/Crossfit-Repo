@@ -191,10 +191,13 @@ export async function AthleteAdjustmentReview({ suggestion }: { suggestion: Tabl
             </Card>
           ) : (
             <Card className="mb-6">
-              <CardContent className="py-4 text-sm text-muted-foreground">
-                {suggestion.status === "rejected"
-                  ? "You undid this change. The athlete is back on what you gave them."
-                  : "This change is no longer active. It was replaced by a newer change or removed."}
+              <CardContent className="grid gap-4 py-4 text-sm text-muted-foreground">
+                <p>
+                  {suggestion.status === "rejected"
+                    ? "You undid this change. The athlete is back on what you gave them."
+                    : "This change is no longer active. It was replaced by a newer change or removed."}
+                </p>
+                {!suggestion.coach_reviewed_at && suggestion.status !== "rejected" && <MarkReviewedForm id={suggestion.id} />}
               </CardContent>
             </Card>
           )}

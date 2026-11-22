@@ -38,7 +38,7 @@ export const athleteAdjustFeelingSchema = z.string().trim().min(3).max(300);
 
 type Scaling = {
   updated_at: string;
-  modifications: string;
+  modifications: string | null;
   details: Json | null;
 } | null;
 
@@ -202,6 +202,7 @@ const RPC_ERRORS: Record<string, string> = {
   workout_changed: "Your coach just changed this WOD. Refresh the page and try again.",
   scaling_changed: "Your scaled version just changed. Refresh the page and try again.",
   workout_not_found: "This WOD isn't available any more.",
+  not_today: "You can only adjust today's WOD.",
 };
 
 function rpcMessage(error: { message?: string } | null) {

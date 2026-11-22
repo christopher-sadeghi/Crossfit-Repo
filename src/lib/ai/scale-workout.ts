@@ -143,6 +143,7 @@ export const scaleWorkoutDetailsSchema = z.object({
   rounds: z.number().nullable().optional(),
   time_cap_seconds: z.number().nullable().optional(),
   check_with_coach: z.boolean().optional(),
+  scheduled_on: z.string().optional(),
 });
 
 const SCALE_WORKOUT_SYSTEM = `You help a CrossFit coach scale a WOD for one athlete. The coach reviews every suggestion before anything changes.

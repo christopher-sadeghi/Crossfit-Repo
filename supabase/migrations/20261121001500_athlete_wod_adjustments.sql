@@ -44,6 +44,11 @@ begin
   if p_input is null or jsonb_typeof(p_input) <> 'object' or octet_length(p_input::text) > 200000 then
     raise exception using errcode = 'P0001', message = 'invalid_input';
   end if;
+  -- Today only, allowing for time zones ahead of or behind the database clock.
+  if coalesce(p_input ->> 'scheduled_on', '') !~ '^\d{4}-\d{2}-\d{2}$'
+    or (p_input ->> 'scheduled_on')::date not between current_date - 1 and current_date + 1 then
+    raise exception using errcode = 'P0001', message = 'not_today';
+  end if;
 
   -- Serialize requests per athlete so the daily cap cannot be raced.
   perform 1 from public.athletes where id = v_athlete_id for update;
@@ -172,9 +177,17 @@ begin
       or v_suggestion.input ->> 'scaling_updated_at' is null then
       raise exception using errcode = 'P0001', message = 'scaling_changed';
     end if;
-    v_has_base := true;
-    v_base_details := v_existing.details;
-    v_base_modifications := v_existing.modifications;
+    if v_existing.athlete_adjusted_at is not null
+      and v_existing.details ->> 'scheduled_on' is distinct from v_suggestion.input ->> 'scheduled_on' then
+      -- An athlete change from another day has expired: start again from the coach scaling.
+      v_has_base := v_existing.coach_modifications is not null;
+      v_base_details := v_existing.coach_details;
+      v_base_modifications := v_existing.coach_modifications;
+    else
+      v_has_base := true;
+      v_base_details := v_existing.details;
+      v_base_modifications := v_existing.modifications;
+    end if;
   elsif v_suggestion.input ->> 'scaling_updated_at' is not null then
     raise exception using errcode = 'P0001', message = 'scaling_changed';
   end if;
@@ -233,13 +246,20 @@ begin
             or (v_new ->> v_field)::numeric > (v_base ->> v_field)::numeric + v_tolerance then
             raise exception using errcode = 'P0001', message = 'harder_' || v_field;
           end if;
-        elsif v_field <> 'load_kg' and v_new ->> v_field is not null then
+        elsif v_new ->> v_field is not null then
           raise exception using errcode = 'P0001', message = 'harder_' || v_field;
         end if;
       end loop;
     else
       -- A substitution may not swap back to a movement the coach already scaled away from.
       if v_new ->> 'movement_id' = v_original ->> 'movement_id' then
+        raise exception using errcode = 'P0001', message = 'harder_substitution';
+      end if;
+      if exists (
+        select 1 from public.movements m
+        where m.id = (v_new ->> 'movement_id')::uuid
+          and lower(m.name) = any (array['bar muscle-up', 'ring muscle-up', 'muscle-up', 'handstand push-up', 'strict handstand push-up', 'handstand walk', 'pistol', 'pistol squat', 'rope climb', 'legless rope climb', 'chest-to-bar pull-up', 'toes-to-bar', 'double-under', 'ghd sit-up', 'ring dip', 'squat snatch', 'squat clean', 'clean and jerk', 'split jerk', 'overhead squat', 'snatch'])
+      ) then
         raise exception using errcode = 'P0001', message = 'harder_substitution';
       end if;
       if v_base ->> 'load_kg' is not null and v_new ->> 'load_kg' is not null
@@ -280,7 +300,8 @@ begin
   v_details := p_details || jsonb_build_object(
     'source', 'ai',
     'requested_by', 'athlete',
-    'suggestion_id', p_suggestion_id
+    'suggestion_id', p_suggestion_id,
+    'scheduled_on', v_suggestion.input ->> 'scheduled_on'
   );
 
   if v_existing.id is not null then
@@ -323,3 +344,201 @@ revoke all on function public.apply_athlete_workout_adjustment(uuid, jsonb, text
 grant execute on function public.start_athlete_workout_adjustment(uuid, jsonb, text) to authenticated, service_role;
 grant execute on function public.fail_athlete_workout_adjustment(uuid, text, jsonb) to authenticated, service_role;
 grant execute on function public.apply_athlete_workout_adjustment(uuid, jsonb, text, jsonb) to authenticated, service_role;
+
+-- Personal program copies keep athlete-change review and undo details.
+create or replace function public.copy_program_for_athlete(
+  p_program_id uuid,
+  p_athlete_id uuid,
+  p_start_date date default null
+)
+returns uuid
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_coach_id uuid := auth.uid();
+  v_source public.programs%rowtype;
+  v_athlete public.athletes%rowtype;
+  v_start_date date;
+  v_suffix text;
+  v_program_name text;
+  v_new_program_id uuid;
+  v_source_workout record;
+  v_new_workout_id uuid;
+begin
+  if v_coach_id is null then
+    raise exception 'You must be signed in.';
+  end if;
+
+  select *
+  into v_source
+  from public.programs p
+  where p.id = p_program_id
+    and p.coach_id = v_coach_id
+    and p.athlete_id is null;
+
+  if not found then
+    raise exception 'Choose a group program owned by your account.';
+  end if;
+
+  select *
+  into v_athlete
+  from public.athletes a
+  where a.id = p_athlete_id
+    and a.coach_id = v_coach_id;
+
+  if not found then
+    raise exception 'Choose an athlete from your roster.';
+  end if;
+
+  select pa.start_date
+  into v_start_date
+  from public.program_assignments pa
+  where pa.program_id = p_program_id
+    and pa.athlete_id = p_athlete_id
+    and pa.coach_id = v_coach_id;
+
+  if not found then
+    v_start_date := p_start_date;
+  end if;
+
+  if v_start_date is null then
+    raise exception 'Choose a start date for this personal program.';
+  end if;
+
+  v_suffix := ' — ' || v_athlete.first_name;
+  v_program_name := left(v_source.name, greatest(1, 80 - char_length(v_suffix))) || v_suffix;
+
+  insert into public.programs (coach_id, name, description, weeks, athlete_id, source_program_id)
+  values (
+    v_coach_id,
+    left(v_program_name, 80),
+    v_source.description,
+    v_source.weeks,
+    p_athlete_id,
+    p_program_id
+  )
+  returning id into v_new_program_id;
+
+  for v_source_workout in
+    select
+      w.id,
+      w.coach_id,
+      w.title,
+      w.workout_type,
+      w.time_cap_seconds,
+      w.rounds,
+      w.description,
+      w.notes,
+      w.week_number,
+      w.day_number,
+      w.scheduled_on,
+      w.athlete_id
+    from public.workouts w
+    where w.program_id = p_program_id
+      and w.coach_id = v_coach_id
+    order by w.week_number, w.day_number, w.title
+  loop
+    v_new_workout_id := gen_random_uuid();
+
+    insert into public.workouts (
+      id,
+      coach_id,
+      program_id,
+      title,
+      workout_type,
+      time_cap_seconds,
+      rounds,
+      description,
+      notes,
+      week_number,
+      day_number,
+      scheduled_on,
+      athlete_id,
+      source_workout_id
+    )
+    values (
+      v_new_workout_id,
+      v_source_workout.coach_id,
+      v_new_program_id,
+      v_source_workout.title,
+      v_source_workout.workout_type,
+      v_source_workout.time_cap_seconds,
+      v_source_workout.rounds,
+      v_source_workout.description,
+      v_source_workout.notes,
+      v_source_workout.week_number,
+      v_source_workout.day_number,
+      v_source_workout.scheduled_on,
+      v_source_workout.athlete_id,
+      v_source_workout.id
+    );
+
+    insert into public.workout_movements (
+      coach_id,
+      workout_id,
+      movement_id,
+      position,
+      sets,
+      reps,
+      load_kg,
+      distance_m,
+      calories,
+      duration_seconds,
+      notes
+    )
+    select
+      wm.coach_id,
+      v_new_workout_id,
+      wm.movement_id,
+      wm.position,
+      wm.sets,
+      wm.reps,
+      wm.load_kg,
+      wm.distance_m,
+      wm.calories,
+      wm.duration_seconds,
+      wm.notes
+    from public.workout_movements wm
+    where wm.workout_id = v_source_workout.id
+      and wm.coach_id = v_coach_id;
+
+    insert into public.athlete_workout_scalings (
+      coach_id,
+      workout_id,
+      athlete_id,
+      modifications,
+      details,
+      athlete_suggestion_id,
+      athlete_adjusted_at,
+      coach_modifications,
+      coach_details
+    )
+    select
+      aws.coach_id,
+      v_new_workout_id,
+      aws.athlete_id,
+      aws.modifications,
+      aws.details,
+      aws.athlete_suggestion_id,
+      aws.athlete_adjusted_at,
+      aws.coach_modifications,
+      aws.coach_details
+    from public.athlete_workout_scalings aws
+    where aws.workout_id = v_source_workout.id
+      and aws.coach_id = v_coach_id
+      and aws.athlete_id = p_athlete_id;
+  end loop;
+
+  delete from public.program_assignments
+  where program_id = p_program_id
+    and athlete_id = p_athlete_id
+    and coach_id = v_coach_id;
+
+  insert into public.program_assignments (coach_id, program_id, athlete_id, start_date)
+  values (v_coach_id, v_new_program_id, p_athlete_id, v_start_date);
+
+  return v_new_program_id;
+end;
+$$;

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CHECK_WITH_COACH_MESSAGE } from "@/lib/ai/athlete-adjust-copy";
+import { effectiveScaling } from "@/lib/ai/athlete-adjust-schema";
 import { scaleWorkoutDetailsSchema } from "@/lib/ai/scale-workout";
 import { SCHEDULE_LABEL, loadAthleteSchedule } from "@/lib/athlete-schedule";
 import { getToday } from "@/lib/time-zone";
@@ -109,7 +110,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
   const { data: scalings } = todayWorkoutIds.length
     ? await supabase
         .from("athlete_workout_scalings")
-        .select("workout_id, modifications, details, athlete_adjusted_at, coach_modifications")
+        .select("workout_id, modifications, details, athlete_adjusted_at, coach_modifications, coach_details")
         .eq("athlete_id", viewer.athleteId)
         .in("workout_id", todayWorkoutIds)
     : { data: [] };
@@ -137,7 +138,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                 movement_id: movement?.id,
                 name: movement?.name ?? "",
               }));
-            const scaling = scalingByWorkout.get(workout.id);
+            const scaling = effectiveScaling(scalingByWorkout.get(workout.id), currentDate);
             const scalingDetails = scaling ? scaleWorkoutDetailsSchema.safeParse(scaling.details) : null;
             const todayResult = todayResultForWorkout(workout);
             const adjusted = Boolean(scaling?.athlete_adjusted_at);
