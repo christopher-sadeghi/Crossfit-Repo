@@ -1,3 +1,4 @@
+import { loadRecentCheckIns } from "@/lib/check-in";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -228,7 +229,8 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
   };
 }
 
-const WRITE_WORKOUT_SYSTEM = `You help a CrossFit coach program WODs. The coach reviews every suggestion before anything changes.
+const WRITE_WORKOUT_SYSTEM = `- Use recent_check_ins: readiness, sleep, soreness areas, stress, energy and mood. Lower readiness or high soreness means scale down and avoid sore areas.
+You help a CrossFit coach program WODs. The coach reviews every suggestion before anything changes.
 Rules:
 - Use ONLY movements from the provided library list, referenced by movement_id. Never invent movements.
 - Loads are in the coach's preferred units (<units>). Use realistic barbell, dumbbell, and kettlebell numbers (Rx loads for an intermediate athlete unless the request says otherwise).
@@ -259,6 +261,7 @@ async function loadAthleteProgrammingContext(supabase: SupabaseClient<Database>,
   if (resultsError) throw resultsError;
   return {
     ...athlete,
+    recent_check_ins: await loadRecentCheckIns(supabase, athleteId, await getToday(), 7),
     goals: goals ?? [],
     recent_results: (results ?? []).map(({ workouts: resultWorkout, load_kg, ...result }) => ({
       ...result,

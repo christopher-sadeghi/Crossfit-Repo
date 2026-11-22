@@ -1,3 +1,4 @@
+import { loadRecentCheckIns } from "@/lib/check-in";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -39,7 +40,8 @@ export const progressSummaryInputSchema = z.object({
   goals: z.array(z.object({ id: z.string(), title: z.string() })),
 });
 
-const SYSTEM = `You help a CrossFit coach write a short progress note about one athlete. The coach reviews the note before it is saved.
+const SYSTEM = `- Use recent_check_ins: readiness, sleep, soreness areas, stress, energy and mood. Lower readiness or high soreness means scale down and avoid sore areas.
+You help a CrossFit coach write a short progress note about one athlete. The coach reviews the note before it is saved.
 Rules:
 - Use only the data provided. Do not invent numbers.
 - Return one entry per goal in the goals list, using its id. Status: "reached" if achieved or the target is met; "on_track" if the current value and pace look likely to hit the target by its date; "behind" if not; "no_data" if there is no current value or start value to judge from.
@@ -124,7 +126,14 @@ async function buildRequest(supabase: SupabaseClient<Database>, { athleteId }: {
     .map((row) => ({ measured_on: row.measured_on, weight_kg: row.weight_kg == null ? null : Number(row.weight_kg) }));
   const trend = weightTrend(recentWeights);
 
+  const recentCheckIns = await loadRecentCheckIns(supabase, athleteId, asOf, 28);
+  const checkInAverages = Object.fromEntries((["readiness", "sleep_hours", "soreness", "stress", "energy", "mood"] as const).map((key) => {
+    const values = recentCheckIns.flatMap((entry) => entry[key] == null ? [] : [Number(entry[key])]);
+    return [key, values.length ? Math.round(values.reduce((a, b) => a + b, 0) / values.length * 10) / 10 : null];
+  }));
   const promptData = {
+    recent_check_ins: recentCheckIns.filter((entry) => entry.date >= addDays(asOf, -6)),
+    check_in_averages_last_28_days: checkInAverages,
     athlete: { first_name: athlete.first_name, experience_level: athlete.experience_level },
     as_of: asOf,
     units,

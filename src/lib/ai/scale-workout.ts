@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { WORKOUT_TYPES } from "@/app/(app)/programs/options";
 import { formatScore, fromKgPrecise, toKg, type Units } from "@/lib/units";
 import type { Database, Json, Tables } from "@/lib/supabase/database.types";
+import { loadRecentCheckIns } from "@/lib/check-in";
 import { getToday } from "@/lib/time-zone";
 
 import { ApprovalError } from "./errors";
@@ -29,6 +30,18 @@ export const scaleWorkoutSchema = z.object({
 });
 
 export const scaleWorkoutInputSchema = z.object({
+  recent_check_ins: z.array(z.object({
+    date: z.string(),
+    sleep_hours: z.number().nullable(),
+    sleep_quality: z.number().nullable(),
+    soreness: z.number().nullable(),
+    soreness_areas: z.array(z.string()),
+    stress: z.number().nullable(),
+    energy: z.number().nullable(),
+    mood: z.number().nullable(),
+    readiness: z.number().nullable(),
+    note: z.string().nullable(),
+  })).default([]),
   workout_id: z.string().uuid(),
   workout_updated_at: z.string(),
   units: z.enum(["lb", "kg"]),
@@ -146,7 +159,8 @@ export const scaleWorkoutDetailsSchema = z.object({
   scheduled_on: z.string().optional(),
 });
 
-const SCALE_WORKOUT_SYSTEM = `You help a CrossFit coach scale a WOD for one athlete. The coach reviews every suggestion before anything changes.
+const SCALE_WORKOUT_SYSTEM = `- Use recent_check_ins: readiness, sleep, soreness areas, stress, energy and mood. Lower readiness or high soreness means scale down and avoid sore areas.
+You help a CrossFit coach scale a WOD for one athlete. The coach reviews every suggestion before anything changes.
 Rules:
 - Keep the WOD's stimulus and format.
 - Return exactly one change for each original movement, in the same order. Copy its original_movement_id exactly.
@@ -234,6 +248,7 @@ export async function buildScaleRequest(
     workout: workoutContext,
     library,
     recent_results: recentResults,
+    recent_check_ins: await loadRecentCheckIns(supabase, athlete.id, asOf, 7),
   } satisfies Json;
 
   return {

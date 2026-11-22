@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SUGGESTION_LABELS } from "@/lib/ai/suggestions";
+import { CHECK_IN_COLUMNS, checkInAttention } from "@/lib/check-in";
+import { addDays } from "@/lib/nutrition";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCoach } from "@/lib/coach";
 import { getOrigin } from "@/lib/auth/redirect";
@@ -20,13 +22,14 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatScore, formatWeight, type Units } from "@/lib/units";
 
 import { ArchiveButton } from "../archive-button";
+import { CheckInsTab } from "./check-ins-tab";
 import { AthleteAccessCard } from "../access-card";
 import { PersonalProgramCopyForm } from "./program-copy-form";
 import { GoalBar } from "./progress/goal-bar";
 import { formatHeadline, type WhiteboardWorkout } from "../../programs/workouts/whiteboard";
 import { LEVEL_LABELS } from "../options";
 
-const TABS = ["overview", "workouts", "journal", "nutrition", "goals", "ai"] as const;
+const TABS = ["overview", "check-ins", "workouts", "journal", "nutrition", "goals", "ai"] as const;
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> };
 type ProfileScheduleWorkout = WhiteboardWorkout & {
@@ -113,7 +116,12 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const latestWeight = latestMetric(metrics, "weight_kg");
   const results = resultsRes.data ?? [];
   const prs = personalRecords(results);
-  const attention = needsAttention(results, await getToday());
+  const today = now;
+  const { data: checkIns, error: checkInsError } = await supabase.from("athlete_journal_entries").select(CHECK_IN_COLUMNS).eq("athlete_id", id).gte("entry_on", addDays(today, -55)).lte("entry_on", today).order("entry_on", { ascending: false });
+  if (checkInsError) throw checkInsError;
+  const workoutAttention = needsAttention(results, today);
+  const checkAttention = checkInAttention(checkIns ?? [], today);
+  const attention = { flagged: workoutAttention.flagged || checkAttention.flagged, reasons: [...workoutAttention.reasons, ...checkAttention.reasons.map((text) => ({ date: today, kind: "check-in" as const, text }))] };
   const target = targetRes.data;
   const invite = inviteRes.data;
   const inviteUrl = invite ? `${await getOrigin()}/join/${invite.token}` : null;
@@ -170,6 +178,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="workouts">Workouts</TabsTrigger>
+          <TabsTrigger value="check-ins">Check-ins</TabsTrigger>
           <TabsTrigger value="journal">Journal</TabsTrigger>
           <TabsTrigger value="nutrition">Nutrition</TabsTrigger>
           <TabsTrigger value="goals">Goals</TabsTrigger>
@@ -192,7 +201,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
                     <li key={`${reason.date}-${reason.kind}-${index}`} className="flex flex-wrap gap-x-2">
                       <span className="font-medium">{formatDate(reason.date)}</span>
                       <span>
-                        {reason.kind === "pain" ? "Pain noted" : "High effort"}: {reason.text}
+                        {reason.kind === "pain" ? "Pain noted" : reason.kind === "check-in" ? "Check-in" : "High effort"}: {reason.text}
                       </span>
                     </li>
                   ))}
@@ -362,6 +371,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
           </ListCard>
         </TabsContent>
 
+        <TabsContent value="check-ins"><CheckInsTab entries={checkIns ?? []} today={today} /></TabsContent>
         <TabsContent value="journal" className="grid gap-4">
           <ListCard title="Daily journal" empty="No journal entries yet. Athletes fill these in from their Journal tab." show={journal.length > 0}>
             <Table>

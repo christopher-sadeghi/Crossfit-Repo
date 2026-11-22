@@ -9,11 +9,10 @@ export const JOURNAL_QUESTIONS = [
   { key: "late_meal", label: "Ate within 2h of bed" },
   { key: "screens_in_bed", label: "Screens in bed" },
   { key: "mobility", label: "Stretching / mobility" },
-  { key: "high_stress", label: "High stress" },
 ] as const;
 
 export const JOURNAL_COLUMNS =
-  "entry_on, sleep_hours, sleep_quality, notes, alcohol, late_caffeine, hit_water_goal, late_meal, screens_in_bed, mobility, high_stress";
+  "entry_on, sleep_hours, sleep_quality, notes, alcohol, late_caffeine, hit_water_goal, late_meal, screens_in_bed, mobility";
 
 export type JournalQuestionKey = (typeof JOURNAL_QUESTIONS)[number]["key"];
 
