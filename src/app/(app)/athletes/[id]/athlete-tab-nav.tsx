@@ -25,7 +25,7 @@ export function AthleteTabNav({
     setValue(nextValue);
     const url = new URL(window.location.href);
     url.searchParams.set("tab", nextValue);
-    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   };
 
   return (
