@@ -61,7 +61,7 @@ export async function saveFood(_: FormState, formData: FormData): Promise<FormSt
   const supabase = await createClient();
 
   const { error } = id
-    ? await supabase.from("food_logs").update(food).eq("id", id).select("id").single()
+    ? await supabase.from("food_logs").update({ ...food, ingredients: null }).eq("id", id).select("id").single()
     : await supabase.from("food_logs").insert(food);
   if (error) return failure(formData, "Couldn't save the entry. Please try again.");
 
