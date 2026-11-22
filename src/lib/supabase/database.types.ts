@@ -9,6 +9,36 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      body_measurements: {
+        Row: { id: string; coach_id: string; athlete_id: string; measured_on: string; site: string; value_cm: number; created_by: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; coach_id: string; athlete_id: string; measured_on: string; site: string; value_cm: number; created_by?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; coach_id?: string; athlete_id?: string; measured_on?: string; site?: string; value_cm?: number; created_by?: string | null; created_at?: string; updated_at?: string };
+        Relationships: [
+          { foreignKeyName: "body_measurements_athlete_id_fkey"; columns: ["athlete_id"]; isOneToOne: false; referencedRelation: "athletes"; referencedColumns: ["id"] },
+          { foreignKeyName: "body_measurements_athlete_id_coach_id_fkey"; columns: ["athlete_id", "coach_id"]; isOneToOne: false; referencedRelation: "athletes"; referencedColumns: ["id", "coach_id"] },
+          { foreignKeyName: "body_measurements_coach_id_fkey"; columns: ["coach_id"]; isOneToOne: false; referencedRelation: "coaches"; referencedColumns: ["id"] }
+        ];
+      };
+      progress_photos: {
+        Row: { id: string; coach_id: string; athlete_id: string; taken_on: string; pose: string; storage_path: string; created_by: string | null; created_at: string };
+        Insert: { id?: string; coach_id: string; athlete_id: string; taken_on: string; pose: string; storage_path: string; created_by?: string | null; created_at?: string };
+        Update: { id?: string; coach_id?: string; athlete_id?: string; taken_on?: string; pose?: string; storage_path?: string; created_by?: string | null; created_at?: string };
+        Relationships: [
+          { foreignKeyName: "progress_photos_athlete_id_fkey"; columns: ["athlete_id"]; isOneToOne: false; referencedRelation: "athletes"; referencedColumns: ["id"] },
+          { foreignKeyName: "progress_photos_athlete_id_coach_id_fkey"; columns: ["athlete_id", "coach_id"]; isOneToOne: false; referencedRelation: "athletes"; referencedColumns: ["id", "coach_id"] },
+          { foreignKeyName: "progress_photos_coach_id_fkey"; columns: ["coach_id"]; isOneToOne: false; referencedRelation: "coaches"; referencedColumns: ["id"] }
+        ];
+      };
+      progress_reminders: {
+        Row: { athlete_id: string; coach_id: string; cadence_weeks: number; starts_on: string; updated_at: string };
+        Insert: { athlete_id: string; coach_id: string; cadence_weeks: number; starts_on: string; updated_at?: string };
+        Update: { athlete_id?: string; coach_id?: string; cadence_weeks?: number; starts_on?: string; updated_at?: string };
+        Relationships: [
+          { foreignKeyName: "progress_reminders_athlete_id_fkey"; columns: ["athlete_id"]; isOneToOne: true; referencedRelation: "athletes"; referencedColumns: ["id"] },
+          { foreignKeyName: "progress_reminders_athlete_id_coach_id_fkey"; columns: ["athlete_id", "coach_id"]; isOneToOne: true; referencedRelation: "athletes"; referencedColumns: ["id", "coach_id"] },
+          { foreignKeyName: "progress_reminders_coach_id_fkey"; columns: ["coach_id"]; isOneToOne: false; referencedRelation: "coaches"; referencedColumns: ["id"] }
+        ];
+      };
       athlete_intakes: {
         Row: { id: string; athlete_id: string; coach_id: string; status: string; current_step: number; answers: Json; requested_at: string; completed_at: string | null; created_at: string; updated_at: string };
         Insert: { id?: string; athlete_id: string; coach_id: string; status?: string; current_step?: number; answers?: Json; requested_at?: string; completed_at?: string | null; created_at?: string; updated_at?: string };

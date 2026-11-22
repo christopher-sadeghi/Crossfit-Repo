@@ -2,6 +2,18 @@ export type Units = "lb" | "kg";
 
 const LB_PER_KG = 2.20462;
 
+export function lengthUnit(units: Units) {
+  return units === "lb" ? "in" : "cm";
+}
+
+export function toCm(value: number, units: Units) {
+  return Math.round((units === "lb" ? value * 2.54 : value) * 10) / 10;
+}
+
+export function fromCm(cm: number, units: Units) {
+  return Math.round((units === "lb" ? cm / 2.54 : cm) * 10) / 10;
+}
+
 export function toKg(value: number, units: Units) {
   return Math.round((units === "lb" ? value / LB_PER_KG : value) * 100) / 100;
 }
