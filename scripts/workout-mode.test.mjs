@@ -101,6 +101,28 @@ test("saved display-unit weights are isolated by units", () => withWorkoutStorag
   assert.deepEqual(restored.states[0].weights, { "0-0": 100 });
 }));
 
+test("changed movement ordering or scaling invalidates saved progress and Rx", () => withWorkoutStorage((records) => {
+  const movements = [{ movement_id: "a", sets: 3, reps: 5, load_kg: null, notes: "@75%" }, { movement_id: "b", sets: 2, reps: 10, load_kg: null, notes: null }];
+  const original = workoutHarness();
+  original.props.workout = { ...original.props.workout, movements };
+  original.render();
+  original.effects()[0]();
+  original.render();
+  original.states[0] = { ...original.states[0], reps: 42, weights: { "0-0": 100 }, done: ["0-0"] };
+  original.render(); original.effects()[1]();
+  const [key, saved] = [...records][0];
+  for (const workout of [{ ...original.props.workout, movements: [...movements].reverse() }, { ...original.props.workout, isScaled: true }, { ...original.props.workout, movements: [{ ...movements[0], sets: 5 }, movements[1]] }]) {
+    records.set(key, saved);
+    const changed = workoutHarness({ workout });
+    changed.effects()[0]();
+    assert.equal(changed.states[0].reps, 0);
+    assert.deepEqual(changed.states[0].weights, {});
+    assert.deepEqual(changed.states[0].done, []);
+    assert.equal(changed.states[0].rx, !workout.isScaled);
+    assert.match(changed.states[2], /version changed/);
+  }
+}));
+
 test("prefill validates numbers, strips control characters and limits notes", () => {
   assert.deepEqual(workoutPrefill({ time_seconds: "125", rounds: "3", load: "105.5", is_rx: "scaled", notes: "Hi\u0000" }), { minutes: "2", seconds: "5", rounds: "3", load: "105.5", is_rx: "scaled", notes: "Hi" });
   assert.deepEqual(workoutPrefill({}), {});

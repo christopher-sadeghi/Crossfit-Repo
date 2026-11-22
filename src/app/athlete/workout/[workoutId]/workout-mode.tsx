@@ -50,6 +50,7 @@ const configSchema = z.discriminatedUnion("mode", [
 ]);
 const savedSchema = z.object({
   createdAt: z.number().nonnegative(),
+  versionFingerprint: z.string(),
   config: configSchema,
   clock: z.object({
     startedAt: z.number().nonnegative().nullable(),
@@ -80,6 +81,22 @@ const emptyClock = { startedAt: null, pausedAt: null, accumulated: 0 };
 const timeLabel = (seconds: number) =>
   `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 
+function createSession(workout: Workout, versionFingerprint: string): Session {
+  return {
+    createdAt: Date.now(),
+    versionFingerprint,
+    config: defaultTimer(workout),
+    clock: emptyClock,
+    rounds: 0,
+    reps: 0,
+    weights: {},
+    done: [],
+    notes: "",
+    rx: !workout.isScaled,
+    completedAtCap: false,
+  };
+}
+
 export function WorkoutMode({
   athleteId,
   date,
@@ -98,19 +115,14 @@ export function WorkoutMode({
   const router = useRouter();
   const storageKey = `workout:${athleteId}:${workout.id}:${date}:${units}`;
   const barKey = `workout-bar:${athleteId}:${units}`;
-  const initial = (): Session => ({
-    createdAt: Date.now(),
-    config: defaultTimer(workout),
-    clock: emptyClock,
-    rounds: 0,
-    reps: 0,
-    weights: {},
-    done: [],
-    notes: "",
-    rx: !workout.isScaled,
-    completedAtCap: false,
+  const versionFingerprint = JSON.stringify({
+    movements: workout.movements.map(({ movement_id, sets, reps, load_kg, notes }) => ({ movement_id, sets, reps, load_kg, notes })),
+    rounds: workout.rounds,
+    time_cap_seconds: workout.time_cap_seconds,
+    isScaled: workout.isScaled,
+    modifications: workout.modifications,
   });
-  const [session, setSession] = useState<Session>(initial);
+  const [session, setSession] = useState<Session>(() => createSession(workout, versionFingerprint));
   const [loaded, setLoaded] = useState(false);
   const [storageWarning, setStorageWarning] = useState("");
   const [bar, setBar] = useState(defaultBar(units));
@@ -131,12 +143,17 @@ export function WorkoutMode({
 
   useEffect(() => {
     const timestamp = Date.now();
+    setSession(createSession(workout, versionFingerprint));
+    previousElapsed.current = 0;
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = savedSchema.safeParse(JSON.parse(saved));
         if (parsed.success && latestResultCreatedAt && Date.parse(latestResultCreatedAt) >= parsed.data.createdAt) {
           localStorage.removeItem(storageKey);
+        } else if (parsed.success && parsed.data.versionFingerprint !== versionFingerprint) {
+          localStorage.removeItem(storageKey);
+          setStorageWarning("Your workout version changed. Saved progress was reset to match it.");
         } else if (parsed.success) {
           setSession(parsed.data);
           previousElapsed.current = elapsedTime(parsed.data.clock, timestamp);
@@ -154,7 +171,7 @@ export function WorkoutMode({
     }
     setNow(timestamp);
     setLoaded(true);
-  }, [storageKey, barKey, units, latestResultCreatedAt]);
+  }, [storageKey, barKey, units, latestResultCreatedAt, workout, versionFingerprint]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -463,7 +480,7 @@ export function WorkoutMode({
               onClick={() => {
                 if (window.confirm("Reset all workout progress?")) {
                   previousElapsed.current = 0;
-                  setSession(initial());
+                  setSession(createSession(workout, versionFingerprint));
                   try {
                     localStorage.removeItem(storageKey);
                   } catch {}
