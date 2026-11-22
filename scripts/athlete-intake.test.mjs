@@ -148,7 +148,7 @@ test("canonical coach goal edits survive resend and unchanged saves submit no fi
   await assert.rejects(saveIntakeStep(3, { goals: [{ ...prefill, target_value: 210 }] }), /REDIRECT/);
   assert.deepEqual(writes[1].p_data.goals, [{ id: goal.id, target_value: 210 }]);
   await assert.rejects(saveIntakeStep(3, { goals: [{ ...prefill, target: "Athlete updated squat" }] }), /REDIRECT/);
-  assert.deepEqual(writes[2].p_data.goals, [{ id: goal.id, title: "Athlete updated squat" }]);
+  assert.deepEqual(writes[2].p_data.goals, [{ id: goal.id, title: "Strength: Athlete updated squat" }]);
   const retyped = goalPrefill({ ...goal, title: "Strength: coach changed the type", goal_type: "skill" });
   await assert.rejects(saveIntakeStep(3, { goals: [retyped] }), /REDIRECT/);
   assert.deepEqual(writes[3].p_data.goals, [{ id: goal.id }]);
@@ -165,6 +165,20 @@ test("performance priorities round-trip independently of coach-edited titles", (
     assert.equal(goalPrefill(goal, category).category, category);
     previous = category;
   }
+});
+test("reopening a maximum-length target removes only questionnaire prefixes and preserves canonical titles", () => {
+  const { goalPrefill, goalPayload, goalInputSchema, GOAL_CATEGORIES } = load("src/lib/athlete-intake.ts");
+  for (const category of GOAL_CATEGORIES) {
+    const goal_type = category === "Body composition" ? "body_composition" : category === "Specific skill" ? "skill" : "performance";
+    for (const target of ["", "x".repeat(200)]) {
+      const goal = { id: "35000000-0000-4000-8000-000000000001", status: "active", title: `${category}${target ? `: ${target}` : ""}`, goal_type, target_value: null, target_date: null };
+      const form = goalPrefill(goal, category);
+      assert.equal(form.target, target);
+      assert.deepEqual(goalPayload(goalInputSchema.parse(form)), { id: goal.id });
+    }
+  }
+  const goal = { id: "35000000-0000-4000-8000-000000000001", status: "active", title: "Coach note: squat 205 lb", goal_type: "performance", target_value: 205, target_date: null };
+  assert.equal(goalPrefill(goal).target, goal.title);
 });
 test("server action rejects invalid, empty, unauthorized, future and unknown benchmark input; reports database errors", async () => {
   const { saveIntakeStep, writes } = actionHarness();

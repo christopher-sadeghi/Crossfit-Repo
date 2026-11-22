@@ -23,20 +23,22 @@ export const benchmarkInputSchema = z.object({
 });
 export const goalInputSchema = z.union([
   z.object({ id: z.string().uuid(), status: z.literal("achieved") }),
-  z.object({ id: z.string().uuid().optional(), category: z.enum(GOAL_CATEGORIES), target: z.string().trim().max(200), target_value: optionalNumber, target_date: z.union([z.literal(""), z.string().date()]), original: z.object({ title: z.string(), category: z.enum(GOAL_CATEGORIES), goal_type: z.string(), target_value: z.number().nullable(), target_date: z.string().nullable() }).optional() }),
+  z.object({ id: z.string().uuid().optional(), category: z.enum(GOAL_CATEGORIES), target: z.string().trim().max(200), target_value: optionalNumber, target_date: z.union([z.literal(""), z.string().date()]), original: z.object({ title: z.string(), target: z.string(), category: z.enum(GOAL_CATEGORIES), goal_type: z.string(), target_value: z.number().nullable(), target_date: z.string().nullable() }).optional() }),
 ]);
 export function goalPrefill(goal: { id: string; status: string; title: string; goal_type: string; target_value: number | null; target_date: string | null }, savedCategory?: unknown) {
   const category = goal.goal_type === "body_composition" ? "Body composition" : goal.goal_type === "skill" ? "Specific skill"
     : GOAL_CATEGORIES.find((c) => c !== "Body composition" && c !== "Specific skill" && c === savedCategory)
       ?? GOAL_CATEGORIES.find((c) => c !== "Body composition" && c !== "Specific skill" && (goal.title === c || goal.title.startsWith(`${c}:`))) ?? "Strength";
+  const prefix = GOAL_CATEGORIES.find((c) => goal.title === c || goal.title.startsWith(`${c}: `));
+  const target = prefix ? goal.title === prefix ? "" : goal.title.slice(prefix.length + 2) : goal.title;
   return { id: goal.id, status: goal.status, category,
-    target: goal.title, target_value: goal.target_value ?? "", target_date: goal.target_date ?? "",
-    original: { title: goal.title, category, goal_type: goal.goal_type, target_value: goal.target_value, target_date: goal.target_date },
+    target, target_value: goal.target_value ?? "", target_date: goal.target_date ?? "",
+    original: { title: goal.title, target, category, goal_type: goal.goal_type, target_value: goal.target_value, target_date: goal.target_date },
   };
 }
 export function goalPayload(goal: z.infer<typeof goalInputSchema>) {
   if ("status" in goal) return { id: goal.id };
-  const title = goal.id ? goal.target || goal.category : `${goal.category}${goal.target ? `: ${goal.target}` : ""}`;
+  const title = goal.id && goal.original && goal.target === goal.original.target ? goal.original.title : `${goal.category}${goal.target ? `: ${goal.target}` : ""}`;
   const goal_type = goal.category === "Body composition" ? "body_composition" : goal.category === "Specific skill" ? "skill" : "performance";
   const fields = { title, category: goal.category, goal_type, target_value: goal.target_value, target_date: goal.target_date || null };
   return { id: goal.id, ...Object.fromEntries(Object.entries(fields).filter(([key, value]) => !goal.id || !goal.original || value !== goal.original[key as keyof typeof fields])) };
