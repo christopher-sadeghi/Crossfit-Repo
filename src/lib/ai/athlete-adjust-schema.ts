@@ -49,9 +49,11 @@ export { CHECK_WITH_COACH_MESSAGE } from "./athlete-adjust-copy";
 
 const PAIN_PATTERN =
   /\b(pain\w*|hurts?|hurting|hurt|aches?|aching|achy|sore|soreness|injur\w*|tweak\w*|strain\w*|sprain\w*|swollen|swelling|numb\w*|tingl\w*|throbb\w*|twinge\w*|pinch\w*)\b/i;
+const EXPLICIT_NO_PAIN =
+  /\bno\s+pain(?:\s*(?:\/|or\b|and\b)\s*(?:illness|injur(?:y|ies)))?(?=\s*(?:[.!;]|$|,\s*just\b))/gi;
 
 export function mentionsPain(text: string) {
-  return PAIN_PATTERN.test(text);
+  return PAIN_PATTERN.test(text.replace(EXPLICIT_NO_PAIN, ""));
 }
 
 // The AI must not diagnose or suggest treatment; anything like this is thrown away.
