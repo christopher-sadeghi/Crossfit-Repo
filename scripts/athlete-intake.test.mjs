@@ -32,10 +32,16 @@ test("coach intake summary renders goal titles then categories, never bookkeepin
     if (typeof node === "string" || typeof node === "number") return String(node);
     return [node?.props?.children].flat(Infinity).map((child) => child && typeof child === "object" ? text(child) : typeof child === "string" ? child : "").join("");
   }
-  for (const categories of [{ [goalId]: "Competition", [staleId]: "Strength" }, undefined, "invalid"]) {
+  for (const { categories, title, expected } of [
+    { categories: { [goalId]: "Competition", [staleId]: "Strength" }, title: "Coach approved squat 205 lb", expected: "Coach approved squat 205 lb · Competition · 205" },
+    { categories: undefined, title: "Coach approved squat 205 lb", expected: "Coach approved squat 205 lb · 205" },
+    { categories: "invalid", title: "Coach approved squat 205 lb", expected: "Coach approved squat 205 lb · 205" },
+    { categories: { [goalId]: "Strength" }, title: "Strength: Build dumbbell squat strength", expected: "Strength: Build dumbbell squat strength · 205" },
+    { categories: { [goalId]: "Strength" }, title: "Strength", expected: "Strength · 205" },
+  ]) {
     const db = { from(table) {
       const data = table === "athlete_intakes" ? { status: "completed", current_step: 7, requested_at: "2026-11-23", answers: { goal_ids: [goalId], goal_categories: categories } }
-        : table === "goals" ? [{ id: goalId, title: "Coach approved squat 205 lb", target_value: 205, target_date: null }]
+        : table === "goals" ? [{ id: goalId, title, target_value: 205, target_date: null }]
         : ["body_metrics", "benchmark_results"].includes(table) ? [] : null;
       const q = { select() { return q; }, eq() { return q; }, order() { return q; }, limit() { return q; }, single() { return q; }, maybeSingle() { return q; }, then(resolve) { return Promise.resolve({ data, error: null }).then(resolve); } };
       return q;
@@ -49,7 +55,7 @@ test("coach intake summary renders goal titles then categories, never bookkeepin
       "@/components/suggestions/suggestion-forms": { RequestIntakeAiForm: "form" },
     });
     const rendered = text(await IntakeTab({ athleteId: "athlete", units: "lb" }));
-    assert.ok(rendered.includes(categories && typeof categories === "object" ? "Coach approved squat 205 lb · Competition · 205" : "Coach approved squat 205 lb · 205"));
+    assert.ok(rendered.includes(expected));
     assert.ok(!rendered.includes(goalId));
     assert.ok(!rendered.includes(staleId));
     assert.ok(!rendered.includes("goal categories"));
