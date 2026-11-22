@@ -12,6 +12,8 @@ do $$ begin
 end $$;
 update public.athletes set user_id = '35000000-0000-0000-0000-000000000003' where id = '35000000-0000-0000-0000-000000000011';
 update public.athletes set user_id = '35000000-0000-0000-0000-000000000004' where id = '35000000-0000-0000-0000-000000000012';
+insert into public.goals(id, athlete_id, coach_id, title, goal_type) values
+ ('35000000-0000-0000-0000-000000000021','35000000-0000-0000-0000-000000000011','35000000-0000-0000-0000-000000000001','Coach goal','performance');
 do $$ begin
  assert (select count(*) from public.athlete_intakes where athlete_id::text like '35000000%' and status = 'requested') = 2;
  assert not has_table_privilege('authenticated','public.athlete_intakes','TRUNCATE');
@@ -23,8 +25,8 @@ set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"35000000-0000-0000-0000-000000000003","role":"authenticated"}',true);
 do $$ declare n integer; begin
  assert (select count(*) from public.athlete_intakes) = 1;
- update public.athlete_intakes set answers = '{"sports_background":"Running"}' where athlete_id = '35000000-0000-0000-0000-000000000011';
- get diagnostics n = row_count; assert n = 1;
+ update public.athlete_intakes set answers = '{"goal_ids":["35000000-0000-0000-0000-000000000021"]}' where athlete_id = '35000000-0000-0000-0000-000000000011';
+ get diagnostics n = row_count; assert n = 0;
  update public.athlete_intakes set answers = '{}' where athlete_id = '35000000-0000-0000-0000-000000000012';
  get diagnostics n = row_count; assert n = 0;
  begin
@@ -35,7 +37,7 @@ do $$ declare n integer; begin
    insert into public.athlete_intakes(athlete_id,coach_id) values ('35000000-0000-0000-0000-000000000011','35000000-0000-0000-0000-000000000001');
    raise exception 'Athlete inserted intake';
  exception when insufficient_privilege then null; end;
- raise notice 'PASS: athlete A reads/updates only own intake; insert and cross-athlete RPC rejected';
+ raise notice 'PASS: athlete reads own intake; direct writes, forged bookkeeping and cross-athlete RPC rejected';
 end $$;
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',1,'{"birth_date":"1995-01-01","height_cm":180,"sex":"male","weight_kg":80}','2026-11-21');
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',1,'{"birth_date":"1995-01-01","height_cm":180,"sex":"male","weight_kg":81}','2026-11-21');
@@ -54,7 +56,7 @@ do $$ declare b uuid; begin
  raise notice 'PASS: benchmark saves to canonical table; invalid benchmark rolls back whole step';
 end $$;
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',2,'{"experience_level":"beginner","years_training":1,"crossfit_detail":"New","sports_background":"Running","benchmarks":[]}','2026-11-21');
-select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',3,'{"goals":[{"title":"Strength: squat","goal_type":"performance","target_value":100,"target_date":"2027-01-01"}]}','2026-11-21');
+select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',3,'{"goal_ids":["35000000-0000-0000-0000-000000000021"],"goals":[{"title":"Strength: squat","goal_type":"performance","target_value":100,"target_date":"2027-01-01"}]}','2026-11-21');
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',3,'{"goals":[{"title":"Strength: squat","goal_type":"performance","target_value":110,"target_date":null}]}','2026-11-21');
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',4,'{"injury_list":[{"area":"Knee","severity":"mild","notes":"Avoid jumping"}]}','2026-11-21');
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',4,'{"injury_list":[]}','2026-11-21');
@@ -64,8 +66,9 @@ select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',7,
 do $$ begin
  assert (select status = 'completed' and completed_at is not null and current_step = 7 from public.athlete_intakes);
  assert (select injuries = 'None' and height_cm = 180 from public.athletes where id = '35000000-0000-0000-0000-000000000011');
- assert (select count(*) from public.goals) = 1;
- assert (select target_value from public.goals) = 110;
+ assert (select count(*) from public.goals) = 2;
+ assert (select title from public.goals where id = '35000000-0000-0000-0000-000000000021') = 'Coach goal';
+ assert (select target_value from public.goals where title = 'Strength: squat') = 110;
  assert (select diet_type from public.athlete_food_preferences) = 'none';
  assert (select count(*) from public.benchmark_results) = 0;
  assert (select count(*) from public.body_metrics) = 1;

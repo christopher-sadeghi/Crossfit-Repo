@@ -28,9 +28,6 @@ create policy "Coaches resend intake" on public.athlete_intakes for update to au
   using (coach_id = (select auth.uid())) with check (coach_id = (select auth.uid()));
 create policy "Athletes read intake" on public.athlete_intakes for select to authenticated
   using (athlete_id = (select public.current_athlete_id()));
-create policy "Athletes update intake" on public.athlete_intakes for update to authenticated
-  using (athlete_id = (select public.current_athlete_id()))
-  with check (athlete_id = (select public.current_athlete_id()) and coach_id = (select public.current_athlete_coach_id()));
 create policy "Athletes read own intake metrics" on public.body_metrics for select to authenticated
   using (athlete_id = (select public.current_athlete_id()));
 
