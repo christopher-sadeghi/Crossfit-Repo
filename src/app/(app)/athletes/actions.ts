@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { failure, type FormState } from "@/lib/auth/form-state";
+import { ftInToCm } from "@/lib/height";
 import { createClient } from "@/lib/supabase/server";
 
 import { LEVELS, SEXES } from "./options";
@@ -12,19 +13,57 @@ import { LEVELS, SEXES } from "./options";
 const optional = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), schema.nullable());
 
-const athleteSchema = z.object({
-  first_name: z.string().trim().min(1, "Enter a first name.").max(50),
-  last_name: z.string().trim().min(1, "Enter a last name.").max(50),
-  email: optional(z.string().trim().email("Enter a valid email.")),
-  birth_date: optional(
-    z.string().date("Enter a valid birth date.").refine((d) => new Date(d) < new Date(), "Birth date must be in the past."),
-  ),
-  sex: optional(z.enum(SEXES)),
-  height_cm: optional(z.coerce.number().min(100, "Height must be 100–250 cm.").max(250, "Height must be 100–250 cm.")),
-  experience_level: z.enum(LEVELS, { message: "Choose an experience level." }),
-  injuries: optional(z.string().trim().max(500)),
-  notes: optional(z.string().trim().max(2000)),
-});
+const HEIGHT_RANGE_ERROR = "Height must be between 3 ft 4 in and 8 ft 2 in.";
+const heightPart = z.preprocess(
+  (value) => (value == null || (typeof value === "string" && value.trim() === "") ? null : value),
+  z.coerce.number().nullable(),
+);
+
+const athleteSchema = z
+  .object({
+    first_name: z.string().trim().min(1, "Enter a first name.").max(50),
+    last_name: z.string().trim().min(1, "Enter a last name.").max(50),
+    email: optional(z.string().trim().email("Enter a valid email.")),
+    birth_date: optional(
+      z.string().date("Enter a valid birth date.").refine((d) => new Date(d) < new Date(), "Birth date must be in the past."),
+    ),
+    sex: optional(z.enum(SEXES)),
+    height_ft: heightPart
+      .pipe(z.number().nullable().superRefine((value, ctx) => {
+        if (value != null && !Number.isInteger(value)) {
+          ctx.addIssue({ code: "custom", message: "Feet must be a whole number." });
+        }
+        if (value != null && (value < 3 || value > 8)) {
+          ctx.addIssue({ code: "custom", message: HEIGHT_RANGE_ERROR });
+        }
+      })),
+    height_in: heightPart.pipe(
+      z.number().nullable().superRefine((value, ctx) => {
+        if (value != null && (value < 0 || value >= 12)) {
+          ctx.addIssue({ code: "custom", message: "Inches must be at least 0 and less than 12." });
+        }
+      }),
+    ),
+    experience_level: z.enum(LEVELS, { message: "Choose an experience level." }),
+    injuries: optional(z.string().trim().max(500)),
+    notes: optional(z.string().trim().max(2000)),
+  })
+  .superRefine(({ height_ft, height_in }, ctx) => {
+    if (height_ft == null && height_in != null) {
+      ctx.addIssue({ code: "custom", path: ["height_ft"], message: "Enter feet for height." });
+    }
+
+    if (height_ft != null) {
+      const heightCm = ftInToCm(height_ft, height_in ?? 0);
+      if (heightCm < 100 || heightCm > 250) {
+        ctx.addIssue({ code: "custom", path: ["height_ft"], message: HEIGHT_RANGE_ERROR });
+      }
+    }
+  })
+  .transform(({ height_ft, height_in, ...athlete }) => ({
+    ...athlete,
+    height_cm: height_ft == null ? null : ftInToCm(height_ft, height_in ?? 0),
+  }));
 
 export async function saveAthlete(_: FormState, formData: FormData): Promise<FormState> {
   const parsed = athleteSchema.safeParse(Object.fromEntries(formData));
