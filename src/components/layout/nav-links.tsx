@@ -11,12 +11,15 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 
-const NAV_ITEMS = [
+export type NavItem = { href: string; label: string; icon: LucideIcon };
+
+const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/athletes", label: "Athletes", icon: Users },
   { href: "/attendance", label: "Attendance", icon: ClipboardCheck },
@@ -28,13 +31,22 @@ const NAV_ITEMS = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function NavLinks({ badges = {} }: { badges?: Record<string, number> }) {
+export function NavLinks({
+  items = NAV_ITEMS,
+  badges = {},
+}: {
+  items?: NavItem[];
+  badges?: Record<string, number>;
+}) {
   const pathname = usePathname();
 
   return (
     <nav className="grid gap-1">
-      {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-        const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+      {items.map(({ href, label, icon: Icon }, index) => {
+        const active =
+          index === 0
+            ? pathname === href
+            : pathname === href || pathname.startsWith(`${href}/`);
         return (
           <Link
             key={href}
