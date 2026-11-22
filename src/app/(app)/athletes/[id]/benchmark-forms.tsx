@@ -25,11 +25,13 @@ export function BenchmarkActionForm({
   children,
   label,
   destructive = false,
+  confirmation = "Delete this entry? Deleting a benchmark also removes all its direct results.",
 }: {
   action: (state: FormState, data: FormData) => Promise<FormState>;
   children: ReactNode;
   label: string;
   destructive?: boolean;
+  confirmation?: string;
 }) {
   const [state, submit, pending] = useActionState(action, {});
   return (
@@ -40,9 +42,7 @@ export function BenchmarkActionForm({
       onSubmit={(event) => {
         if (
           destructive &&
-          !window.confirm(
-            "Delete this entry? Deleting a benchmark also removes all its direct results.",
-          )
+          !window.confirm(confirmation)
         )
           event.preventDefault();
       }}
@@ -236,6 +236,7 @@ export function DeleteBenchmarkResult({ id }: { id: string }) {
       action={deleteBenchmarkResult}
       label="Delete entry"
       destructive
+      confirmation="Delete this attempt? Only this benchmark attempt will be removed."
     >
       <input type="hidden" name="id" value={id} />
     </BenchmarkActionForm>

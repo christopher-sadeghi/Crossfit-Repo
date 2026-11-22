@@ -90,3 +90,29 @@ test("result and shared custom/retest forms cancel native resets synchronously, 
   const empty = forms().BenchmarkResultForm({ benchmarks: [], athleteId: "a", today: "2026-01-01", units: "kg" });
   assert.equal(elements(empty, "form").length, 0);
 });
+
+test("result deletion confirms only one attempt, while custom benchmark deletion keeps its warning", () => {
+  const { DeleteBenchmarkResult, BenchmarkActionForm } = forms();
+  const previousWindow = globalThis.window;
+  const prompts = [];
+  let allow = false;
+  globalThis.window = { confirm: (message) => { prompts.push(message); return allow; } };
+  try {
+    const result = BenchmarkActionForm(DeleteBenchmarkResult({ id: "attempt" }).props);
+    const custom = BenchmarkActionForm({ action: () => {}, label: "Delete benchmark & direct results", destructive: true });
+    for (const tree of [result, custom]) {
+      let prevented = false;
+      tree.props.onSubmit({ preventDefault() { prevented = true; } });
+      assert.equal(prevented, true);
+    }
+    assert.equal(prompts[0], "Delete this attempt? Only this benchmark attempt will be removed.");
+    assert.equal(prompts[1], "Delete this entry? Deleting a benchmark also removes all its direct results.");
+    allow = true;
+    result.props.onSubmit({ preventDefault() { assert.fail("Confirmed deletion should submit"); } });
+    BenchmarkActionForm({ action: () => {}, label: "Save" }).props.onSubmit({ preventDefault() { assert.fail("Save should submit without confirmation"); } });
+    assert.equal(prompts.length, 3);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
