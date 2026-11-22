@@ -42,8 +42,9 @@ import { AthleteCalendar } from "./athlete-calendar";
 import { LoadTab } from "./load-tab";
 import { addDays, monday } from "./calendar-dates";
 import { LEVEL_LABELS } from "../options";
+import { AssistantTab } from "./assistant-tab";
 
-const TABS = ["overview", "check-ins", "workouts", "load", "journal", "nutrition", "goals", "ai", "benchmarks", "intake", "consistency", "reports", "form"] as const;
+const TABS = ["overview", "check-ins", "workouts", "load", "journal", "nutrition", "goals", "ai", "assistant", "benchmarks", "intake", "consistency", "reports", "form"] as const;
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; week?: string; date?: string; checkins?: string }> };
 type ProfileScheduleWorkout = WhiteboardWorkout & {
@@ -219,6 +220,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
           <TabsTrigger value="nutrition">Nutrition</TabsTrigger>
           <TabsTrigger value="goals">Goals</TabsTrigger>
           <TabsTrigger value="ai">AI History</TabsTrigger>
+          <TabsTrigger value="assistant">AI chat</TabsTrigger>
           <TabsTrigger value="benchmarks">Benchmarks</TabsTrigger>
           <TabsTrigger value="intake">Intake</TabsTrigger>
           <TabsTrigger value="consistency">Consistency</TabsTrigger>
@@ -495,6 +497,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
           </ListCard>
         </TabsContent>
 
+        <TabsContent value="assistant"><AssistantTab athleteId={id} rules={athlete.assistant_rules} /></TabsContent>
         <TabsContent value="ai">
           <ListCard empty="No AI suggestions for this athlete yet." show={suggestions.length > 0}>
             <Table>

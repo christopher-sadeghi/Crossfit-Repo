@@ -139,13 +139,13 @@ Rules:
 
 export async function buildScaleRequest(
   supabase: SupabaseClient<Database>,
-  params: { athleteId: string | null; workoutId?: string | null; request?: string | null },
+  params: { athleteId: string | null; workoutId?: string | null; request?: string | null; session?: { units: Units; athleteFacing: true } },
 ): Promise<{ input: Json; system: string; prompt: string; schema: z.ZodType }> {
   if (!params.athleteId || !params.workoutId) throw new Error("An athlete and WOD are required.");
 
   const [{ units, library }, { data: athlete, error: athleteError }, { data: workout, error: workoutError }, { data: resultRows, error: resultsError }] =
     await Promise.all([
-      loadWorkoutContext(supabase),
+      loadWorkoutContext(supabase, params.session),
       supabase
         .from("athletes")
         .select("id, first_name, experience_level, injuries, notes, sex, birth_date")
@@ -184,7 +184,7 @@ export async function buildScaleRequest(
     first_name: athlete.first_name,
     experience_level: athlete.experience_level,
     injuries: athlete.injuries,
-    notes: athlete.notes,
+    notes: params.session?.athleteFacing ? null : athlete.notes,
     sex: athlete.sex,
     birth_date: athlete.birth_date,
     age: athlete.birth_date ? ageOn(athlete.birth_date, asOf) : null,
