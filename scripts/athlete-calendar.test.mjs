@@ -193,6 +193,17 @@ test("calendar renders Logged for matching results on any date, including today'
   assert.match(render(today, []), /Trail walk.*Outside · 45 min/);
   assert.match(render(today, []), /tab=workouts&amp;week=2026-11-30&amp;date=2026-12-02#calendar-log-activity/);
   assert.doesNotMatch(render(today, []), /date=2026-12-03#calendar-log-activity/);
+  const calendar = render(today, []);
+  assert.match(calendar, /<button[^>]*>Add from library<\/button>/);
+  assert.match(calendar, /id="add-existing-wod"/);
+  assert.match(calendar, /name="date"[^>]*value="2026-12-02"/);
+  assert.doesNotMatch(calendar, /href="[^"]*#add-existing-wod"/);
+  const source = readFileSync(path.join(root, "src/app/(app)/athletes/[id]/athlete-calendar.tsx"), "utf8");
+  assert.match(source, /onAddFromLibrary\(date\)/);
+  assert.match(source, /menu\.current\.open = false/);
+  assert.match(source, /form\?\.scrollIntoView/);
+  assert.match(source, /select\[name="workout_id"\]/);
+  assert.match(source, /props\.selectedDate !== syncedSelectedDate/);
 });
 
 test("athlete Today keeps distinct disclosure and check-in keys across a local date refresh", async () => {

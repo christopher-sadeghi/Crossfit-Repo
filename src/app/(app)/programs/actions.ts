@@ -76,8 +76,49 @@ export async function placeWorkout(_: FormState, formData: FormData): Promise<Fo
   const { data: program } = await supabase.from("programs").select("weeks").eq("id", placement.program_id).maybeSingle();
   if (!program) return failure(formData, "Program not found.");
   if (placement.week_number > program.weeks) return failure(formData, `This program only has ${program.weeks} weeks.`);
-  const { data: workout } = await supabase.from("workouts").select("athlete_id").eq("id", workout_id).maybeSingle();
+  const { data: workout } = await supabase
+    .from("workouts")
+    .select("athlete_id, program_id, title, workout_type, time_cap_seconds, rounds, description, notes, workout_movements(movement_id, position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes)")
+    .eq("id", workout_id)
+    .maybeSingle();
   if (!workout || workout.athlete_id) return failure(formData, "One-off WODs can't be added to a program.");
+
+  if (workout.program_id) {
+    const { data: copy, error: copyError } = await supabase
+      .from("workouts")
+      .insert({
+        title: workout.title,
+        workout_type: workout.workout_type,
+        time_cap_seconds: workout.time_cap_seconds,
+        rounds: workout.rounds,
+        description: workout.description,
+        notes: workout.notes,
+        program_id: placement.program_id,
+        week_number: placement.week_number,
+        day_number: placement.day_number,
+        athlete_id: null,
+        scheduled_on: null,
+        source_workout_id: null,
+      })
+      .select("id")
+      .single();
+    if (copyError || !copy) return failure(formData, "Couldn't add that WOD. Please try again.");
+
+    const movements = workout.workout_movements ?? [];
+    if (movements.length) {
+      const { error: movementError } = await supabase
+        .from("workout_movements")
+        .insert(movements.map((movement) => ({ ...movement, workout_id: copy.id })));
+      if (movementError) {
+        await supabase.from("workouts").delete().eq("id", copy.id);
+        return failure(formData, "Couldn't copy that WOD's movements. Please try again.");
+      }
+    }
+
+    revalidatePath(`/programs/${placement.program_id}`);
+    revalidatePath("/programs/workouts");
+    return { message: "WOD copied to the calendar." };
+  }
 
   const { count, error } = await supabase
     .from("workouts")

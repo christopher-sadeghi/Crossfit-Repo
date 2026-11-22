@@ -31,6 +31,7 @@ import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_LOAD_WARNING_RATIO, gymSessionLoad } from "@/lib/training-load";
 import { loadActivities, loadTrainingLoad } from "@/lib/training-load-data";
 import { formatDate, formatScore, formatWeight, type Units } from "@/lib/units";
+import { loadWorkoutLibrary } from "@/lib/workout-library";
 
 import { ArchiveButton } from "../archive-button";
 import { CheckInsTab } from "./check-ins-tab";
@@ -92,7 +93,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
     groupProgramsRes,
     athleteAssignmentsRes,
     journalRes,
-    libraryRes,
+    library,
     checkInsRes,
   ] = await Promise.all([
     loadLiftMaxes(supabase, id),
@@ -136,7 +137,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
       .eq("athlete_id", id)
       .order("entry_on", { ascending: false })
       .limit(30),
-    supabase.from("workouts").select("id, title").is("athlete_id", null).is("program_id", null).order("title"),
+    loadWorkoutLibrary(supabase),
     supabase
       .from("athlete_journal_entries")
       .select(CHECK_IN_COLUMNS)
@@ -287,7 +288,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
             items={scheduleItems}
             activities={calendarActivities.map(({ id, performed_on, activity_type, custom_label, duration_minutes }) => ({ id, performed_on, activity_type, custom_label, duration_minutes }))}
             results={results.map(({ workout_id, performed_on }) => ({ workout_id, performed_on }))}
-            library={libraryRes.data ?? []}
+            library={library}
             programs={(athleteAssignmentsRes.data ?? []).flatMap((assignment) => assignment.programs ? [assignment.programs] : [])}
           />
           <Card id="calendar-log-activity">
