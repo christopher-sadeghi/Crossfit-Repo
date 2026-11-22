@@ -4,6 +4,7 @@ import { scaleWorkoutDetailsSchema } from "./ai/scale-workout-schema";
 export type WorkoutMovement = {
   movement_id: string; name: string; sets: number | null; reps: number | null;
   load_kg: number | null; notes: string | null;
+  reason?: string;
   distance_m?: number | null; calories?: number | null; duration_seconds?: number | null;
 };
 type BaseWorkout = { movements: WorkoutMovement[]; rounds: number | null; time_cap_seconds: number | null };

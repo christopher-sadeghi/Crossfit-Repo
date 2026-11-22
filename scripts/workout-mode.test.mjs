@@ -148,6 +148,29 @@ test("strength plates are shown for each set's edited weight, not just set one",
   assert.equal(elements(h.render()).filter((node) => node.type.name === "PlateDisplay").length, 0);
 });
 
+test("AI-adjusted EMOM retains reason guidance and prefers an explicit scaled load over percentages", () => {
+  const { fromKgPrecise } = load("src/lib/units.ts");
+  const base = { id: "w", title: "EMOM", workout_type: "emom", time_cap_seconds: 600, rounds: 10, description: "@90%", movements: [{ movement_id: "squat", name: "Back Squat", sets: 1, reps: 5, load_kg: 100, notes: "@75%" }] };
+  const reason = "Use about 130 lb today to keep the squats comfortable.";
+  const movement = { original_movement_id: "squat", movement_id: "squat", movement_name: "Back Squat", sets: 1, reps: 3, distance_m: null, calories: null, duration_seconds: null, reason };
+  const scaling = { modifications: "Easier today", athlete_adjusted_at: "2026-01-01T10:00:00Z", coach_modifications: null, coach_details: null, details: { source: "ai", suggestion_id: "12345678-1234-4234-8234-123456789012", scheduled_on: "2026-01-01", movements: [] } };
+  for (const load_kg of [null, 58.97]) {
+    const workout = workoutVersion(base, { ...scaling, details: { ...scaling.details, movements: [{ ...movement, load_kg }] } }, "2026-01-01");
+    assert.equal(workout.movements[0].reason, reason);
+    assert.equal(workout.movements[0].load_kg, load_kg);
+    const h = workoutHarness({ workout, units: "lb", maxes: load_kg == null ? [] : [{ movement_id: "squat", oneRmKg: 200 }] });
+    h.states[1] = true;
+    const nodes = elements(h.render());
+    assert.ok(nodes.some((node) => node.type === "p" && node.props.children === reason));
+    const input = nodes.find((node) => node.type === "input" && node.props["aria-label"] === "Back Squat working weight (lb)");
+    assert.equal(input.props.value, load_kg == null ? "" : fromKgPrecise(load_kg, "lb"));
+    if (load_kg != null) assert.ok(nodes.some((node) => node.type.name === "PlateDisplay" && node.props.weight === 130));
+  }
+  const unscaled = workoutHarness({ workout: { ...base, isScaled: false } });
+  unscaled.states[1] = true;
+  assert.equal(elements(unscaled.render()).some((node) => node.type === "p" && node.props.children === reason), false);
+});
+
 test("prefill validates numbers, strips control characters and limits notes", () => {
   assert.deepEqual(workoutPrefill({ time_seconds: "125", rounds: "3", load: "105.5", is_rx: "scaled", notes: "Hi\u0000" }), { minutes: "2", seconds: "5", rounds: "3", load: "105.5", is_rx: "scaled", notes: "Hi" });
   assert.deepEqual(workoutPrefill({}), {});

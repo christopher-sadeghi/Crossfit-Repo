@@ -118,12 +118,13 @@ export function WorkoutMode({
   const barKey = `workout-bar:${athleteId}:${units}`;
   const versionFingerprint = JSON.stringify({
     movements: workout.movements.map(
-      ({ movement_id, sets, reps, load_kg, notes }) => ({
+      ({ movement_id, sets, reps, load_kg, notes, reason }) => ({
         movement_id,
         sets,
         reps,
         load_kg,
         notes,
+        reason,
       }),
     ),
     rounds: workout.rounds,
@@ -306,6 +307,11 @@ export function WorkoutMode({
   }
 
   function movementLoad(movement: WorkoutMovement, set: number) {
+    if (movement.load_kg != null)
+      return {
+        weight: fromKgPrecise(movement.load_kg, units),
+        label: "Prescribed",
+      };
     const percentages = parsePercentages(movement.notes, movement.sets ?? 1);
     const percent = (
       percentages.length
@@ -315,11 +321,6 @@ export function WorkoutMode({
     const max = maxes.find(
       (m) => m.movement_id === movement.movement_id,
     )?.oneRmKg;
-    if (movement.load_kg != null)
-      return {
-        weight: fromKgPrecise(movement.load_kg, units),
-        label: "Prescribed",
-      };
     if (percent && max)
       return {
         weight: percentageLoad(max, percent, units, bar).weight,
@@ -667,6 +668,9 @@ export function WorkoutMode({
                 </p>
                 {movement.notes && (
                   <p className="text-slate-300">{movement.notes}</p>
+                )}
+                {movement.reason && (
+                  <p className="text-sm text-slate-300">{movement.reason}</p>
                 )}
                 {workout.workout_type === "strength" ? (
                   <div
