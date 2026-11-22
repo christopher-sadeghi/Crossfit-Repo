@@ -47,7 +47,8 @@ export function ageOn(birthDate: string, asOf: string) {
   return age;
 }
 
-export async function loadWorkoutContext(supabase: SupabaseClient<Database>) {
+export async function loadWorkoutContext(supabase: SupabaseClient<Database>, session?: { units: Units }) {
+  if (session) return { units: session.units, library: await loadWorkoutMovementLibrary(supabase) };
   const [{ data: coach, error: coachError }, library] = await Promise.all([
     supabase.from("coaches").select("units").maybeSingle(),
     loadWorkoutMovementLibrary(supabase),

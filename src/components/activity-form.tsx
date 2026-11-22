@@ -11,31 +11,34 @@ import { draftActivity } from "@/lib/ai/activity-draft";
 import { ACTIVITY_TYPES, activityLabel, distanceUnit, fromActivityMeters, type ActivityDraft, type AthleteActivity } from "@/lib/athlete-activities";
 import type { FormState } from "@/lib/auth/form-state";
 import type { Units } from "@/lib/units";
+import type { AssistantCardIdentity } from "@/lib/ai/assistant-card-actions";
+import { saveAssistantActivity } from "@/app/athlete/assistant/actions";
 
-type Props = { athleteId: string; today: string; defaultDate?: string; units: Units; activity?: AthleteActivity };
+type Props = { athleteId: string; today: string; defaultDate?: string; units: Units; activity?: AthleteActivity; initialDraft?: ActivityDraft; assistantCard?: AssistantCardIdentity };
 
 function distanceValue(meters: number | null | undefined, units: Units) {
   return meters == null ? "" : String(Number(fromActivityMeters(meters, units).toPrecision(12)));
 }
 
-export function ActivityForm({ athleteId, today, defaultDate = today, units, activity }: Props) {
+export function ActivityForm({ athleteId, today, defaultDate = today, units, activity, initialDraft, assistantCard }: Props) {
   const initialValues = {
-    activity_type: activity?.activity_type ?? "",
-    custom_label: activity?.custom_label ?? "",
-    performed_on: activity?.performed_on ?? defaultDate,
-    duration_minutes: String(activity?.duration_minutes ?? ""),
-    rpe: String(activity?.rpe ?? ""),
-    distance: distanceValue(activity?.distance_m, units),
+    activity_type: activity?.activity_type ?? initialDraft?.activity_type ?? "",
+    custom_label: activity?.custom_label ?? initialDraft?.custom_label ?? "",
+    performed_on: activity?.performed_on ?? initialDraft?.performed_on ?? defaultDate,
+    duration_minutes: String(activity?.duration_minutes ?? initialDraft?.duration_minutes ?? ""),
+    rpe: String(activity?.rpe ?? initialDraft?.rpe ?? ""),
+    distance: distanceValue(activity?.distance_m ?? initialDraft?.distance_m, units),
     notes: activity?.notes ?? "",
   };
   const [values, setValues] = useState(initialValues);
   const [description, setDescription] = useState("");
-  const [draft, setDraft] = useState<ActivityDraft | null>(null);
+  const [draft, setDraft] = useState<ActivityDraft | null>(initialDraft ?? null);
   const [draftError, setDraftError] = useState("");
   const [draftPending, startDraft] = useTransition();
   const [state, action, pending] = useActionState(async (previous: FormState, data: FormData) => {
     try {
-      const result = await saveActivity(athleteId, activity?.id ?? null, previous, data);
+      const result = assistantCard ? await saveAssistantActivity(assistantCard, previous, data)
+        : await saveActivity(athleteId, activity?.id ?? null, previous, data);
       if (!activity && result.message) {
         setValues(initialValues);
         setDraft(null);
@@ -85,9 +88,11 @@ export function ActivityForm({ athleteId, today, defaultDate = today, units, act
     });
   }
 
+  if (initialDraft && state.message) return <p role="status" className="text-sm">{state.message}</p>;
+
   return (
     <div className="grid gap-4">
-      {!activity && (
+      {!activity && !initialDraft && (
         <div className="grid gap-2 rounded-lg border p-3">
           <Label htmlFor={`${id}-description`}>Describe what you did</Label>
           <Textarea id={`${id}-description`} value={description} maxLength={1000}
