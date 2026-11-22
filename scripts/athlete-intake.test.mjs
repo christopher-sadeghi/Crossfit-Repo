@@ -10,7 +10,7 @@ const root = path.resolve(import.meta.dirname, "..");
 function load(relative, overrides = {}) {
   const filename = path.resolve(root, relative);
   const loaded = { exports: {} };
-  const js = ts.transpileModule(readFileSync(filename, "utf8"), { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, esModuleInterop: true } }).outputText;
+  const js = ts.transpileModule(readFileSync(filename, "utf8"), { fileName: filename, compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const localRequire = (id) => id in overrides ? overrides[id] : id.startsWith("@/") ? load(`src/${id.slice(2)}.ts`, overrides) : id.startsWith(".") ? load(path.resolve(path.dirname(filename), `${id}.ts`), overrides) : require(id);
   new Function("require", "module", "exports", js)(localRequire, loaded, loaded.exports);
   return loaded.exports;
@@ -85,6 +85,37 @@ test("server action uses canonical fields, coach units and local today", async (
   await assert.rejects(saveIntakeStep(3, valid[2]), /REDIRECT/);
   assert.equal(writes[1].p_data.goals[0].goal_type, "performance");
   await assert.rejects(saveIntakeStep(7, valid[6]), /REDIRECT:\/athlete$/);
+});
+test("achieved goals render without edit controls, occupy picks and submit identity only", async () => {
+  const goals = [1, 2, 3].map((n) => ({ id: `35000000-0000-4000-8000-00000000000${n}`, status: "achieved", category: "Strength", target: "Squat", target_value: 100, target_date: "2026-01-01" }));
+  let submission;
+  let pending;
+  const { IntakeForm } = load("src/app/athlete/onboarding/intake-form.tsx", {
+    react: { useState: (initial) => [initial, () => {}], useTransition: () => [false, (fn) => { pending = fn(); }] },
+    "next/link": "a",
+    "@/components/ui/button": { Button: "button" },
+    "@/components/ui/input": { Input: "input" },
+    "@/components/ui/textarea": { Textarea: "textarea" },
+    "./actions": { saveIntakeStep: async (step, input) => { submission = { step, input }; } },
+  });
+  function elements(node, type) {
+    if (!node || typeof node !== "object") return [];
+    return [...(node.type === type ? [node] : []), ...[node.props?.children].flat(Infinity).flatMap((child) => elements(child, type))];
+  }
+  const tree = IntakeForm({ step: 3, values: { goals }, benchmarks: [], units: "kg" });
+  assert.match(JSON.stringify(tree), /Achieved/);
+  assert.equal(elements(tree, "input").length, 0);
+  assert.equal(elements(tree, "select").length, 0);
+  assert.equal(elements(tree, "button").some((button) => button.props.children === "Remove"), false);
+  assert.equal(elements(tree, "button").find((button) => button.props.children === "Add goal").props.disabled, true);
+  elements(tree, "form")[0].props.onSubmit({ preventDefault() {} });
+  await pending;
+  assert.deepEqual(submission.input.goals, goals.map(({ id, status }) => ({ id, status })));
+  assert.equal(schemas[2].safeParse(submission.input).success, true);
+  assert.equal(schemas[2].safeParse({ goals: [...goals, valid[2].goals[0]] }).success, false);
+  const { saveIntakeStep, writes } = actionHarness();
+  await assert.rejects(saveIntakeStep(3, submission.input), /REDIRECT/);
+  assert.deepEqual(writes[0].p_data.goals, goals.map(({ id }) => ({ id })));
 });
 test("server action rejects invalid, empty, unauthorized, future and unknown benchmark input; reports database errors", async () => {
   const { saveIntakeStep, writes } = actionHarness();

@@ -41,7 +41,7 @@ export async function saveIntakeStep(step: number, input: unknown): Promise<{ er
   }
   if (step === 3) {
     const v = intakeSchemas[2].parse(input);
-    payload = { goals: v.goals.map((g) => ({ id: g.id, title: `${g.category}${g.target ? `: ${g.target}` : ""}`, goal_type: g.category === "Body composition" ? "body_composition" : g.category === "Specific skill" ? "skill" : "performance", target_value: g.target_value, target_date: g.target_date || null })) };
+    payload = { goals: v.goals.map((g) => "status" in g ? { id: g.id } : ({ id: g.id, title: `${g.category}${g.target ? `: ${g.target}` : ""}`, goal_type: g.category === "Body composition" ? "body_composition" : g.category === "Specific skill" ? "skill" : "performance", target_value: g.target_value, target_date: g.target_date || null })) };
   }
   const { error } = await supabase.rpc("save_athlete_intake_step", { p_athlete_id: viewer.athleteId, p_step: step, p_data: payload as Json, p_today: today });
   if (error) return { error: "Couldn't save your answers. Please try again." };
