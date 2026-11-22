@@ -13,6 +13,13 @@ import {
   saveCustomBenchmark,
 } from "./benchmark-actions";
 
+function preserveFormValues(form: HTMLFormElement | null) {
+  if (!form) return;
+  const preventReset = (event: Event) => event.preventDefault();
+  form.addEventListener("reset", preventReset);
+  return () => form.removeEventListener("reset", preventReset);
+}
+
 export function BenchmarkActionForm({
   action,
   children,
@@ -28,7 +35,7 @@ export function BenchmarkActionForm({
   return (
     <form
       action={submit}
-      onReset={(event) => event.preventDefault()}
+      ref={preserveFormValues}
       className="grid gap-3"
       onSubmit={(event) => {
         if (
@@ -109,7 +116,7 @@ export function BenchmarkResultForm({
   return (
     <form
       action={submit}
-      onReset={(event) => event.preventDefault()}
+      ref={preserveFormValues}
       className="grid gap-4"
     >
       <input type="hidden" name="athlete_id" value={athleteId} />

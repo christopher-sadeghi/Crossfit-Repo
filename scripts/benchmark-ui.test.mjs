@@ -7,16 +7,16 @@ import ts from "typescript";
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, "..");
-function load(relative) {
+function load(relative, overrides = {}) {
   const filename = path.resolve(root, relative);
   const loaded = { exports: {} };
   const js = ts.transpileModule(readFileSync(filename, "utf8"), {
     compilerOptions: { target: ts.ScriptTarget.ES2017, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
     fileName: filename,
   }).outputText;
-  const localRequire = (id) => id === "recharts"
+  const localRequire = (id) => overrides[id] ?? (id === "recharts"
     ? Object.fromEntries(["CartesianGrid", "Line", "LineChart", "ResponsiveContainer", "Tooltip", "XAxis", "YAxis"].map((name) => [name, name]))
-    : id.startsWith("@/") ? load(`src/${id.slice(2)}.ts`) : require(id);
+    : id.startsWith("@/") ? load(`src/${id.slice(2)}.ts`, overrides) : require(id));
   new Function("require", "module", "exports", js)(localRequire, loaded, loaded.exports);
   return loaded.exports;
 }
@@ -59,4 +59,34 @@ test("lift and empty trends never fabricate zeroes for absent estimates or score
   assert.deepEqual(trend([]).rows, []);
   assert.deepEqual(trend([point()]).rows.map((p) => p.value), [null]);
   assert.match(trend([point()]).label, /No plottable scores/);
+});
+
+function forms(state = {}) {
+  const overrides = {
+    react: { ...require("react"), useState: (initial) => [initial, () => {}], useId: () => "test", useActionState: () => [state, () => {}, false] },
+    "@/components/ui/button": { Button: "button" },
+    "@/components/ui/input": { Input: "input" },
+    "@/components/ui/textarea": { Textarea: "textarea" },
+    "./benchmark-actions": {},
+  };
+  return load("src/app/(app)/athletes/[id]/benchmark-forms.tsx", overrides);
+}
+test("result and shared custom/retest forms cancel native resets synchronously, including success and error states", () => {
+  for (const state of [{}, { message: "Result saved." }, { error: "Invalid score" }]) {
+    const { BenchmarkResultForm, BenchmarkActionForm } = forms(state);
+    const result = BenchmarkResultForm({ benchmarks: [{ id: "lift", name: "Squat", kind: "lift", workout_type: "strength" }], athleteId: "a", today: "2026-01-01", units: "kg" });
+    const shared = BenchmarkActionForm({ action: () => {}, label: "Save interval", children: null });
+    for (const tree of [result, shared]) {
+      const target = new EventTarget();
+      const cleanup = tree.props.ref(target);
+      assert.equal(target.dispatchEvent(new Event("reset", { cancelable: true })), false);
+      cleanup();
+      assert.equal(target.dispatchEvent(new Event("reset", { cancelable: true })), true);
+    }
+    const selects = elements(result, "select");
+    assert.equal(selects[0].props.value, "lift");
+    assert.equal(selects[1].props.value, "1");
+  }
+  const empty = forms().BenchmarkResultForm({ benchmarks: [], athleteId: "a", today: "2026-01-01", units: "kg" });
+  assert.equal(elements(empty, "form").length, 0);
 });
