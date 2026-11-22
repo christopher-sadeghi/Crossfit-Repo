@@ -85,6 +85,43 @@ export const scaleWorkoutInputSchema = z.object({
   ),
 });
 
+export function applyScaleWorkoutLoadEdits(
+  proposal: z.infer<typeof scaleWorkoutSchema>,
+  input: z.infer<typeof scaleWorkoutInputSchema>,
+  formData: FormData,
+  summary: string,
+): { data: z.infer<typeof scaleWorkoutSchema> } | { error: string } {
+  const changes: typeof proposal.changes = [];
+  for (const [index, change] of proposal.changes.entries()) {
+    const value = formData.get(`load_${index}`);
+    if (value === null) {
+      changes.push(change);
+      continue;
+    }
+
+    const movementName =
+      input.library.find(({ id }) => id === change.movement_id)?.name ||
+      input.workout.movements[index]?.name ||
+      `movement ${index + 1}`;
+    if (typeof value !== "string") return { error: `Enter a valid weight for ${movementName}.` };
+    const rawLoad = value.trim();
+    if (!rawLoad) {
+      changes.push({ ...change, load: null });
+      continue;
+    }
+
+    const load = Number(rawLoad);
+    if (!Number.isFinite(load) || load < 0 || load > 2000)
+      return { error: `Enter a valid weight for ${movementName}.` };
+    changes.push({ ...change, load });
+  }
+
+  const final = scaleWorkoutSchema.safeParse({ ...proposal, summary, changes });
+  return final.success
+    ? { data: final.data }
+    : { error: "This scaling suggestion is incomplete. Ask again." };
+}
+
 export const scaleWorkoutDetailsSchema = z.object({
   source: z.literal("ai"),
   suggestion_id: z.string().uuid(),
