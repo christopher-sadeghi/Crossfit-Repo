@@ -25,6 +25,7 @@ import BenchmarksTab from "./benchmarks-tab";
 import { IntakeTab } from "./intake-tab";
 import ConsistencyTab from "./consistency-tab";
 import { WeeklyReportsTab } from "./weekly-reports-tab";
+import { FormChecksTab } from "./form-checks-tab";
 import { personalRecords } from "@/lib/results";
 import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_LOAD_WARNING_RATIO, gymSessionLoad } from "@/lib/training-load";
@@ -42,7 +43,7 @@ import { LoadTab } from "./load-tab";
 import { addDays, monday } from "./calendar-dates";
 import { LEVEL_LABELS } from "../options";
 
-const TABS = ["overview", "check-ins", "workouts", "load", "journal", "nutrition", "goals", "ai", "benchmarks", "intake", "consistency", "reports"] as const;
+const TABS = ["overview", "check-ins", "workouts", "load", "journal", "nutrition", "goals", "ai", "benchmarks", "intake", "consistency", "reports", "form"] as const;
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; week?: string; date?: string; checkins?: string }> };
 type ProfileScheduleWorkout = WhiteboardWorkout & {
@@ -222,6 +223,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
           <TabsTrigger value="intake">Intake</TabsTrigger>
           <TabsTrigger value="consistency">Consistency</TabsTrigger>
           <TabsTrigger value="reports">Reports</TabsTrigger>
+          <TabsTrigger value="form">Form checks</TabsTrigger>
         </TabsList>
         </div>
 
@@ -384,6 +386,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
         <TabsContent value="intake"><IntakeTab athleteId={id} units={units} /></TabsContent>
         <TabsContent value="consistency"><ConsistencyTab athleteId={id} /></TabsContent>
         <TabsContent value="reports"><WeeklyReportsTab athleteId={id} today={today} active={athlete.status === "active"} /></TabsContent>
+        <TabsContent value="form"><FormChecksTab athleteId={id} /></TabsContent>
         <TabsContent value="check-ins">
           <CheckInsTab entries={checkIns} today={today} showAll={checkins === "all"} />
         </TabsContent>

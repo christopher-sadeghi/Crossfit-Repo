@@ -90,7 +90,7 @@ test("demo reset collects only its coach's custom movement clips before deleting
   let rpcError = null;
   const client = {
     auth: { getClaims: async () => ({ data: { claims: { sub: "coach" } } }) },
-    from: (table) => table === "progress_photos" ? { delete: () => ({ eq: async () => ({ error: null }) }) } : query,
+    from: (table) => ["progress_photos", "form_reviews"].includes(table) ? { delete: () => ({ eq: async () => ({ error: null }) }) } : query,
     rpc: async (_, params) => {
       calls.push(["rpc", params.reset]);
       return { data: { athletes: 12 }, error: rpcError };
