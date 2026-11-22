@@ -47,6 +47,7 @@ function fixture({ suggestions = 0, chats = 0, drafts = 0, concurrentDraft = fal
   const dependencies = { ai, "@ai-sdk/openai": { openai: () => ({}) } };
   const { draftActivity } = load("ai/activity-draft", {
     ...dependencies,
+    "./activity-extraction": load("ai/activity-extraction", { ...dependencies, "@/lib/athlete-activities": load("athlete-activities") }),
     "./service-core": load("ai/service-core", dependencies),
     "@/lib/activity-actor": { getActivityActor: async () => ({ supabase, units: "kg" }) },
     "@/lib/athlete-activities": load("athlete-activities"),

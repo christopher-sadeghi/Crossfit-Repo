@@ -21,6 +21,7 @@ export type SuggestionOptions<S extends z.ZodType> = {
   successStatus?: "pending" | "idea";
   /** Needed when an athlete asks, since the row belongs to their coach. */
   coachId?: string;
+  requestedBy?: string;
   model?: LanguageModel;
 };
 
@@ -52,6 +53,7 @@ async function saveFailure<S extends z.ZodType>(
 ) {
   const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
   console.error("AI suggestion failed:", error);
+  if (opts.requestedBy) return { error: friendlyError(error) };
   const { error: insertError } = await supabase.from("ai_suggestions").insert({
     suggestion_type: opts.type,
     athlete_id: opts.athleteId,
@@ -119,6 +121,7 @@ export async function runSuggestionWithClient<S extends z.ZodType>(
       suggestion_type: opts.type,
       athlete_id: opts.athleteId,
       ...(opts.coachId ? { coach_id: opts.coachId } : {}),
+      ...(opts.requestedBy ? { requested_by: opts.requestedBy } : {}),
       input: opts.input as NonNullable<Json>,
       model: modelId(model),
       status: "failed",

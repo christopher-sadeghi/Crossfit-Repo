@@ -36,12 +36,14 @@ export async function trainingLoadContext(supabase: SupabaseClient<Database>, at
 }
 
 /** Compact, RLS-scoped attendance and scheduled-day consistency for AI prompts. */
-export async function consistencyContext(supabase: SupabaseClient<Database>, athleteId: string, asOf: string) {
+export async function consistencyContext(supabase: SupabaseClient<Database>, athleteId: string, asOf: string, driftDays?: number) {
   const { data: athlete, error: athleteError } = await supabase.from("athletes").select("coach_id").eq("id", athleteId).single();
   if (athleteError || !athlete) throw athleteError ?? new Error("Athlete not found.");
   const [{ stats, attendance }, { data: coach, error: coachError }] = await Promise.all([
     loadConsistency(supabase, athleteId, asOf),
-    supabase.from("coaches").select("drift_days").eq("id", athlete.coach_id).single(),
+    driftDays === undefined
+      ? supabase.from("coaches").select("drift_days").eq("id", athlete.coach_id).single()
+      : Promise.resolve({ data: { drift_days: driftDays }, error: null }),
   ]);
   if (coachError || !coach) throw coachError ?? new Error("Coach not found.");
   const drift = drifting(stats, { driftDays: coach.drift_days });
