@@ -62,7 +62,7 @@ test("invalid height, score, goals, injuries, schedule, nutrition and lifestyle 
   assert.equal(schemas[4].safeParse({ ...valid[4], equipment: ["None", "Barbell"] }).success, false);
 });
 
-function actionHarness({ kind = "athlete", dbError = null } = {}) {
+function actionHarness({ kind = "athlete", dbError = null, notificationError = null, notificationThrows = false } = {}) {
   const writes = [];
   const { saveIntakeStep } = load("src/app/athlete/onboarding/actions.ts", {
     "next/cache": { revalidatePath() {} },
@@ -70,8 +70,8 @@ function actionHarness({ kind = "athlete", dbError = null } = {}) {
     "@/lib/viewer": { getViewer: async () => ({ kind, athleteId: "own-athlete", units: "lb" }) },
     "@/lib/time-zone": { getToday: async () => "2026-11-21" },
     "@/lib/supabase/server": { createClient: async () => ({
-      rpc: async (name, args) => { writes.push({ name, ...args }); return { error: dbError }; },
-      from: () => ({ select: async () => ({ data: [], error: null }) }),
+      rpc: async (name, args) => { writes.push({ name, ...args }); if (name === "create_notification" && notificationThrows) throw new Error("Notification offline"); return { error: name === "create_notification" ? notificationError : dbError }; },
+      from: (table) => table === "athletes" ? { select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: { first_name: "Alex", last_name: "Athlete" }, error: null }) } : ({ select: async () => ({ data: [], error: null }) }),
     }) },
   });
   return { saveIntakeStep, writes };
@@ -85,6 +85,24 @@ test("server action uses canonical fields, coach units and local today", async (
   await assert.rejects(saveIntakeStep(3, valid[2]), /REDIRECT/);
   assert.equal(writes[1].p_data.goals[0].goal_type, "performance");
   await assert.rejects(saveIntakeStep(7, valid[6]), /REDIRECT:\/athlete$/);
+});
+test("completed intake notifies the coach only after saving, links intake, and tolerates notification failures", async (t) => {
+  t.mock.method(console, "error", () => {});
+  for (const options of [{}, { notificationError: new Error("Denied") }, { notificationThrows: true }]) {
+    const { saveIntakeStep, writes } = actionHarness(options);
+    await assert.rejects(saveIntakeStep(7, valid[6]), /REDIRECT:\/athlete$/);
+    assert.deepEqual(writes.map((write) => write.name), ["save_athlete_intake_step", "create_notification"]);
+    assert.equal(writes[1].p_athlete_id, "own-athlete");
+    assert.equal(writes[1].p_kind, "message");
+    assert.match(writes[1].p_title, /Alex Athlete: Intake completed/);
+    assert.equal(writes[1].p_link, "/athletes/own-athlete?tab=intake");
+  }
+  const failed = actionHarness({ dbError: new Error("Save failed") });
+  assert.ok((await failed.saveIntakeStep(7, valid[6])).error);
+  assert.deepEqual(failed.writes.map((write) => write.name), ["save_athlete_intake_step"]);
+  const partial = actionHarness();
+  await assert.rejects(partial.saveIntakeStep(1, valid[0]), /REDIRECT/);
+  assert.deepEqual(partial.writes.map((write) => write.name), ["save_athlete_intake_step"]);
 });
 test("achieved goals render without edit controls, occupy picks and submit identity only", async () => {
   const goals = [1, 2, 3].map((n) => ({ id: `35000000-0000-4000-8000-00000000000${n}`, status: "achieved", category: "Strength", target: "Squat", target_value: 100, target_date: "2026-01-01" }));
