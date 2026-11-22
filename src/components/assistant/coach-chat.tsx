@@ -1,14 +1,14 @@
 "use client";
 
-import { Bot, Loader2, Send, Trash2, X } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 
 import { clearChat, loadChat, sendChatMessage, type ChatMessage } from "@/app/(app)/assistant/actions";
 import { InlineSuggestionCard } from "@/components/suggestions/inline-suggestion-card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import type { ChatContext } from "@/lib/ai/chat";
+import { ChatBubble, ChatComposer, ChatLauncher, ChatPanelShell } from "./chat-panel";
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 
@@ -88,34 +88,30 @@ export function CoachChat() {
 
   if (!open)
     return (
-      <Button onClick={() => setOpen(true)} className="fixed right-6 bottom-6 z-40 gap-2 rounded-full shadow-lg" size="lg">
-        <Bot className="size-5" />
-        Ask AI coach
-      </Button>
+      <ChatLauncher label="Ask AI coach" onClick={() => setOpen(true)} className="fixed right-6 bottom-6 z-40" />
     );
 
   return (
-    <aside
-      aria-label="AI coach chat"
-      className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l bg-background shadow-xl"
-    >
-      <header className="flex items-center gap-2 border-b px-4 py-3">
-        <Bot className="size-5" />
-        <div className="flex-1">
-          <h2 className="font-semibold">AI coach</h2>
-          <p className="text-xs text-muted-foreground">
-            {label ? `Asking about ${label}. ` : ""}Changes wait for your approval.
-          </p>
-        </div>
+    <ChatPanelShell
+      ariaLabel="AI coach chat"
+      title="AI coach"
+      subtitle={`${label ? `Asking about ${label}. ` : ""}Changes wait for your approval.`}
+      actions={
         <Button variant="ghost" size="icon" onClick={clear} disabled={pending || !messages?.length} aria-label="Clear chat">
           <Trash2 className="size-4" />
         </Button>
-        <Button variant="ghost" size="icon" onClick={() => setOpen(false)} aria-label="Close chat">
-          <X className="size-4" />
-        </Button>
-      </header>
-
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
+      }
+      onClose={() => setOpen(false)}
+      footer={
+        <ChatComposer
+          value={draft}
+          onChange={setDraft}
+          onSend={() => send(draft)}
+          disabled={pending}
+          placeholder={label ? `Ask about ${label}…` : "Ask about your athletes or programming…"}
+        />
+      }
+    >
         {messages === null ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : messages.length === 0 ? (
@@ -132,26 +128,18 @@ export function CoachChat() {
           </div>
         ) : (
           messages.map((message) => (
-            <div key={message.id} className={message.role === "user" ? "flex justify-end" : ""}>
-              <div
-                className={
-                  message.role === "user"
-                    ? "max-w-[85%] rounded-lg bg-primary px-3 py-2 text-sm whitespace-pre-wrap text-primary-foreground"
-                    : "space-y-2 text-sm"
-                }
-              >
-                <div className="whitespace-pre-wrap">{message.content.replaceAll("**", "")}</div>
-                {message.suggestions.length > 0 && (
-                  <ul className="space-y-2">
-                    {message.suggestions.map((s) => (
-                      <li key={s.id}>
-                        <InlineSuggestionCard id={s.id} suggestion={s} onOpenReview={() => { setOpen(false); setMessages(null); }} />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
+            <ChatBubble key={message.id} role={message.role}>
+              <div className="whitespace-pre-wrap">{message.content.replaceAll("**", "")}</div>
+              {message.suggestions.length > 0 && (
+                <ul className="space-y-2">
+                  {message.suggestions.map((s) => (
+                    <li key={s.id}>
+                      <InlineSuggestionCard id={s.id} suggestion={s} onOpenReview={() => { setOpen(false); setMessages(null); }} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </ChatBubble>
           ))
         )}
         {pending && (
@@ -162,34 +150,6 @@ export function CoachChat() {
         )}
         {error && <p className="rounded-lg border border-destructive/40 p-2 text-sm text-destructive">{error}</p>}
         <div ref={endRef} />
-      </div>
-
-      <form
-        className="flex items-end gap-2 border-t p-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          send(draft);
-        }}
-      >
-        <Textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send(draft);
-            }
-          }}
-          placeholder={label ? `Ask about ${label}…` : "Ask about your athletes or programming…"}
-          maxLength={2000}
-          rows={2}
-          className="max-h-40 resize-none"
-          aria-label="Message"
-        />
-        <Button type="submit" size="icon" disabled={pending || !draft.trim()} aria-label="Send">
-          <Send className="size-4" />
-        </Button>
-      </form>
-    </aside>
+    </ChatPanelShell>
   );
 }

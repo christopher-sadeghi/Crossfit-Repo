@@ -5,10 +5,11 @@ import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notifications/bell";
 import { getNotifications } from "@/app/notification-actions";
-import { getTimeZone } from "@/lib/time-zone";
+import { getTimeZone, getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
 import { getViewer } from "@/lib/viewer";
 import { checkProgressReminders } from "@/lib/notifications";
+import { AthleteChat } from "@/components/assistant/athlete-chat";
 
 import { logout } from "../(auth)/actions";
 import { AthleteNav } from "./athlete-nav";
@@ -26,7 +27,7 @@ export default async function AthleteLayout({
 
   const supabase = await createClient();
   await checkProgressReminders(supabase, { athleteId: viewer.athleteId });
-  const [notifications, timeZone] = await Promise.all([getNotifications(), getTimeZone()]);
+  const [notifications, timeZone, today] = await Promise.all([getNotifications(), getTimeZone(), getToday()]);
   const { data: coach } = await supabase
     .from("coaches")
     .select("gym_name")
@@ -79,6 +80,7 @@ export default async function AthleteLayout({
       <div className="md:hidden">
         <AthleteTabs unreadMessages={notifications.unreadMessages} />
       </div>
+      <AthleteChat athleteId={viewer.athleteId} today={today} units={viewer.units} />
     </div>
   );
 }

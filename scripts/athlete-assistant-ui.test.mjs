@@ -116,10 +116,14 @@ test("stream hook displays JSON 429/403/503 and stream failures without leaving 
 
 test("entry points and coach tab preserve scoped thread cards without expanding athlete navigation", () => {
   const today = readFileSync(path.join(root, "src/app/athlete/page.tsx"), "utf8");
+  const layout = readFileSync(path.join(root, "src/app/athlete/layout.tsx"), "utf8");
+  const assistantRoute = readFileSync(path.join(root, "src/app/athlete/assistant/page.tsx"), "utf8");
   const athlete = readFileSync(path.join(root, "src/app/(app)/athletes/[id]/page.tsx"), "utf8");
   const athleteTabs = readFileSync(path.join(root, "src/app/(app)/athletes/[id]/athlete-tab-nav.tsx"), "utf8");
   const thread = readFileSync(path.join(root, "src/components/messages/thread.tsx"), "utf8");
-  assert.match(today, /href="\/athlete\/assistant"/);
+  assert.doesNotMatch(today, /href="\/athlete\/assistant"/);
+  assert.match(layout, /<AthleteChat athleteId=\{viewer\.athleteId\}/);
+  assert.match(assistantRoute, /redirect\("\/athlete\?assistant=open"\)/);
   assert.match(today, /id={`adjust-\$\{workout.id\}`}/);
   assert.match(athlete, /value: "assistant", label: "AI chat"/);
   assert.match(athleteTabs, /TabsTrigger key=\{tab\.value\} value=\{tab\.value\}/);
@@ -127,6 +131,60 @@ test("entry points and coach tab preserve scoped thread cards without expanding 
   assert.match(thread, /input->>source_message_id.not.is.null/);
   assert.match(thread, /cardsByMessage.get\(row.id\)/);
   assert.ok(!thread.includes("requested_by"));
+});
+
+test("assistant history is athlete-scoped and stops after a page smaller than 500 rows", async () => {
+  let currentViewer = { kind: "coach" };
+  let clientCalls = 0;
+  const ranges = [];
+  const scopedFilters = [];
+  const pages = [
+    Array.from({ length: 500 }, (_, index) => ({ id: `row-${index}`, role: "user", content: "Question" })),
+    [{ id: "last-row", role: "assistant", content: "Answer", metadata: null, actions: [] }],
+  ];
+  const client = {
+    from(table) {
+      assert.equal(table, "athlete_ai_messages");
+      const query = { filters: [], select: null, orderBy: [] };
+      return {
+        select(value) { query.select = value; return this; },
+        eq(...args) { query.filters.push(args); return this; },
+        order(value) { query.orderBy.push(value); return this; },
+        range: async (start, end) => {
+          ranges.push([start, end]);
+          scopedFilters.push(query.filters);
+          assert.match(query.select, /actions:athlete_ai_card_actions\(card_index, action, ref_id\)/);
+          assert.deepEqual(query.orderBy, ["created_at", "id"]);
+          return { data: pages.shift(), error: null };
+        },
+      };
+    },
+  };
+  const actions = load("src/app/athlete/assistant/actions.ts", {
+    "next/cache": {},
+    "@/app/messages-actions": {},
+    "@/lib/ai/assistant-safety": {},
+    "@/lib/ai/assistant-schema": {},
+    "@/lib/ai/service-core": {},
+    "@/lib/ai/suggestions": {},
+    "@/lib/consistency": {},
+    "@/lib/messages": {},
+    "@/lib/supabase/server": { createClient: async () => { clientCalls++; return client; } },
+    "@/lib/viewer": { getViewer: async () => currentViewer },
+    "@/lib/ai/assistant-card-actions": {},
+    "@/lib/activity-actions": {},
+  });
+
+  assert.match((await actions.loadAssistantMessages()).error, /athlete/);
+  assert.equal(clientCalls, 0);
+
+  currentViewer = { kind: "athlete", athleteId: "athlete-123" };
+  const result = await actions.loadAssistantMessages();
+  assert.equal(result.messages.length, 501);
+  assert.equal(result.messages[0].role, "user");
+  assert.equal(result.messages.at(-1).id, "last-row");
+  assert.deepEqual(ranges, [[0, 499], [500, 999]]);
+  assert.deepEqual(scopedFilters, [[["athlete_id", "athlete-123"]], [["athlete_id", "athlete-123"]]]);
 });
 
 function nodes(tree) {
