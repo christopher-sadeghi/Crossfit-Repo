@@ -66,7 +66,12 @@ export async function POST(request: Request) {
           body: "How are you feeling today? Take a moment to check in.",
           link: "/athlete", dedupe_key: `check-in-reminder:${row.athlete_id}:${localDate}`,
         })));
-        if (notifications.error) throw notifications.error;
+        if (notifications.error) {
+          const cleanup = await admin.from("check_in_reminder_sends").delete()
+            .in("athlete_id", [...created]).eq("local_date", localDate);
+          if (cleanup.error) console.error("Check-in reminder reservation cleanup failed");
+          throw notifications.error;
+        }
         counts.sent += recipients.length;
         await Promise.all(recipients.map((row) => pushNewNotifications({ athleteId: row.athlete_id, kind: "check_in_reminder" })));
       }
