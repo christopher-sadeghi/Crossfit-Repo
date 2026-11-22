@@ -22,7 +22,7 @@ export const programWorkoutSchema = z.object({
 });
 export const programWeekSchema = z.object({ week_number: z.number().int().min(1).max(4), workouts: z.array(programWorkoutSchema).min(1).max(7) });
 export const draftProgramSchema = z.object({
-  name: z.string().trim().min(1).max(100), rationale: z.string().trim().min(1).max(3000),
+  name: z.string().trim().min(1).max(80), rationale: z.string().trim().min(1).max(1000),
   start_date: z.string().date(), weeks: z.array(programWeekSchema).length(4),
 });
 export const draftProgramInputSchema = z.object({

@@ -74,7 +74,7 @@ export function ApproveProgramForm({ id, name, startDate }: { id: string; name: 
   const [state, action, pending] = useActionState(approveSuggestion, {});
   return <form action={action} className="grid gap-4">
     <input type="hidden" name="id" value={id} />
-    <label className="grid gap-2 text-sm">Program name<Input name="name" defaultValue={state.values?.name ?? name} maxLength={100} required /></label>
+    <label className="grid gap-2 text-sm">Program name<Input name="name" defaultValue={state.values?.name ?? name} maxLength={80} required /></label>
     <label className="grid gap-2 text-sm">Start date<Input name="start_date" type="date" defaultValue={state.values?.start_date ?? startDate} required /></label>
     <Button disabled={pending}>{pending ? "Saving…" : "Approve & assign personal program"}</Button>
     <Message state={state} />

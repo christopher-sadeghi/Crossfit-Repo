@@ -60,6 +60,12 @@ function fixture({ status = "completed", athleteStatus = "active", rpcError = nu
   });
   return { db, calls, entry: loader("src/lib/ai/draft-program.ts").draftProgramEntry };
 }
+test("draft name and rationale fit the program editor limits", () => {
+  assert.equal(draftProgramSchema.safeParse({ ...proposal(), name: "x".repeat(80), rationale: "x".repeat(1000) }).success, true);
+  assert.equal(draftProgramSchema.safeParse({ ...proposal(), name: "x".repeat(81) }).success, false);
+  assert.equal(draftProgramSchema.safeParse({ ...proposal(), rationale: "x".repeat(1001) }).success, false);
+  assert.equal(draftProgramSchema.safeParse({ ...proposal(), name: "", rationale: "" }).success, false);
+});
 test("build requires completed intake, sets next Monday, includes profile/context and constrains movement ids", async () => {
   const f = fixture();
   const request = await f.entry.buildRequest(f.db, { athleteId: "athlete" });
