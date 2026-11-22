@@ -9,38 +9,16 @@ import { getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
 import { getViewer } from "@/lib/viewer";
 
-const optionalNumber = (min: number, max: number, message: string, integer: boolean) =>
-  z.preprocess(
-    (v) => v ?? "",
-    z
-      .string()
-      .trim()
-      .transform((v) => (v === "" ? null : Number(v)))
-      .refine(
-        (v) => v == null || (Number.isFinite(v) && v >= min && v <= max && (!integer || Number.isInteger(v))),
-        message,
-      ),
-  );
-
 const checkbox = z.preprocess((v) => v === "on", z.boolean());
 
 const journalSchema = z.object({
   entry_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a date."),
-  sleep_hours: optionalNumber(0, 24, "Sleep must be between 0 and 24 hours.", false).transform((v) =>
-    v == null ? null : Math.round(v * 10) / 10,
-  ),
-  sleep_quality: optionalNumber(1, 5, "Sleep quality must be between 1 and 5.", true),
   alcohol: checkbox,
   late_caffeine: checkbox,
   hit_water_goal: checkbox,
   late_meal: checkbox,
   screens_in_bed: checkbox,
   mobility: checkbox,
-  high_stress: checkbox,
-  notes: z.preprocess(
-    (v) => v ?? "",
-    z.string().trim().max(500, "Notes must be 500 characters or fewer.").transform((v) => v || null),
-  ),
 });
 
 export async function saveJournalEntry(_: FormState, formData: FormData): Promise<FormState> {

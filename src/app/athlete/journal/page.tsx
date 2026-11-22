@@ -48,6 +48,7 @@ export default async function AthleteJournalPage({ searchParams }: { searchParam
           <p className="text-sm text-muted-foreground">
             {entryOn === todayIso ? "Today" : formatDate(entryOn)} · optional, helps your coach spot patterns
           </p>
+          <Link href="/athlete" className="text-sm text-muted-foreground underline">Sleep, recovery ratings and notes are in today&apos;s daily check-in.</Link>
         </div>
         <Card>
           <CardContent className="pt-6">

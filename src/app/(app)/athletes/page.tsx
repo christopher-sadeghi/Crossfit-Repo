@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { loadCheckInAttention } from "@/lib/check-in";
 import { needsAttention } from "@/lib/feedback";
 import { getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
+import { formatDate } from "@/lib/units";
 import { cn } from "@/lib/utils";
 
 import { LEVEL_LABELS } from "./options";
@@ -38,7 +40,7 @@ export default async function AthletesPage({ searchParams }: Props) {
     const like = `ilike."%${word}%"`;
     query = query.or(`first_name.${like},last_name.${like},email.${like}`);
   }
-  const [{ data: athletes = [] }, { data: invites = [] }, { data: results = [] }] = await Promise.all([
+  const [{ data: athletes = [] }, { data: invites = [] }, { data: results = [] }, checkInAttention] = await Promise.all([
     query,
     supabase
       .from("athlete_invites")
@@ -51,6 +53,7 @@ export default async function AthletesPage({ searchParams }: Props) {
       .gte("performed_on", since)
       .lte("performed_on", todayIso)
       .or("pain_notes.not.is.null,rpe.gte.9"),
+    loadCheckInAttention(supabase, todayIso),
   ]);
   const invitedAthletes = new Set((invites ?? []).map((invite) => invite.athlete_id));
   const attentionResults = new Map<string, typeof results>();
@@ -61,7 +64,10 @@ export default async function AthletesPage({ searchParams }: Props) {
   }
   const attentionAthletes = new Set(
     (athletes ?? [])
-      .filter((athlete) => needsAttention(attentionResults.get(athlete.id) ?? [], todayIso).flagged)
+      .filter((athlete) =>
+        needsAttention(attentionResults.get(athlete.id) ?? [], todayIso).flagged ||
+        checkInAttention.get(athlete.id)?.flagged,
+      )
       .map((athlete) => athlete.id),
   );
 
@@ -118,7 +124,16 @@ export default async function AthletesPage({ searchParams }: Props) {
                         <Link href={`/athletes/${a.id}`} className="hover:underline">
                           {a.first_name} {a.last_name}
                         </Link>
-                        {attentionAthletes.has(a.id) && <Badge variant="destructive">Needs attention</Badge>}
+                        {attentionAthletes.has(a.id) && (
+                          <Badge
+                            variant="destructive"
+                            title={checkInAttention.get(a.id)?.reasons
+                              .map((reason) => `${formatDate(reason.date)}: ${reason.text}`)
+                              .join("; ")}
+                          >
+                            Needs attention
+                          </Badge>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>

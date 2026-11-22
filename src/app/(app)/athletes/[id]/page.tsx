@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SUGGESTION_LABELS } from "@/lib/ai/suggestions";
+import { CHECK_IN_COLUMNS, CHECK_IN_FILTER, checkInAttention } from "@/lib/check-in";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCoach } from "@/lib/coach";
 import { getOrigin } from "@/lib/auth/redirect";
@@ -21,6 +22,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatScore, formatWeight, type Units } from "@/lib/units";
 
 import { ArchiveButton } from "../archive-button";
+import { CheckInsTab } from "./check-ins-tab";
 import { AthleteAccessCard } from "../access-card";
 import { PersonalProgramCopyForm } from "./program-copy-form";
 import { GoalBar } from "./progress/goal-bar";
@@ -29,9 +31,9 @@ import { AthleteCalendar } from "./athlete-calendar";
 import { addDays, monday } from "./calendar-dates";
 import { LEVEL_LABELS } from "../options";
 
-const TABS = ["overview", "workouts", "journal", "nutrition", "goals", "ai"] as const;
+const TABS = ["overview", "check-ins", "workouts", "journal", "nutrition", "goals", "ai"] as const;
 
-type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; week?: string; date?: string }> };
+type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; week?: string; date?: string; checkins?: string }> };
 type ProfileScheduleWorkout = WhiteboardWorkout & {
   id: string;
   source_workout_id: string | null;
@@ -40,13 +42,14 @@ type ProfileScheduleWorkout = WhiteboardWorkout & {
 };
 
 export default async function AthletePage({ params, searchParams }: Props) {
-  const [{ id }, { tab, week, date }] = await Promise.all([params, searchParams]);
+  const [{ id }, { tab, week, date, checkins }] = await Promise.all([params, searchParams]);
   const supabase = await createClient();
   const coach = await getCoach();
   const units: Units = coach?.units ?? "lb";
 
-  const now = await getToday();
-  const sinceDate = new Date(`${now}T00:00:00Z`);
+  const today = await getToday();
+  const now = today;
+  const sinceDate = new Date(`${today}T00:00:00Z`);
   sinceDate.setUTCDate(sinceDate.getUTCDate() - 6);
   const since = sinceDate.toISOString().slice(0, 10);
   const parsedWeek = z.string().date().safeParse(week);
@@ -67,6 +70,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
     athleteAssignmentsRes,
     journalRes,
     libraryRes,
+    checkInsRes,
   ] = await Promise.all([
     supabase.from("athletes").select("*").eq("id", id).maybeSingle(),
     supabase.from("body_metrics").select("measured_on, weight_kg, body_fat_pct").eq("athlete_id", id).order("measured_on", { ascending: false }),
@@ -109,6 +113,14 @@ export default async function AthletePage({ params, searchParams }: Props) {
       .order("entry_on", { ascending: false })
       .limit(30),
     supabase.from("workouts").select("id, title").is("athlete_id", null).is("program_id", null).order("title"),
+    supabase
+      .from("athlete_journal_entries")
+      .select(CHECK_IN_COLUMNS)
+      .or(CHECK_IN_FILTER)
+      .eq("athlete_id", id)
+      .lte("entry_on", today)
+      .order("entry_on", { ascending: false })
+      .limit(checkins === "all" ? 10_000 : 365),
   ]);
 
   const athlete = athleteRes.data;
@@ -117,7 +129,17 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const latestWeight = latestMetric(metrics, "weight_kg");
   const results = resultsRes.data ?? [];
   const prs = personalRecords(results);
-  const attention = needsAttention(results, await getToday());
+  const checkIns = checkInsRes.data ?? [];
+  if (checkInsRes.error) throw checkInsRes.error;
+  const workoutAttention = needsAttention(results, today);
+  const checkAttention = checkInAttention(checkIns, today);
+  const attention = {
+    flagged: workoutAttention.flagged || checkAttention.flagged,
+    reasons: [
+      ...workoutAttention.reasons,
+      ...checkAttention.reasons.map((reason) => ({ ...reason, kind: "check-in" as const })),
+    ],
+  };
   const target = targetRes.data;
   const invite = inviteRes.data;
   const inviteUrl = invite ? `${await getOrigin()}/join/${invite.token}` : null;
@@ -173,6 +195,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="workouts">Workouts</TabsTrigger>
+          <TabsTrigger value="check-ins">Check-ins</TabsTrigger>
           <TabsTrigger value="journal">Journal</TabsTrigger>
           <TabsTrigger value="nutrition">Nutrition</TabsTrigger>
           <TabsTrigger value="goals">Goals</TabsTrigger>
@@ -195,7 +218,8 @@ export default async function AthletePage({ params, searchParams }: Props) {
                     <li key={`${reason.date}-${reason.kind}-${index}`} className="flex flex-wrap gap-x-2">
                       <span className="font-medium">{formatDate(reason.date)}</span>
                       <span>
-                        {reason.kind === "pain" ? "Pain noted" : "High effort"}: {reason.text}
+                        {reason.kind === "pain" ? "Pain noted" : reason.kind === "check-in" ? "Check-in" : "High effort"}
+                        : {reason.text}
                       </span>
                     </li>
                   ))}
@@ -312,6 +336,9 @@ export default async function AthletePage({ params, searchParams }: Props) {
           </ListCard>
         </TabsContent>
 
+        <TabsContent value="check-ins">
+          <CheckInsTab entries={checkIns} today={today} showAll={checkins === "all"} />
+        </TabsContent>
         <TabsContent value="journal" className="grid gap-4">
           <ListCard title="Daily journal" empty="No journal entries yet. Athletes fill these in from their Journal tab." show={journal.length > 0}>
             <Table>
