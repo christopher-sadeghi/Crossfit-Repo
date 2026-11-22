@@ -51,6 +51,8 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
   if (!loggedBy) return failure(formData, "Please log in again to save your result.");
 
   const r = parsed.data;
+  const { data: canView } = await supabase.rpc("athlete_can_view_workout", { p_workout_id: r.workout_id });
+  if (!canView) return failure(formData, "That WOD is no longer available.");
   const { data: workout } = await supabase
     .from("workouts")
     .select("workout_type")
