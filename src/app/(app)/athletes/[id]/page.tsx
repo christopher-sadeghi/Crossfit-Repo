@@ -19,6 +19,7 @@ import { getToday } from "@/lib/time-zone";
 import { formatGoalValue, goalProgress, latestMetric } from "@/lib/progress";
 import { loadLiftMaxes } from "@/lib/benchmarks";
 import BenchmarksTab from "./benchmarks-tab";
+import ConsistencyTab from "./consistency-tab";
 import { personalRecords } from "@/lib/results";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatScore, formatWeight, type Units } from "@/lib/units";
@@ -33,7 +34,7 @@ import { AthleteCalendar } from "./athlete-calendar";
 import { addDays, monday } from "./calendar-dates";
 import { LEVEL_LABELS } from "../options";
 
-const TABS = ["overview", "check-ins", "workouts", "journal", "nutrition", "goals", "ai", "benchmarks"] as const;
+const TABS = ["overview", "check-ins", "workouts", "journal", "nutrition", "goals", "ai", "benchmarks", "consistency"] as const;
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; week?: string; date?: string; checkins?: string }> };
 type ProfileScheduleWorkout = WhiteboardWorkout & {
@@ -206,6 +207,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
           <TabsTrigger value="goals">Goals</TabsTrigger>
           <TabsTrigger value="ai">AI History</TabsTrigger>
           <TabsTrigger value="benchmarks">Benchmarks</TabsTrigger>
+          <TabsTrigger value="consistency">Consistency</TabsTrigger>
         </TabsList>
         </div>
 
@@ -343,6 +345,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
         </TabsContent>
 
         <TabsContent value="benchmarks"><BenchmarksTab athleteId={id} units={units} /></TabsContent>
+        <TabsContent value="consistency"><ConsistencyTab athleteId={id} /></TabsContent>
         <TabsContent value="check-ins">
           <CheckInsTab entries={checkIns} today={today} showAll={checkins === "all"} />
         </TabsContent>

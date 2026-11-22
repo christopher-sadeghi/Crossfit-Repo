@@ -10,6 +10,7 @@ const profileSchema = z.object({
   full_name: z.string().trim().min(1, "Enter your name.").max(100),
   gym_name: z.string().trim().max(100),
   units: z.enum(["lb", "kg"]),
+  drift_days: z.coerce.number().int().min(1, "Choose between 1 and 60 days.").max(60, "Choose between 1 and 60 days."),
 });
 
 export async function updateProfile(_: FormState, formData: FormData): Promise<FormState> {

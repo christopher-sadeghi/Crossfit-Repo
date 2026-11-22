@@ -8,6 +8,7 @@ import { formatDate, formatScore } from "@/lib/units";
 import { getViewer } from "@/lib/viewer";
 
 import { AthleteResultControls } from "./result-controls";
+import { AthleteConsistencyCard } from "../consistency-card";
 
 export default async function AthleteHistoryPage() {
   const viewer = await getViewer();
@@ -32,6 +33,7 @@ export default async function AthleteHistoryPage() {
   return (
     <div className="grid gap-3">
       <h1 className="text-xl font-semibold tracking-tight">Workout history</h1>
+      <AthleteConsistencyCard athleteId={viewer.athleteId} />
       {results?.length ? (
         results.map((result) => (
           <Card key={result.id}>

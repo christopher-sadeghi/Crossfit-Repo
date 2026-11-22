@@ -9,7 +9,7 @@ import { loadLiftMaxes } from "@/lib/benchmarks";
 import type { Database, Json, Tables } from "@/lib/supabase/database.types";
 import { formatDate } from "@/lib/units";
 
-import { foodAverages, trainingVolume, weightTrend } from "./athlete-context";
+import { consistencyContext, foodAverages, trainingVolume, weightTrend } from "./athlete-context";
 import { ApprovalError } from "./errors";
 import { joinProgressNote } from "./progress-note";
 
@@ -43,6 +43,7 @@ export const progressSummaryInputSchema = z.object({
 
 const SYSTEM = `You help a CrossFit coach write a short progress note about one athlete. The coach reviews the note before it is saved.
 Rules:
+- Use consistency to mention low completion or drifting and keep recommendations realistic; missing rates mean unknown, not zero.
 - Mention recovery trends from recent_check_ins and check-in averages: readiness, sleep, soreness, stress, energy and mood. Cite only the available data.
 - Use only the data provided. Do not invent numbers.
 - Return one entry per goal in the goals list, using its id. Status: "reached" if achieved or the target is met; "on_track" if the current value and pace look likely to hit the target by its date; "behind" if not; "no_data" if there is no current value or start value to judge from.
@@ -65,6 +66,7 @@ async function buildRequest(supabase: SupabaseClient<Database>, { athleteId }: {
     { data: target, error: targetError },
     { data: food, error: foodError },
     training,
+    consistency,
   ] = await Promise.all([
     loadLiftMaxes(supabase, athleteId),
     supabase.from("coaches").select("units").maybeSingle(),
@@ -96,6 +98,7 @@ async function buildRequest(supabase: SupabaseClient<Database>, { athleteId }: {
       .gte("logged_on", addDays(asOf, -13))
       .lte("logged_on", asOf),
     trainingVolume(supabase, athleteId, asOf),
+    consistencyContext(supabase, athleteId, asOf),
   ]);
   if (coachError || !coach) throw coachError ?? new Error("Coach not found.");
   if (athleteError || !athlete) throw athleteError ?? new Error("Athlete not found.");
@@ -153,6 +156,7 @@ async function buildRequest(supabase: SupabaseClient<Database>, { athleteId }: {
       change_kg: trend.change_kg,
     },
     training_last_4_weeks: training,
+    consistency,
     nutrition: { current_target: target, food_log_last_14_days: foodAverages(food ?? []) },
   } satisfies Json;
 

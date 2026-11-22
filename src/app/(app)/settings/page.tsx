@@ -24,6 +24,7 @@ export default async function SettingsPage() {
             fullName={coach?.fullName ?? ""}
             gymName={coach?.gymName ?? ""}
             units={coach?.units ?? "lb"}
+            driftDays={coach?.driftDays ?? 5}
           />
         </CardContent>
       </Card>
