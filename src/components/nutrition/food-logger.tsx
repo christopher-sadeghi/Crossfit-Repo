@@ -81,23 +81,32 @@ export function FoodLogger({ athleteId, date, allergies, recent, saved, todayEnt
       catch { setState({ error: "Couldn't save the change. Please try again." }); }
     });
   }
-  function pick(item: Candidate) {
+  function showPanel(item: Candidate) {
     setSelected(item); setServingIndex(0); setQuantity("1"); setMeal(defaultMeal()); setState({});
+  }
+  function pick(item: Candidate) {
+    if (item.source === "off" && !item.savedId) void lookup(`/api/foods/barcode/${item.sourceId}`, true);
+    else showPanel(item);
   }
   function add(item: Candidate, serving: FoodServing, amount: number, meal: Meal) {
     if (!Number.isFinite(amount) || amount < 0.25 || amount > 20) { setState({ error: "Choose a quantity between 0.25 and 20." }); return; }
     run(() => logFood(athleteId, { date, meal, name: item.name.slice(0, 120), ingredients: [item.ingredients, item.allergens.length ? `Allergens: ${item.allergens.join(", ")}` : null].filter(Boolean).join("; ").slice(0, 2000) || null, serving: (amount === 1 ? servingLabel(serving) : `${amount} × ${servingLabel(serving)}`).slice(0, 120), ...scaled(serving, amount) }));
   }
-  function toggleFavorite(item: Candidate, serving = item.servings[0]) {
+  function saveFavorite(item: Candidate, serving: FoodServing) {
     const row = favoriteRow(item, serving);
     if (row) run(() => setFavorite(row.id, !row.is_favorite));
     else run(() => saveFoodToLibrary(athleteId, { kind: "food", is_favorite: true, name: item.name.slice(0, 120), brand: item.brand?.slice(0, 120) ?? null, ingredients: [item.ingredients, item.allergens.length ? `Allergens: ${item.allergens.join(", ")}` : null].filter(Boolean).join("; ").slice(0, 2000) || null, serving_label: servingLabel(serving).slice(0, 80), ...scaled(serving, 1), source: item.source, source_id: item.sourceId }));
   }
+  function toggleFavorite(item: Candidate, serving = item.servings[0]) {
+    if (item.source === "off" && !item.savedId && item !== selected) {
+      void lookup(`/api/foods/barcode/${item.sourceId}`, true).then(full => { if (full) saveFavorite(full, full.servings[0]); });
+    } else saveFavorite(item, serving);
+  }
   function star(item: Candidate, serving?: FoodServing) {
     const on = favoriteRow(item, serving)?.is_favorite ?? false;
-    return <Button type="button" size="icon" variant="ghost" className="shrink-0" disabled={pending} aria-label={`${on ? "Unfavorite" : "Favorite"} ${item.name}`} aria-pressed={on} onClick={() => toggleFavorite(item, serving)}><Star className={on ? "fill-amber-400 text-amber-600" : ""} /></Button>;
+    return <Button type="button" size="icon" variant="ghost" className="shrink-0" disabled={pending || lookupPending} aria-label={`${on ? "Unfavorite" : "Favorite"} ${item.name}`} aria-pressed={on} onClick={() => toggleFavorite(item, serving)}><Star className={on ? "fill-amber-400 text-amber-600" : ""} /></Button>;
   }
-  async function lookup(url: string, barcode: boolean) {
+  async function lookup(url: string, barcode: boolean): Promise<FoodItem | undefined> {
     request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
@@ -107,7 +116,7 @@ export function FoodLogger({ athleteId, date, allergies, recent, saved, todayEnt
       const result = await response.json();
       if (controller.signal.aborted) return;
       if (!response.ok) setLookupState({ error: result.error || "Food lookup isn't available right now." });
-      else if (barcode && result.item) pick(result.item);
+      else if (barcode && result.item) { showPanel(result.item); return result.item; }
       else { setItems(result.items ?? []); setSearched(true); setLookupState({ message: result.notice }); }
     } catch {
       if (!controller.signal.aborted) setLookupState({ error: "Food lookup isn't available right now." });
