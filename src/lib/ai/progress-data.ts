@@ -6,10 +6,11 @@ import { addDays } from "@/lib/nutrition";
 import { formatGoalValue, goalProgress, TRACKING_LABELS } from "@/lib/progress";
 import type { Database } from "@/lib/supabase/database.types";
 import { getTimeZone } from "@/lib/time-zone";
+import { measurementTrends } from "@/lib/measurements";
 
 /** Shared goal tracking and result data for progress notes and weekly reports. */
 export async function loadProgressData(supabase: SupabaseClient<Database>, athleteId: string, asOf: string) {
-  const [liftMaxes, coach, athlete, goals, metrics, results, timeZone] = await Promise.all([
+  const [liftMaxes, coach, athlete, goals, metrics, results, timeZone, measurements] = await Promise.all([
     loadLiftMaxes(supabase, athleteId, asOf),
     supabase.from("coaches").select("units").maybeSingle(),
     supabase.from("athletes").select("first_name, experience_level").eq("id", athleteId).single(),
@@ -33,8 +34,9 @@ export async function loadProgressData(supabase: SupabaseClient<Database>, athle
       .order("created_at", { ascending: false })
       .order("id", { ascending: false }),
     getTimeZone(),
+    supabase.from("body_measurements").select("site, measured_on, value_cm").eq("athlete_id", athleteId).lte("measured_on", asOf).order("measured_on"),
   ]);
-  for (const response of [coach, athlete, goals, metrics, results]) if (response.error) throw response.error;
+  for (const response of [coach, athlete, goals, metrics, results, measurements]) if (response.error) throw response.error;
   if (!coach.data || !athlete.data) throw new Error("Athlete or coach not found.");
 
   const units = coach.data.units;
@@ -65,7 +67,7 @@ export async function loadProgressData(supabase: SupabaseClient<Database>, athle
       target_met: progress.reached,
     }];
   });
-  return { athlete: athlete.data, units, goals: goalInputs, ...data };
+  return { athlete: athlete.data, units, goals: goalInputs, measurementTrends: measurementTrends(measurements.data ?? [], units, asOf), ...data };
 }
 
 export const RECOVERY_FIELDS = Object.keys(CHECK_IN_LABELS) as (keyof typeof CHECK_IN_LABELS)[];

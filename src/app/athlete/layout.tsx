@@ -7,6 +7,7 @@ import { getNotifications } from "@/app/notification-actions";
 import { getTimeZone } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
 import { getViewer } from "@/lib/viewer";
+import { checkProgressReminders } from "@/lib/notifications";
 
 import { logout } from "../(auth)/actions";
 import { AthleteTabs } from "./athlete-tabs";
@@ -22,6 +23,7 @@ export default async function AthleteLayout({
   if (viewer.kind === "none") redirect("/no-access");
 
   const supabase = await createClient();
+  await checkProgressReminders(supabase, { athleteId: viewer.athleteId });
   const [notifications, timeZone] = await Promise.all([getNotifications(), getTimeZone()]);
   const { data: coach } = await supabase
     .from("coaches")

@@ -46,6 +46,7 @@ Rules:
 - Use consistency to mention low completion or drifting and keep recommendations realistic; missing rates mean unknown, not zero.
 - Mention recovery trends from recent_check_ins and check-in averages: readiness, sleep, soreness, stress, energy and mood. Cite only the available data.
 - Use only the data provided. Do not invent numbers.
+- Use measurement_trends when present to describe body measurement changes in the supplied units; do not infer appearance or health.
 - Return one entry per goal in the goals list, using its id. Status: "reached" if achieved or the target is met; "on_track" if the current value and pace look likely to hit the target by its date; "behind" if not; "no_data" if there is no current value or start value to judge from.
 - Each goal note is one plain-English sentence that cites the numbers (start, current, target, date) exactly as given. If a value is null, say "not logged"; never write "null".
 - The summary is 2–4 short sentences for the coach about overall progress, including training consistency, body weight trend, and nutrition adherence when there is data. If there are no goals, say so and summarise the rest.
@@ -57,7 +58,7 @@ async function buildRequest(supabase: SupabaseClient<Database>, { athleteId }: {
   if (!athleteId) throw new Error("Athlete not found.");
   const asOf = await getToday();
   const [
-    { athlete, units, goals: goalInputs, metrics },
+    { athlete, units, goals: goalInputs, metrics, measurementTrends },
     { data: target, error: targetError },
     { data: food, error: foodError },
     training,
@@ -92,6 +93,7 @@ async function buildRequest(supabase: SupabaseClient<Database>, { athleteId }: {
   const trend = weightTrend(recentWeights);
 
   const promptData = {
+    ...(measurementTrends.length ? { measurement_trends: measurementTrends } : {}),
     recent_check_ins: recentCheckIns.filter((entry) => entry.date >= addDays(asOf, -6)),
     check_in_averages_last_28_days: averageCheckIns(recentCheckIns),
     athlete: { first_name: athlete.first_name, experience_level: athlete.experience_level },

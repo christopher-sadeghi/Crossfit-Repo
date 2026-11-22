@@ -21,7 +21,7 @@ export function CheckInReminder({ athleteId, cadence }: { athleteId: string; cad
         </select>
         <Button type="submit" disabled={pending}>{pending ? "Saving…" : "Save setting"}</Button>
       </form>
-      <p className="text-xs text-muted-foreground">Preference only for now. Automatic reminders are not enabled yet.</p>
+      <p className="text-xs text-muted-foreground">Reminders appear when you or your athlete open the app. A photo or measurement starts the next check-in period.</p>
       <ActionFeedback result={result} />
     </CardContent>
   </Card>;
