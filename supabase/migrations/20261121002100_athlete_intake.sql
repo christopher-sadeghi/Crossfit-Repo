@@ -55,7 +55,7 @@ declare
   record_id uuid;
   extra jsonb := '{}';
 begin
-  select * into a from public.athletes where id = p_athlete_id and user_id = auth.uid();
+  select * into a from public.athletes where id = p_athlete_id and user_id = auth.uid() and status = 'active';
   if not found then raise exception 'Not your athlete' using errcode = '42501'; end if;
   select * into intake from public.athlete_intakes where athlete_id = a.id for update;
   if not found then raise exception 'Questionnaire not requested'; end if;

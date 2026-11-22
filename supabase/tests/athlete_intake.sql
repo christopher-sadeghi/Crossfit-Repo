@@ -91,4 +91,19 @@ do $$ begin
  assert (select answers from public.athlete_intakes) = '{}'::jsonb;
  raise notice 'PASS: athlete B sees only own untouched intake';
 end $$;
+reset role;
+update public.athletes set status = 'archived' where id = '35000000-0000-0000-0000-000000000011';
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"35000000-0000-0000-0000-000000000003","role":"authenticated"}',true);
+do $$ begin
+ begin
+   perform public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',7,'{"sleep_hours":1,"stress_level":"high","job_activity":"physical"}','2026-11-21');
+   raise exception 'Archived athlete saved intake';
+ exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+do $$ begin
+ assert (select answers->>'sleep_hours' from public.athlete_intakes where athlete_id = '35000000-0000-0000-0000-000000000011') = '8';
+ raise notice 'PASS: archived athlete RPC rejected without changing intake';
+end $$;
 rollback;
