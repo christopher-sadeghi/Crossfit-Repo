@@ -12,18 +12,21 @@ export default async function MessagesPage() {
   if (viewer.kind === "athlete") redirect("/athlete/messages");
   if (viewer.kind === "none") redirect("/no-access");
   const supabase = await createClient();
-  const [{ data: athletes, error: athleteError }, { data: messages, error: messageError }, timeZone] = await Promise.all([
+  const [{ data: athletes, error: athleteError }, timeZone] = await Promise.all([
     supabase.from("athletes").select("id, first_name, last_name").eq("coach_id", viewer.id).eq("status", "active").order("first_name"),
-    supabase.from("messages").select("athlete_id, body, sender_id, read_at, created_at").eq("coach_id", viewer.id).order("created_at", { ascending: false }),
     getTimeZone(),
   ]);
-  if (athleteError || messageError) throw new Error("Couldn't load conversations. Please try again.");
-  const latest = new Map<string, NonNullable<typeof messages>[number]>();
-  const unread = new Map<string, number>();
-  for (const message of messages ?? []) {
-    if (!latest.has(message.athlete_id)) latest.set(message.athlete_id, message);
-    if (message.sender_id !== viewer.id && !message.read_at) unread.set(message.athlete_id, (unread.get(message.athlete_id) ?? 0) + 1);
-  }
+  if (athleteError) throw new Error("Couldn't load conversations. Please try again.");
+  const summaries = await Promise.all((athletes ?? []).map(async (athlete) => {
+    const [last, unread] = await Promise.all([
+      supabase.from("messages").select("body, created_at").eq("athlete_id", athlete.id).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle(),
+      supabase.from("messages").select("id", { count: "exact", head: true }).eq("athlete_id", athlete.id).neq("sender_id", viewer.id).is("read_at", null),
+    ]);
+    if (last.error || unread.error) throw new Error("Couldn't load conversations. Please try again.");
+    return { athleteId: athlete.id, last: last.data, unread: unread.count ?? 0 };
+  }));
+  const latest = new Map(summaries.map((summary) => [summary.athleteId, summary.last]));
+  const unread = new Map(summaries.map((summary) => [summary.athleteId, summary.unread]));
   const sorted = [...(athletes ?? [])].sort((a, b) => (latest.get(b.id)?.created_at ?? "").localeCompare(latest.get(a.id)?.created_at ?? ""));
   const formatter = new Intl.DateTimeFormat(undefined, { timeZone, dateStyle: "medium", timeStyle: "short" });
   return (

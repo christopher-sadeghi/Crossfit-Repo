@@ -44,17 +44,33 @@ function clientFixture(tables = {}, queryError = null) {
     auth: { getClaims: async () => ({ data: { claims: { sub: userId } } }) },
     from(table) {
       let rows = tables[table] ?? [];
+      const ordering = [];
+      let limit = 1000, update;
+      const result = () => {
+        const count = rows.length;
+        if (update && !queryError) rows.forEach((row) => Object.assign(row, update));
+        const sorted = [...rows].sort((a, b) => {
+          for (const [key, ascending] of ordering) {
+            const compared = String(a[key]).localeCompare(String(b[key]));
+            if (compared) return ascending ? compared : -compared;
+          }
+          return 0;
+        });
+        return { data: sorted.slice(0, limit), count, error: queryError };
+      };
       const builder = {
-        select: () => builder, order: () => builder, limit: () => builder,
+        select: () => builder,
+        order: (key, { ascending = true } = {}) => { ordering.push([key, ascending]); return builder; },
+        limit: (value) => { limit = value; return builder; },
         eq: (key, value) => { rows = rows.filter((row) => row[key] === value); return builder; },
         neq: (key, value) => { rows = rows.filter((row) => row[key] !== value); return builder; },
         is: (key, value) => { rows = rows.filter((row) => row[key] === value); return builder; },
         in: (key, values) => { rows = rows.filter((row) => values.includes(row[key])); return builder; },
         insert: (value) => { calls.push({ insert: value, table }); rows = [{ ...value, id: itemId }]; return builder; },
-        update: (value) => { calls.push({ update: value, table }); return builder; },
-        maybeSingle: async () => ({ data: rows[0] ?? null, error: queryError }),
-        single: async () => ({ data: rows[0] ?? null, error: queryError }),
-        then: (resolve) => resolve({ data: rows, error: queryError }),
+        update: (value) => { update = value; calls.push({ update: value, table }); return builder; },
+        maybeSingle: async () => { const value = result(); return { ...value, data: value.data[0] ?? null }; },
+        single: async () => { const value = result(); return { ...value, data: value.data[0] ?? null }; },
+        then: (resolve) => resolve(result()),
       };
       return builder;
     },
@@ -137,6 +153,51 @@ test("send rejects empty, oversized, forged links, strangers and database failur
     const { actions, notifications } = actionsFixture(options);
     assert.ok((await actions.sendMessage(athleteId, {}, data)).error);
     assert.equal(notifications.length, 0);
+  }
+});
+
+function treeNodes(node) {
+  if (!node || typeof node !== "object") return [];
+  return [node, ...[node.props?.children].flat().flatMap(treeNodes)];
+}
+
+test("long threads show the latest 100 chronologically, count all unread and mark even hidden messages read", async () => {
+  const messages = Array.from({ length: 1205 }, (_, index) => ({
+    id: String(index).padStart(5, "0"), athlete_id: athleteId, coach_id: coachId,
+    sender_id: index < 1105 ? userId : coachId, read_at: null, body: `message-${index}`,
+    created_at: new Date(Date.UTC(2026, 10, 1, 0, index)).toISOString(),
+  }));
+  for (const mode of ["long", "empty", "error"]) {
+    const { client } = clientFixture({ athletes: [athlete], messages: mode === "empty" ? [] : messages }, mode === "error" ? { message: "offline" } : null);
+    client.auth.getClaims = async () => ({ data: { claims: { sub: coachId } } });
+    const load = loader({
+      "@/lib/supabase/server": { createClient: async () => client },
+      "@/lib/viewer": { getViewer: async () => coach },
+      "@/lib/time-zone": { getToday: async () => "2026-11-01", getTimeZone: async () => "UTC" },
+      "@/lib/messages": { messageAthlete: async () => athlete, resolveMessageLinks: async () => new Map(), messageLinkOptions: async () => [] },
+      "@/components/messages/composer": { MessageComposer: "composer" },
+      "@/components/messages/thread-live": { ThreadLive: "thread-live" },
+      "next/cache": { revalidatePath() {} },
+    });
+    const { MessageThread } = load("src/components/messages/thread.tsx");
+    const { default: MessagesPage } = load("src/app/(app)/messages/page.tsx");
+    if (mode === "error") {
+      await assert.rejects(MessageThread({ athleteId }), /Couldn't load your messages/);
+      await assert.rejects(MessagesPage(), /Couldn't load conversations/);
+      continue;
+    }
+    const nodes = treeNodes(await MessageThread({ athleteId }));
+    const bodies = nodes.filter((node) => node.type === "p" && /^message-/.test(node.props.children)).map((node) => node.props.children);
+    assert.deepEqual(bodies, mode === "empty" ? [] : messages.slice(-100).map((row) => row.body));
+    assert.equal(nodes.find((node) => node.type === "thread-live").props.unreadKey, mode === "empty" ? "" : "1105");
+    const list = treeNodes(await MessagesPage());
+    if (mode === "long") {
+      assert.ok(list.some((node) => node.props?.["aria-label"] === "1105 unread messages"));
+      assert.ok(list.some((node) => node.props?.children === "message-1204"));
+      await load("src/app/messages-actions.ts").markThreadRead(athleteId);
+      assert.ok(messages.slice(0, 1105).every((row) => row.read_at));
+      assert.ok(messages.slice(1105).every((row) => row.read_at === null));
+    } else assert.ok(list.some((node) => node.props?.children === "No messages yet · Start a conversation"));
   }
 });
 

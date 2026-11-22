@@ -19,18 +19,19 @@ export async function MessageThread({ athleteId: requestedAthleteId, requestedLi
   const supabase = await createClient();
   const athlete = await messageAthlete(supabase, viewer, athleteId);
   if (!athlete) notFound();
-  const [{ data: auth }, { data: coach }, { data: messages, error }, today, timeZone] = await Promise.all([
-    supabase.auth.getClaims(),
-    supabase.from("coaches").select("full_name").eq("id", athlete.coach_id).maybeSingle(),
-    supabase.from("messages").select("*").eq("athlete_id", athleteId).order("created_at").order("id"),
-    getToday(), getTimeZone(),
-  ]);
-  if (error) throw new Error("Couldn't load your messages. Please try again.");
+  const { data: auth } = await supabase.auth.getClaims();
   const userId = auth?.claims?.sub;
   if (typeof userId !== "string") redirect("/login");
+  const [{ data: coach }, { data: messages, error }, { count: unreadCount, error: unreadError }, today, timeZone] = await Promise.all([
+    supabase.from("coaches").select("full_name").eq("id", athlete.coach_id).maybeSingle(),
+    supabase.from("messages").select("*").eq("athlete_id", athleteId).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(100),
+    supabase.from("messages").select("id", { count: "exact", head: true }).eq("athlete_id", athleteId).neq("sender_id", userId).is("read_at", null),
+    getToday(), getTimeZone(),
+  ]);
+  if (error || unreadError) throw new Error("Couldn't load your messages. Please try again.");
   const athleteName = `${athlete.first_name} ${athlete.last_name}`;
   const coachName = coach?.full_name || "Coach";
-  const rows = messages ?? [];
+  const rows = [...(messages ?? [])].reverse();
   const links = rows.flatMap((row) => row.link_type && row.link_id ? [{ type: row.link_type as MessageLink["type"], id: row.link_id }] : []);
   const [resolved, options] = await Promise.all([
     resolveMessageLinks(supabase, athleteId, links, isCoach),
@@ -48,7 +49,7 @@ export async function MessageThread({ athleteId: requestedAthleteId, requestedLi
   const dateFormat = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
   const timeFormat = new Intl.DateTimeFormat(undefined, { timeZone, hour: "numeric", minute: "2-digit" });
   const dayFormat = new Intl.DateTimeFormat(undefined, { timeZone, dateStyle: "medium" });
-  const unreadKey = rows.filter((row) => row.sender_id !== userId && !row.read_at).map((row) => row.id).join(",");
+  const unreadKey = unreadCount ? String(unreadCount) : "";
 
   return (
     <div className="mx-auto grid w-full max-w-3xl gap-5">
