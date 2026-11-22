@@ -55,11 +55,8 @@ export async function moveAthleteWorkout(athleteId: string, workoutId: string, d
 export async function deleteAthleteWorkout(athleteId: string, workoutId: string): Promise<FormState> {
   if (!ids.safeParse({ athleteId, workoutId }).success) return { error: "Choose an athlete and WOD." };
   const supabase = await createClient();
-  const { count, error: resultError } = await supabase.from("workout_results").select("id", { count: "exact", head: true }).eq("workout_id", workoutId);
-  if (resultError) return { error: "Couldn't check results. Please try again." };
-  if (count) return { error: "This athlete already logged this WOD; delete their result first." };
-  const { data, error } = await supabase.from("workouts").delete().eq("id", workoutId).eq("athlete_id", athleteId).is("program_id", null).select("id").maybeSingle();
-  if (error || !data) return { error: "Couldn't delete that athlete's WOD." };
+  const { error } = await supabase.rpc("delete_athlete_workout", { p_workout_id: workoutId, p_athlete_id: athleteId });
+  if (error) return { error: error.message };
   revalidatePath(`/athletes/${athleteId}`);
   return { message: "WOD deleted." };
 }

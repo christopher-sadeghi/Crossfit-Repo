@@ -1170,6 +1170,7 @@ export type Database = {
       copy_workout_for_athlete: { Args: { p_workout_id: string; p_athlete_id: string; p_scheduled_on: string }; Returns: string };
       override_workout_for_athlete: { Args: { p_workout_id: string; p_athlete_id: string; p_mode: string }; Returns: string | null };
       restore_workout_for_athlete: { Args: { p_workout_id: string; p_athlete_id: string }; Returns: undefined };
+      delete_athlete_workout: { Args: { p_workout_id: string; p_athlete_id: string }; Returns: undefined };
       apply_athlete_workout_adjustment: {
         Args: { p_details: Json; p_modifications: string; p_proposal: Json; p_suggestion_id: string };
         Returns: string;

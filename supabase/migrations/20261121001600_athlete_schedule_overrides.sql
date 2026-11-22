@@ -75,8 +75,11 @@ begin
   insert into public.athlete_workout_overrides (athlete_id, workout_id, replacement_workout_id)
   values (p_athlete_id, p_workout_id, v_id)
   on conflict (athlete_id, workout_id) do update set replacement_workout_id = excluded.replacement_workout_id, updated_at = now();
-  if v_old is not null and not exists (select 1 from public.workout_results where workout_id = v_old) then
-    delete from public.workouts where id = v_old;
+  if v_old is not null then
+    perform 1 from public.workouts where id = v_old and coach_id = auth.uid() for update;
+    if not exists (select 1 from public.workout_results where workout_id = v_old) then
+      delete from public.workouts where id = v_old;
+    end if;
   end if;
   return v_id;
 end;
@@ -90,6 +93,7 @@ begin
   if not found then raise exception 'Choose an athlete from your roster.'; end if;
   select replacement_workout_id into v_old from public.athlete_workout_overrides
   where athlete_id = p_athlete_id and workout_id = p_workout_id;
+  perform 1 from public.workouts where id = v_old and coach_id = auth.uid() for update;
   if exists (select 1 from public.workout_results where workout_id = v_old) then
     raise exception 'This athlete already logged their version; delete their result first.';
   end if;
@@ -98,6 +102,23 @@ begin
 end;
 $$;
 
+create function public.delete_athlete_workout(p_workout_id uuid, p_athlete_id uuid)
+returns void language plpgsql security invoker set search_path = '' as $$
+begin
+  perform 1 from public.workouts
+  where id = p_workout_id and coach_id = auth.uid()
+    and athlete_id = p_athlete_id and program_id is null
+  for update;
+  if not found then raise exception 'Choose a one-off WOD for this athlete.'; end if;
+  if exists (select 1 from public.workout_results where workout_id = p_workout_id) then
+    raise exception 'This athlete already logged this WOD; delete their result first.';
+  end if;
+  delete from public.workouts where id = p_workout_id;
+end;
+$$;
+
+revoke all on function public.delete_athlete_workout(uuid, uuid) from public, anon;
+grant execute on function public.delete_athlete_workout(uuid, uuid) to authenticated;
 revoke all on function public.copy_workout_for_athlete(uuid, uuid, date) from public, anon;
 revoke all on function public.override_workout_for_athlete(uuid, uuid, text) from public, anon;
 revoke all on function public.restore_workout_for_athlete(uuid, uuid) from public, anon;

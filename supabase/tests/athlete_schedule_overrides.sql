@@ -41,6 +41,22 @@ begin
   perform public.override_workout_for_athlete('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a1', 'remove');
   assert exists (select 1 from public.workouts where id = v_id);
   assert exists (select 1 from public.workout_results where workout_id = v_id);
+  begin
+    perform public.delete_athlete_workout(v_id, '00000000-0000-0000-0000-0000000000a1');
+    raise exception 'delete should reject logged workouts';
+  exception when raise_exception then
+    if sqlerrm <> 'This athlete already logged this WOD; delete their result first.' then raise; end if;
+  end;
+  assert exists (select 1 from public.workout_results where workout_id = v_id);
+  v_id := public.copy_workout_for_athlete('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a1', '2026-12-03');
+  perform public.delete_athlete_workout(v_id, '00000000-0000-0000-0000-0000000000a1');
+  assert not exists (select 1 from public.workouts where id = v_id);
+  begin
+    perform public.delete_athlete_workout(v_id, '00000000-0000-0000-0000-0000000000a1');
+    raise exception 'delete should reject missing workouts';
+  exception when raise_exception then
+    if sqlerrm <> 'Choose a one-off WOD for this athlete.' then raise; end if;
+  end;
 end $$;
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000b","role":"authenticated"}', true);
 do $$
@@ -62,5 +78,5 @@ do $$ begin
   assert (select count(*) from public.athlete_workout_overrides) = 1;
   assert not public.athlete_can_view_workout('00000000-0000-0000-0000-0000000000a3');
 end $$;
-select 'PASS: edit, movements, source, scaling, idempotency, remove, restore, logged-result protection, coach isolation, athlete visibility' as result;
+select 'PASS: edit, movements, source, scaling, idempotency, remove, restore, logged-result protection, safe delete, coach isolation, athlete visibility' as result;
 rollback;
