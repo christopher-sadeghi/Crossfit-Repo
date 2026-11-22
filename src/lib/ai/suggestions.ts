@@ -20,6 +20,7 @@ import { ageOn, loadWorkoutContext } from "./workout-context";
 import { movementIdSchema } from "./movement-schema";
 import { foodAverages, trainingVolume, weightTrend } from "./athlete-context";
 import { progressSummaryEntry } from "./progress-summary";
+import { suggestFoodEntry } from "./suggest-food";
 
 export { ApprovalError } from "./errors";
 
@@ -29,6 +30,7 @@ export const SUGGESTION_LABELS: Record<Enums<"suggestion_type">, string> = {
   adjust_macros: "Adjust macros",
   progress_summary: "Progress summary",
   movement_guide: "Movement how-to",
+  suggest_food: "Food ideas",
 };
 
 export const adjustMacrosSchema = z.object({
@@ -113,6 +115,8 @@ export type SuggestionParams = {
   request?: string | null;
   scheduledOn?: string | null;
   movementId?: string;
+  date?: string;
+  meal?: string | null;
 };
 export type SuggestionApplyOptions = { saveAs?: "update" | "new" };
 type SuggestionEntry = {
@@ -457,4 +461,5 @@ export const SUGGESTION_REGISTRY: Record<Enums<"suggestion_type">, SuggestionEnt
     apply: applyMacroSuggestion,
   },
   progress_summary: progressSummaryEntry,
+  suggest_food: suggestFoodEntry,
 };

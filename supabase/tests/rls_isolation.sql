@@ -275,6 +275,90 @@ do $$ begin
   assert (select count(*) from public.movement_guides) = 0, 'athlete B cannot read A guides';
 end $$;
 
+-- Food preferences, food log and food ideas (FIT-24).
+reset role;
+select set_config('request.jwt.claims', '{}', true);
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000a"}', true);
+insert into public.athlete_food_preferences (athlete_id, coach_id, diet_type, allergies)
+values ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-00000000000a', 'vegetarian', '{peanuts}');
+insert into public.nutrition_targets (athlete_id, calories, protein_g, carbs_g, fat_g, start_date)
+values ('00000000-0000-0000-0000-0000000000a1', 2200, 150, 220, 70, '2026-01-01');
+insert into public.ai_suggestions (id, athlete_id, suggestion_type, status, input) values
+  ('00000000-0000-0000-0000-0000000000f1', '00000000-0000-0000-0000-0000000000a1', 'suggest_food', 'idea', '{}'),
+  ('00000000-0000-0000-0000-0000000000f2', '00000000-0000-0000-0000-0000000000a1', 'adjust_macros', 'pending', '{}');
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a4"}', true);
+do $$
+declare n integer;
+begin
+  assert (select count(*) from public.athlete_food_preferences) = 1, 'athlete A can read their food preferences';
+  update public.athlete_food_preferences set dislikes = '{olives}' where athlete_id = '00000000-0000-0000-0000-0000000000a1';
+  get diagnostics n = row_count;
+  assert n = 1, 'athlete A can update their food preferences';
+  assert (select count(*) from public.nutrition_targets) = 1, 'athlete A can read their targets';
+  assert (select count(*) from public.ai_suggestions) = 1, 'athlete A sees only food ideas, not other AI suggestions';
+  update public.nutrition_targets set calories = 9000;
+  get diagnostics n = row_count;
+  assert n = 0, 'athlete A cannot change targets';
+
+  insert into public.ai_suggestions (athlete_id, coach_id, suggestion_type, status, input)
+  values ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-00000000000a', 'suggest_food', 'failed', '{}');
+  begin
+    insert into public.ai_suggestions (athlete_id, coach_id, suggestion_type, status, input)
+    values ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-00000000000a', 'adjust_macros', 'pending', '{}');
+    raise exception 'athlete created a non-food AI suggestion';
+  exception when insufficient_privilege then null;
+  end;
+  update public.ai_suggestions set status = 'approved' where id = '00000000-0000-0000-0000-0000000000f1';
+  get diagnostics n = row_count;
+  assert n = 0, 'athlete cannot approve a coach-requested idea';
+
+  insert into public.food_logs (athlete_id, coach_id, meal, food_name, ai_suggestion_id)
+  values ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-00000000000a', 'snack', 'Idea', '00000000-0000-0000-0000-0000000000f1');
+  update public.food_logs set calories = 1;
+  get diagnostics n = row_count;
+  assert n = 0, 'athletes cannot edit food log entries';
+  delete from public.food_logs where food_name = 'Idea';
+  get diagnostics n = row_count;
+  assert n = 1, 'athlete A can remove their own food log entry';
+end $$;
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000b4"}', true);
+do $$
+declare n integer;
+begin
+  assert (select count(*) from public.athlete_food_preferences) = 0, 'athlete B cannot read A food preferences';
+  assert (select count(*) from public.ai_suggestions) = 0, 'athlete B cannot read A food ideas';
+  assert (select count(*) from public.nutrition_targets) = 0, 'athlete B cannot read A targets';
+  update public.athlete_food_preferences set allergies = '{}';
+  get diagnostics n = row_count;
+  assert n = 0, 'athlete B cannot change A food preferences';
+  begin
+    insert into public.food_logs (athlete_id, coach_id, meal, food_name)
+    values ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-00000000000a', 'snack', 'x');
+    raise exception 'athlete B logged food for athlete A';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.food_logs (athlete_id, coach_id, meal, food_name, ai_suggestion_id)
+    select id, coach_id, 'snack', 'x', '00000000-0000-0000-0000-0000000000f1' from public.athletes;
+    raise exception 'athlete B linked a food log to A''s idea';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000b"}', true);
+do $$ begin
+  assert (select count(*) from public.athlete_food_preferences) = 0, 'coach B cannot read A food preferences';
+  begin
+    insert into public.athlete_food_preferences (athlete_id, coach_id)
+    values ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-00000000000a');
+    raise exception 'coach B wrote A food preferences';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+
 select 'rls_isolation: all checks passed' as result;
 
 rollback;

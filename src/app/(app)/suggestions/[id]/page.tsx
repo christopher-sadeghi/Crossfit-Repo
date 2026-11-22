@@ -26,6 +26,10 @@ import { formatDate, toKg, type Units } from "@/lib/units";
 import { Whiteboard } from "@/app/(app)/programs/workouts/whiteboard";
 import { ScaleWorkoutReview } from "@/components/suggestions/scale-workout-review";
 import { scaleWorkoutInputSchema, scaleWorkoutSchema } from "@/lib/ai/scale-workout";
+import { FoodIdeaList } from "@/components/nutrition/food-ideas";
+import { FOOD_DISCLAIMER, foodIdeasInputSchema, foodIdeasSchema } from "@/lib/ai/suggest-food";
+import { addedIdeaNames } from "@/lib/food-ideas";
+import { readPreferences } from "@/lib/food-preferences";
 
 type Props = { params: Promise<{ id: string }> };
 type MacroKey = "calories" | "protein_g" | "carbs_g" | "fat_g";
@@ -52,6 +56,20 @@ export default async function SuggestionPage({ params }: Props) {
     ? (final?.success ? final.data.rationale : "")
     : (proposal?.success ? proposal.data.rationale : "");
   const summaryType = suggestion.suggestion_type === "progress_summary";
+  const foodType = suggestion.suggestion_type === "suggest_food";
+  const foodIdeas = foodType ? foodIdeasSchema.safeParse(suggestion.proposal) : null;
+  const foodInput = foodType ? foodIdeasInputSchema.safeParse(suggestion.input) : null;
+  const [foodAdded, foodPrefs] = foodIdeas?.success && suggestion.athlete_id
+    ? await Promise.all([
+        addedIdeaNames(supabase, suggestion.id),
+        supabase
+          .from("athlete_food_preferences")
+          .select("diet_type, allergies, dislikes, cooking_minutes")
+          .eq("athlete_id", suggestion.athlete_id)
+          .maybeSingle()
+          .then(({ data }) => readPreferences(data)),
+      ])
+    : [[], readPreferences(null)];
   const decided = suggestion.status === "approved" || suggestion.status === "edited";
   const summaryParsed = summaryType ? progressSummarySchema.safeParse(decided ? suggestion.final : suggestion.proposal) : null;
   const shownSummary = summaryParsed?.success ? summaryParsed.data : null;
@@ -182,6 +200,9 @@ export default async function SuggestionPage({ params }: Props) {
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <Badge variant={statusVariant}>{suggestion.status}</Badge>
           <span className="text-sm text-muted-foreground">Model: {suggestion.model ?? "—"}</span>
+          {suggestion.requested_by && suggestion.requested_by !== suggestion.coach_id && (
+            <span className="text-sm text-muted-foreground">· Asked by the athlete</span>
+          )}
         </div>
       </div>
 
@@ -341,6 +362,27 @@ export default async function SuggestionPage({ params }: Props) {
         </div>
       )}
 
+      {foodType && foodIdeas?.success && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Food ideas{foodInput?.success ? ` for ${formatDate(foodInput.data.date)}` : ""}</CardTitle>
+            {foodInput?.success && (
+              <p className="text-sm text-muted-foreground">
+                {foodInput.data.remaining
+                  ? `Left for the day when asked: ${foodInput.data.remaining.calories} kcal · P ${foodInput.data.remaining.protein_g}g · C ${foodInput.data.remaining.carbs_g}g · F ${foodInput.data.remaining.fat_g}g.`
+                  : "No macro target was set for that day."}
+                {foodInput.data.allergies.length ? ` Allergies checked: ${foodInput.data.allergies.join(", ")}.` : " No allergies listed."}
+                {" "}Ideas need no approval; adding one to the food log is optional.
+              </p>
+            )}
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <FoodIdeaList id={suggestion.id} ideas={foodIdeas.data} addedNames={foodAdded} allergies={foodPrefs.allergies} />
+            <p className="text-xs text-muted-foreground">{FOOD_DISCLAIMER}</p>
+          </CardContent>
+        </Card>
+      )}
+
       {suggestion.status === "failed" && (
         <Card className="mb-6">
           <CardHeader><CardTitle>Suggestion unavailable</CardTitle></CardHeader>
@@ -461,7 +503,7 @@ export default async function SuggestionPage({ params }: Props) {
 
       {suggestion.suggestion_type === "movement_guide" && suggestion.input && typeof suggestion.input === "object" && !Array.isArray(suggestion.input) && typeof suggestion.input.movement_id === "string" ? (
         <Link href={`/programs/movements/${encodeURIComponent(suggestion.input.movement_id)}`} className="underline underline-offset-4">Review on the movement page</Link>
-      ) : !macrosType && !workoutType && !scaleType && !summaryType && suggestion.suggestion_type !== "movement_guide" ? (
+      ) : !macrosType && !workoutType && !scaleType && !summaryType && !foodType && suggestion.suggestion_type !== "movement_guide" ? (
         <p className="text-sm text-muted-foreground">This suggestion type isn&apos;t ready yet.</p>
       ) : null}
     </>
