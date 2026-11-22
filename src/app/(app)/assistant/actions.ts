@@ -3,45 +3,30 @@
 import { revalidatePath } from "next/cache";
 
 import { chatContextSchema, chatMessageSchema, runChatWithClient, type ChatContext } from "@/lib/ai/chat";
-import { SUGGESTION_LABELS } from "@/lib/ai/suggestions";
+import { COACH_SESSION_ERROR } from "@/lib/ai/coach-session";
+import { inlineSuggestion, type InlineSuggestion } from "@/lib/ai/inline-suggestion";
+import { getViewer } from "@/lib/viewer";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
 import { getToday } from "@/lib/time-zone";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type ChatSuggestion = { id: string; label: string; title: string | null; status: string; detail: string | null };
-export type ChatMessage = { id: string; role: "user" | "assistant"; content: string; suggestions: ChatSuggestion[] };
+export type ChatMessage = { id: string; role: "user" | "assistant"; content: string; suggestions: InlineSuggestion[] };
 
 async function loadSuggestions(supabase: SupabaseClient<Database>, ids: string[]) {
-  if (!ids.length) return new Map<string, ChatSuggestion>();
+  if (!ids.length) return new Map<string, InlineSuggestion>();
   const { data } = await supabase
     .from("ai_suggestions")
-    .select("id, suggestion_type, status, proposal, input, athletes(first_name)")
+    .select("*, athletes(first_name, last_name)")
     .in("id", ids);
-  return new Map(
-    (data ?? []).map((s) => {
-      const proposal = s.proposal as { title?: unknown } | null;
-      const input = s.input as { scheduled_on?: unknown; mode?: unknown } | null;
-      const parts = [
-        s.athletes?.first_name,
-        typeof input?.scheduled_on === "string" ? input.scheduled_on : null,
-        input?.mode === "adjust" ? "change to existing WOD" : null,
-      ].filter(Boolean);
-      return [
-        s.id,
-        {
-          id: s.id,
-          label: SUGGESTION_LABELS[s.suggestion_type],
-          title: typeof proposal?.title === "string" ? proposal.title : null,
-          status: s.status,
-          detail: parts.join(" · ") || null,
-        },
-      ];
-    }),
-  );
+  return new Map((data ?? []).map((row) => [
+    row.id,
+    inlineSuggestion(row, row.athletes && `${row.athletes.first_name} ${row.athletes.last_name}`),
+  ]));
 }
 
 export async function loadChat(): Promise<ChatMessage[]> {
+  if ((await getViewer())?.kind !== "coach") throw new Error(COACH_SESSION_ERROR);
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("ai_chat_messages")
@@ -64,6 +49,7 @@ export async function sendChatMessage(
   message: string,
   context: ChatContext,
 ): Promise<{ reply: ChatMessage } | { error: string }> {
+  if ((await getViewer())?.kind !== "coach") return { error: COACH_SESSION_ERROR };
   const text = chatMessageSchema.safeParse(message);
   if (!text.success) return { error: "Type a message of up to 2000 characters." };
   const parsedContext = chatContextSchema.safeParse(context);
@@ -76,7 +62,7 @@ export async function sendChatMessage(
       today: await getToday(),
     });
     if ("error" in result) return result;
-    if (result.suggestionIds.length) revalidatePath("/suggestions");
+    if (result.suggestionIds.length) revalidatePath("/settings/ai-history");
     const suggestions = await loadSuggestions(supabase, result.suggestionIds);
     return {
       reply: {

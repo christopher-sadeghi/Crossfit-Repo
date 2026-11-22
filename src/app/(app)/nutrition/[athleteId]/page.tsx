@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FoodIdeaList, FoodPreferencesForm, SuggestFoodForm } from "@/components/nutrition/food-ideas";
 import { FoodLogger } from "@/components/nutrition/food-logger";
-import { RequestMacroSuggestionForm } from "@/components/suggestions/suggestion-forms";
+import { RequestMacroSuggestionForm } from "@/components/suggestions/request-forms";
 import { FOOD_DISCLAIMER } from "@/lib/ai/suggest-food";
 import { MACRO_DISCLAIMER } from "@/lib/ai/suggestions";
 import { cookingLabel, DIET_LABELS, readPreferences } from "@/lib/food-preferences";

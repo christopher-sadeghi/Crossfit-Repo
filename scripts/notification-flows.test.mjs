@@ -320,7 +320,7 @@ test("approval actions notify only on successful athlete-specific approvals, inc
   for (const type of ["adjust_macros", "write_workout", "progress_summary", "scale_workout"]) {
     for (const mode of ["success", "failure", "no-athlete", "absent"]) {
       const suggestion = { id: itemId, athlete_id: mode === "no-athlete" ? null : athleteId, suggestion_type: type, status: "pending", proposal: { summary: "Report", goals: [] }, input: { mode: "write", workout_id: itemId } };
-      const { load, events } = actionHarness({ ai_suggestions: mode === "absent" ? [] : [suggestion] }, {}, {
+      const { load, events } = actionHarness({ ai_suggestions: mode === "absent" ? [] : [suggestion] }, { viewer: { kind: "coach", id: userId } }, {
         "@/lib/ai/suggestions": { SUGGESTION_REGISTRY: { [type]: { apply: true, proposalSchema: z.any() } } },
         "@/lib/ai/decisions": { approveSuggestionWithClient: async () => { events.push(["approve"]); return mode === "failure" ? { error: "Failed" } : { status: "approved" }; } },
         "@/lib/ai/scale-workout": { scaleWorkoutSchema: z.any(), scaleWorkoutInputSchema: z.any(), applyScaleWorkoutLoadEdits: () => ({ data: {} }) },
@@ -436,4 +436,47 @@ test("bell polls visible tabs every 18s, displays local times, marks/navigates a
     if (oldWindow === undefined) delete globalThis.window; else globalThis.window = oldWindow;
     if (oldDocument === undefined) delete globalThis.document; else globalThis.document = oldDocument;
   }
+});
+
+test("Ask AI uses only an athlete message in the coach's thread and keeps a plain reply private", async () => {
+  const calls = [];
+  const threads = {
+    athletes: [{ id: athleteId, coach_id: userId, status: "active" }],
+    messages: [{ id: itemId, coach_id: userId, athlete_id: athleteId, sender_id: "athlete-user", body: "Can I get an easier WOD?" }],
+  };
+  const mocks = { "@/lib/ai/chat": { runChatWithClient: async (_, opts) => {
+    calls.push(opts);
+    return { suggestionIds: [], reply: "Let's talk about how today felt." };
+  } } };
+  const filename = "src/app/(app)/messages/[athleteId]/ask-ai-action.ts";
+  const athlete = actionHarness(threads, {}, mocks);
+  assert.match((await athlete.load(filename).askAthleteMessageAI(athleteId, itemId)).error, /signed in as an athlete in this browser/);
+  assert.equal(calls.length, 0);
+
+  const coach = actionHarness(threads, { viewer: { kind: "coach", id: userId } }, mocks);
+  const { askAthleteMessageAI } = coach.load(filename);
+  assert.equal((await askAthleteMessageAI(athleteId, userId)).error, "This athlete message is unavailable.");
+  assert.equal(calls.length, 0);
+  assert.deepEqual(await askAthleteMessageAI(athleteId, itemId), { draft: "Let's talk about how today felt." });
+  assert.deepEqual(calls[0].thread, { athleteId, messageId: itemId });
+  assert.equal(calls[0].today, date);
+  assert.match(calls[0].message, /Can I get an easier WOD\?/);
+  assert.ok(!coach.events.some(([action]) => action === "insert"));
+});
+
+test("thread approvals use the normal message sender with an athlete-visible workout link", async () => {
+  const sent = [];
+  const { sendThreadApproval } = loader({
+    "@/app/messages-actions": { sendMessage: async (athlete, _, data) => {
+      sent.push({ athlete, ...Object.fromEntries(data) });
+      return { sentId: "sent" };
+    } },
+  })("src/lib/ai/thread-approval.ts");
+  const suggestion = { athlete_id: athleteId, suggestion_type: "write_workout" };
+  const target = { target_table: "workouts", target_id: itemId };
+  assert.equal(await sendThreadApproval(suggestion, target, {}), "not_thread");
+  assert.deepEqual(sent, []);
+  const threadSuggestion = { ...suggestion, input: { source_message_id: "athlete-message" } };
+  assert.equal(await sendThreadApproval(threadSuggestion, target, { title: "Easy engine", date }), "sent");
+  assert.deepEqual(sent, [{ athlete: athleteId, link: `workout:${itemId}`, body: `I added “Easy engine” to your schedule for ${date}.` }]);
 });
