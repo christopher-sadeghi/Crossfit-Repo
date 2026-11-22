@@ -1,11 +1,14 @@
 import { z } from "zod";
 
 import { searchOff, searchUsda } from "@/lib/food-db/providers";
+import { foodLookupLimit } from "@/lib/food-db/rate-limit";
 import { getViewer } from "@/lib/viewer";
 
 export async function GET(request: Request) {
   const viewer = await getViewer();
   if (viewer?.kind !== "coach" && viewer?.kind !== "athlete") return Response.json({ error: "Please sign in to search foods." }, { status: 401 });
+  const limitedAccount = foodLookupLimit(viewer.kind === "coach" ? `coach:${viewer.id}` : `athlete:${viewer.athleteId}`);
+  if (limitedAccount) return limitedAccount;
   const parsed = z.object({ q: z.string().trim().min(2).max(100), source: z.enum(["all", "usda", "off"]).default("all") }).safeParse(Object.fromEntries(new URL(request.url).searchParams));
   if (!parsed.success) return Response.json({ error: "Enter 2–100 characters and choose a valid food source." }, { status: 400 });
   const { q, source } = parsed.data;

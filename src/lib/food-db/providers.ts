@@ -27,6 +27,7 @@ class LookupFailure extends Error {
   constructor(readonly reason: "rate_limit" | "unavailable") { super("Food source unavailable"); }
 }
 
+// Successful results last 24h; account rate limits are best-effort per server instance.
 const cachedLookup = unstable_cache(async (source: "usda" | "off", term: string, barcode: boolean) => {
   let url: URL;
   if (source === "usda") {

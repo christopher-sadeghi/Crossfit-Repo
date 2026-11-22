@@ -1,9 +1,12 @@
 import { lookupBarcode } from "@/lib/food-db/providers";
+import { foodLookupLimit } from "@/lib/food-db/rate-limit";
 import { getViewer } from "@/lib/viewer";
 
 export async function GET(_: Request, { params }: { params: Promise<{ code: string }> }) {
   const viewer = await getViewer();
   if (viewer?.kind !== "coach" && viewer?.kind !== "athlete") return Response.json({ error: "Please sign in to look up foods." }, { status: 401 });
+  const limitedAccount = foodLookupLimit(viewer.kind === "coach" ? `coach:${viewer.id}` : `athlete:${viewer.athleteId}`);
+  if (limitedAccount) return limitedAccount;
   const { code } = await params;
   if (!/^\d{8,14}$/.test(code)) return Response.json({ error: "Enter a barcode with 8–14 digits." }, { status: 400 });
   const result = await lookupBarcode(code);
