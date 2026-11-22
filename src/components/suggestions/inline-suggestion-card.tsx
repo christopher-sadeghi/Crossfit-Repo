@@ -53,13 +53,21 @@ export function InlineSuggestionCard({ id, suggestion, onOpenReview }: {
           : <p className="whitespace-pre-wrap">{card.summary}</p>)}
         {card.type === "write_workout" && <>
           <p className="font-medium">{card.title}{card.scheduledOn ? ` · ${card.scheduledOn}` : ""}</p>
+          <p>{card.format}{card.rounds != null ? ` · ${card.rounds} rounds` : ""}{card.timeCapMinutes != null ? ` · ${card.timeCapMinutes} min cap` : ""}</p>
           <p className="whitespace-pre-wrap">{card.description}</p>
           <ul className="list-disc pl-5">{card.movements.map((movement, index) => <li key={index}>{movement}</li>)}</ul>
+          {card.notes && <p className="whitespace-pre-wrap">Notes: {card.notes}</p>}
           {pending && <ApproveWorkoutSuggestionForm id={id} mode={card.mode} defaultSaveAs="new" resultCount={0} compact />}
         </>}
         {card.type === "draft_program" && <>
           <p className="font-medium">{card.name} · Starts {card.startDate}</p>
           <p>{card.rationale}</p>
+          <details open={card.workouts.length <= 7}>
+            <summary className="cursor-pointer font-medium">Scheduled workouts ({card.workouts.length})</summary>
+            <ul className="mt-1 list-disc pl-5">{card.workouts.map((workout) => (
+              <li key={`${workout.week}-${workout.day}`}>Week {workout.week}, day {workout.day} · {workout.title}</li>
+            ))}</ul>
+          </details>
           {pending && <ApproveProgramForm id={id} name={card.name} startDate={card.startDate} compact />}
         </>}
         {card.type === "weekly_report" && <>

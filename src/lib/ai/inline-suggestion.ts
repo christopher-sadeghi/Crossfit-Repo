@@ -1,3 +1,4 @@
+import { WORKOUT_TYPE_LABELS } from "@/app/(app)/programs/options";
 import { draftProgramSchema } from "./draft-program-schema";
 import { progressNoteParts, progressSummarySchema } from "./progress-summary";
 import { scaleReviewMovements } from "./scale-review";
@@ -47,6 +48,7 @@ export function inlineSuggestion(row: Tables<"ai_suggestions">, athleteName?: st
         const names = new Map(input.library.map((movement) => [movement.id, movement.name]));
         return {
           ...base, type: row.suggestion_type, title: data.title, description: data.description,
+          format: WORKOUT_TYPE_LABELS[data.workout_type], rounds: data.rounds, timeCapMinutes: data.time_cap_minutes, notes: data.notes,
           mode: input.mode, scheduledOn: input.scheduled_on,
           movements: data.movements.map((movement) =>
             [names.get(movement.movement_id) ?? "Unavailable movement",
@@ -55,14 +57,21 @@ export function inlineSuggestion(row: Tables<"ai_suggestions">, athleteName?: st
               movement.load == null ? null : `${movement.load} ${input.units}`,
               movement.distance_m == null ? null : `${movement.distance_m} m`,
               movement.duration_seconds == null ? null : `${movement.duration_seconds} sec`,
-              movement.calories == null ? null : `${movement.calories} cal`].filter(Boolean).join(" · ")),
+              movement.calories == null ? null : `${movement.calories} cal`,
+              movement.notes].filter(Boolean).join(" · ")),
         };
       }
       break;
     }
     case "draft_program": {
       const { data } = draftProgramSchema.safeParse(raw);
-      if (data) return { ...base, type: row.suggestion_type, name: data.name, startDate: data.start_date, rationale: data.rationale };
+      if (data) return {
+        ...base, type: row.suggestion_type, name: data.name, startDate: data.start_date, rationale: data.rationale,
+        workouts: [...data.weeks].sort((a, b) => a.week_number - b.week_number).flatMap((week) =>
+          [...week.workouts].sort((a, b) => a.day_number - b.day_number).map((workout) => ({
+            week: week.week_number, day: workout.day_number, title: workout.title,
+          }))),
+      };
       break;
     }
     case "weekly_report": {
