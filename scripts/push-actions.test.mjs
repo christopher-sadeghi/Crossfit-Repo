@@ -40,6 +40,19 @@ test("category saves allow none or all and upsert only own settings", async () =
     assert.deepEqual(Array.from(f.calls.at(-1)[1].push_categories), categories);
   }
 });
+test("existing owned subscriptions backfill the logout cookie with the same options as registration", async () => {
+  const saved = fixture(); await saved.savePushSubscription(sub);
+  const existing = fixture();
+  assert.equal((await existing.hasPushSubscription(sub.endpoint)).enabled, true);
+  const cookie = existing.calls.find((c) => c[0] === "cookie-set");
+  assert.deepEqual(JSON.parse(JSON.stringify(cookie)), JSON.parse(JSON.stringify(saved.calls.find((c) => c[0] === "cookie-set"))));
+  assert.equal(cookie[3].path, "/"); assert.equal(cookie[3].maxAge, 60 * 60 * 24 * 365);
+  for (const options of [{ found: false }, { anonymous: true }, { error: new Error("offline") }]) {
+    const f = fixture(options);
+    assert.equal((await f.hasPushSubscription(sub.endpoint)).enabled, false);
+    assert.ok(!f.calls.some((c) => c[0] === "cookie-set"));
+  }
+});
 test("malformed, unauthenticated and failed actions return errors", async () => {
   const f = fixture();
   for (const input of [null, {}, { ...sub, endpoint: "http://insecure.test" }, { ...sub, keys: {} }]) assert.ok((await f.savePushSubscription(input)).error);

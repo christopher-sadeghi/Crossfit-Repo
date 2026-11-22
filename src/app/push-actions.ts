@@ -20,6 +20,10 @@ async function context() {
   return { supabase, userId };
 }
 
+async function setPushEndpointCookie(endpoint: string) {
+  (await cookies()).set("fitcoach-push-endpoint", endpoint, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365 });
+}
+
 export async function savePushSubscription(input: unknown) {
   const parsed = subscriptionSchema.safeParse(input);
   if (!parsed.success) return { error: "Invalid push subscription." };
@@ -28,7 +32,7 @@ export async function savePushSubscription(input: unknown) {
     const { endpoint, keys, userAgent } = parsed.data;
     const { error } = await supabase.rpc("register_push_subscription", { p_endpoint: endpoint, p_p256dh: keys.p256dh, p_auth: keys.auth, p_user_agent: userAgent });
     if (error) throw error;
-    (await cookies()).set("fitcoach-push-endpoint", endpoint, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365 });
+    await setPushEndpointCookie(endpoint);
     return {};
   } catch { return { error: "Couldn't enable push notifications. Please try again." }; }
 }
@@ -52,6 +56,7 @@ export async function hasPushSubscription(endpoint: unknown) {
     const { supabase, userId } = await context();
     const { data, error } = await supabase.from("push_subscriptions").select("id").eq("user_id", userId).eq("endpoint", parsed.data).maybeSingle();
     if (error) throw error;
+    if (data) await setPushEndpointCookie(parsed.data);
     return { enabled: !!data };
   } catch { return { enabled: false, error: "Couldn't check this device. Please reload." }; }
 }
