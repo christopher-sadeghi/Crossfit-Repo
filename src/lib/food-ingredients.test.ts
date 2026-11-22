@@ -1,73 +1,88 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { test } from "node:test";
+import ts from "typescript";
 
 import { matchedAllergies } from "./ai/food-safety";
-import { foodIngredients } from "./food-ingredients";
+import { FOOD_INGREDIENTS_LIMIT, foodIngredients } from "./food-ingredients";
 
-test("preserves specific almond warnings when plain ingredients exceed the limit", () => {
-  const ingredients = foodIngredients([{ name: "Snack", ingredients: `${"sugar, ".repeat(1200)}roasted almonds, salt` }], 8000);
-  assert.ok(ingredients);
-  assert.ok(ingredients.length <= 8000);
-  assert.ok(ingredients.includes("roasted almonds"));
-  assert.deepEqual(matchedAllergies(ingredients, ["almond"]), ["almond"]);
-  const logged = foodIngredients([{ name: "Saved snack", ingredients }], 8000);
-  assert.ok(logged);
-  assert.deepEqual(matchedAllergies(logged, ["almond"]), ["almond"]);
+test("joins names, ingredients and tags in their original order without losing text", () => {
+  assert.equal(foodIngredients([
+    { name: " First ", ingredients: "Sugar,\npalm oil; salt", allergens: ["tree\nnuts", "milk"] },
+    { name: "Second", ingredients: "almonds, almonds" },
+  ]), "First: Sugar, palm oil; salt; allergens: tree nuts, milk; Second: almonds, almonds");
 });
 
-test("keeps explicit allergen tags and deduplicates full allergen-bearing text", () => {
-  const ingredients = foodIngredients([{ name: "Snack", ingredients: "almonds; almonds; Allergens: unusual seed, MILK", allergens: ["milk"] }], 8000);
-  assert.ok(ingredients);
-  assert.deepEqual(matchedAllergies(ingredients, ["almond", "unusual seed", "milk"]), ["almond", "unusual seed", "milk"]);
-  assert.equal(ingredients.split("; almonds").length - 1, 1);
+test("preserves wrapped phrases and newline-delimited declarations", () => {
+  for (const [text, allergies] of [
+    ["Sugar\nContains: tree\nnuts", ["tree nuts"]],
+    ["Contains: hazelnuts\nMay contain: almonds", ["hazelnut", "almond"]],
+    ["peanut\n butter, roasted tree\nnuts", ["peanut butter", "tree nuts"]],
+  ] as const) {
+    const ingredients = foodIngredients([{ name: "Snack", ingredients: text }]);
+    assert.deepEqual(matchedAllergies(ingredients, [...allergies]), [...allergies]);
+  }
 });
 
-test("keeps the allergy summary first when safety text exceeds the limit", () => {
-  const ingredients = foodIngredients([{ name: "Snack", ingredients: `${"almonds ".repeat(1200)}` }], 8000);
-  assert.equal(ingredients.length, 8000);
-  assert.ok(ingredients.startsWith("Allergens: tree nut;"));
+test("preserves pumpkin seed at either side of the former declaration cutoff", () => {
+  for (const count of [0, 280, 290, 295, 300, 305, 1000]) {
+    const ingredients = foodIngredients([{ name: "Snack", ingredients: `Contains: ${"x".repeat(count)} pumpkin\nseed, salt` }]);
+    assert.deepEqual(matchedAllergies(ingredients, ["pumpkin seed"]), ["pumpkin seed"]);
+  }
+});
+
+test("keeps specific almond warnings throughout long meals and on reuse", () => {
+  const original = `${"sugar, ".repeat(3000)}Contains: almonds`;
+  const ingredients = foodIngredients([{ name: "Meal", ingredients: original }]);
+  assert.equal(ingredients, `Meal: ${original}`);
+  assert.ok(ingredients.length > 8000 && ingredients.length < FOOD_INGREDIENTS_LIMIT);
   assert.deepEqual(matchedAllergies(ingredients, ["almond"]), ["almond"]);
+  const reused = foodIngredients([{ name: "Saved meal", ingredients }]);
+  assert.deepEqual(matchedAllergies(reused, ["almond"]), ["almond"]);
+});
+
+test("does not silently truncate text above the storage limit", () => {
+  const original = `${"sugar, ".repeat(8000)}almonds`;
+  const ingredients = foodIngredients([{ name: "Meal", ingredients: original }]);
+  assert.ok(ingredients.length > FOOD_INGREDIENTS_LIMIT);
+  assert.equal(ingredients, `Meal: ${original}`);
 });
 
 test("handles empty and ingredient-free inputs", () => {
-  assert.equal(foodIngredients([], 8000), "");
-  assert.equal(foodIngredients([{ name: "Snack", ingredients: null }], 8000), "Foods: Snack");
+  assert.equal(foodIngredients([]), "");
+  assert.equal(foodIngredients([{ name: "Snack", ingredients: null }]), "Snack");
 });
 
-test("preserves line-wrapped allergen phrases and odd whitespace", () => {
-  const ingredients = foodIngredients([{ name: "Snack", ingredients: `${"sugar, ".repeat(1200)}peanut\n butter, roasted tree\nnuts`, allergens: ["unusual\t\u00a0seed"] }], 8000);
-  assert.ok(ingredients);
-  assert.ok(ingredients.includes("peanut butter"));
-  assert.ok(ingredients.includes("tree nuts"));
-  assert.deepEqual(matchedAllergies(ingredients, ["peanut butter", "tree nut", "unusual seed"]), ["peanut butter", "tree nut", "unusual seed"]);
-});
-
-test("keeps newline-delimited and inline allergen declarations before trimming", () => {
-  for (const declarations of [
-    "\nContains: hazelnuts\nMay contain: almonds\nTraces of: walnuts",
-    " Contains: hazelnuts. May contain: almonds Traces of: walnuts",
-  ]) {
-    const ingredients = foodIngredients([{ name: "Snack", ingredients: `${"sugar, ".repeat(1200)}palm oil${declarations}` }], 8000);
-    assert.ok(ingredients);
-    assert.ok(ingredients.length <= 8000);
-    assert.ok(ingredients.includes("Contains: hazelnuts"));
-    assert.ok(ingredients.includes("May contain: almonds"));
-    assert.ok(ingredients.includes("Traces of: walnuts"));
-    assert.deepEqual(matchedAllergies(ingredients, ["hazelnut", "almond", "walnut"]), ["hazelnut", "almond", "walnut"]);
-  }
-});
-
-test("keeps wrapped phrases within allergen declarations", () => {
-  const ingredients = foodIngredients([{ name: "Snack", ingredients: "Sugar\nContains: tree\nnuts" }], 8000);
-  assert.ok(ingredients);
-  assert.ok(ingredients.includes("Contains: tree nuts"));
-  assert.deepEqual(matchedAllergies(ingredients, ["tree nuts"]), ["tree nuts"]);
-});
-
-test("saves declarations followed by oversized plain ingredient lists", () => {
-  for (const allergen of ["milk", "tree\nnuts"]) {
-    const ingredients = foodIngredients([{ name: "Snack", ingredients: `Contains: ${allergen}\n${"sugar, ".repeat(1400)}` }], 8000);
-    assert.ok(ingredients.length <= 8000);
-    assert.deepEqual(matchedAllergies(ingredients, [allergen.replace(/\s+/g, " ")]), [allergen.replace(/\s+/g, " ")]);
-  }
+test("over-limit meals and single food logs return clear errors without writing", async () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  const entries = [{ food_name: "Meal", ingredients: "x".repeat(FOOD_INGREDIENTS_LIMIT), calories: 100, protein_g: 1, carbs_g: 1, fat_g: 1 }];
+  let writes = 0;
+  const query = {
+    select: () => query,
+    eq: () => query,
+    in: async () => ({ data: entries, error: null }),
+    insert: async () => { writes++; return { error: null }; },
+  };
+  const dependencies: Record<string, unknown> = {
+    "@/lib/food-actor": { actor: async () => ({ coachId: id, isAthlete: false }), revalidateFood: () => {} },
+    "@/lib/food-ingredients": { foodIngredients, FOOD_INGREDIENTS_LIMIT },
+    "@/lib/nutrition": { MEALS: ["lunch"] },
+    "@/lib/supabase/server": { createClient: async () => ({ from: () => query }) },
+    "@/lib/time-zone": { getToday: async () => "2026-11-22" },
+  };
+  const require = createRequire(`${process.cwd()}/package.json`);
+  const loaded = { exports: {} };
+  const code = ts.transpileModule(readFileSync("src/lib/food-log-actions.ts", "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  new Function("require", "module", "exports", code)((key: string) => key in dependencies ? dependencies[key] : require(key), loaded, loaded.exports);
+  const actions = loaded.exports as {
+    saveMealFromLog: (athleteId: string, date: string, name: string, ids: string[]) => Promise<{ error?: string }>;
+    logFood: (athleteId: string, food: object) => Promise<{ error?: string }>;
+  };
+  assert.deepEqual(await actions.saveMealFromLog(id, "2026-11-22", "Lunch", [id]), { error: "This meal has too many ingredients to save — try fewer foods." });
+  const result = await actions.logFood(id, { date: "2026-11-22", meal: "lunch", name: "Meal", calories: 100, protein_g: 1, carbs_g: 1, fat_g: 1, ingredients: "x".repeat(FOOD_INGREDIENTS_LIMIT + 1) });
+  assert.match(result.error ?? "", /too many ingredients to log/);
+  assert.equal(writes, 0);
 });

@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import type { FormState } from "@/lib/auth/form-state";
 import { actor, revalidateFood } from "@/lib/food-actor";
-import { foodIngredients } from "@/lib/food-ingredients";
+import { FOOD_INGREDIENTS_LIMIT, foodIngredients } from "@/lib/food-ingredients";
 import { MEALS } from "@/lib/nutrition";
 import { createClient } from "@/lib/supabase/server";
 import { getToday } from "@/lib/time-zone";
@@ -25,12 +25,12 @@ const librarySchema = z.object({
   brand: z.string().trim().max(120).nullable().default(null),
   serving_label: z.string().trim().min(1).max(80),
   ...macros,
-  ingredients: z.string().trim().max(8000).nullable().default(null),
+  ingredients: z.string().trim().max(FOOD_INGREDIENTS_LIMIT).nullable().default(null),
   source: z.enum(["custom", "usda", "off", "log"]),
   source_id: z.string().trim().min(1).max(64).nullable().default(null),
 }).refine(v => v.kind !== "food" || v.is_favorite, "Database foods must be favorites.");
 export type LibraryFoodInput = z.input<typeof librarySchema>;
-const logSchema = z.object({ date, meal: z.enum(MEALS), name, serving: z.string().trim().max(120).nullable().default(null), ingredients: z.string().trim().max(8000).nullable().default(null), ...macros });
+const logSchema = z.object({ date, meal: z.enum(MEALS), name, serving: z.string().trim().max(120).nullable().default(null), ingredients: z.string().trim().max(FOOD_INGREDIENTS_LIMIT).nullable().default(null), ...macros });
 export type LogFoodInput = z.input<typeof logSchema>;
 const denied = { error: "You can't change food for this athlete." };
 
@@ -38,7 +38,7 @@ export async function logFood(athleteId: string, data: LogFoodInput): Promise<Fo
   const who = await actor(athleteId);
   if (!who) return denied;
   const parsed = logSchema.safeParse(who.isAthlete ? { ...data, date: await getToday() } : data);
-  if (!parsed.success) return { error: "Please check the food, serving and macros." };
+  if (!parsed.success) return { error: parsed.error.issues.some(issue => issue.path[0] === "ingredients") ? "This food has too many ingredients to log — enter it manually instead." : "Please check the food, serving and macros." };
   const { name, date, ...food } = parsed.data;
   const supabase = await createClient();
   const { error } = await supabase.from("food_logs").insert({ ...food, athlete_id: athleteId, coach_id: who.coachId, food_name: name, logged_on: date });
@@ -108,6 +108,7 @@ export async function saveMealFromLog(athleteId: string, day: string, mealName: 
   totals.protein_g = Math.round(totals.protein_g * 10) / 10;
   totals.carbs_g = Math.round(totals.carbs_g * 10) / 10;
   totals.fat_g = Math.round(totals.fat_g * 10) / 10;
-  const ingredients = foodIngredients(entries.map(e => ({ name: e.food_name, ingredients: e.ingredients })), 8000);
+  const ingredients = foodIngredients(entries.map(e => ({ name: e.food_name, ingredients: e.ingredients })));
+  if (ingredients.length > FOOD_INGREDIENTS_LIMIT) return { error: "This meal has too many ingredients to save — try fewer foods." };
   return saveFoodToLibrary(athleteId, { ...totals, name: parsed.data.name, kind: "meal", is_favorite: false, serving_label: "1 meal", ingredients, source: "log" });
 }
