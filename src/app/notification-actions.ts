@@ -1,7 +1,9 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import type { FormState } from "@/lib/auth/form-state";
 import { createClient } from "@/lib/supabase/server";
 
 export type NotificationItem = { id: string; title: string; body: string | null; link: string | null; read_at: string | null; created_at: string };
@@ -43,4 +45,25 @@ export async function markNotificationRead(id?: string): Promise<{ error?: strin
 
 export async function markAllNotificationsRead(): Promise<{ error?: string }> {
   return markNotificationRead();
+}
+
+export async function saveNotificationSettings(_: FormState, formData: FormData): Promise<FormState> {
+  const parsed = z.object({
+    email_enabled: z.enum(["on"]).nullable().transform((value) => value === "on"),
+    email_frequency: z.enum(["instant", "daily"]),
+  }).safeParse({ email_enabled: formData.get("email_enabled"), email_frequency: formData.get("email_frequency") });
+  if (!parsed.success) return { error: "Choose instant alerts or a daily digest." };
+  try {
+    const supabase = await createClient();
+    const { data: auth } = await supabase.auth.getClaims();
+    const userId = auth?.claims?.sub;
+    if (typeof userId !== "string") return { error: "Sign in to save notification settings." };
+    const { error } = await supabase.from("notification_settings").upsert({ user_id: userId, ...parsed.data }, { onConflict: "user_id" });
+    if (error) throw error;
+    revalidatePath("/settings");
+    revalidatePath("/athlete/messages");
+    return { message: "Notification preferences saved." };
+  } catch {
+    return { error: "Couldn't save notification settings. Please try again." };
+  }
 }

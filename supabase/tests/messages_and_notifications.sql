@@ -72,6 +72,23 @@ insert into public.messages (athlete_id, coach_id, body) values
   ('29000000-0000-0000-0000-000000000011', '29000000-0000-0000-0000-000000000001', 'Athlete reply');
 select public.create_notification('29000000-0000-0000-0000-000000000011', 'result_logged', repeat('x', 180), repeat('y', 2100), '/athletes/29000000-0000-0000-0000-000000000011', 'result-test');
 insert into public.notification_settings (email_enabled) values (false);
+do $$ begin
+  assert (select not email_enabled and email_frequency = 'daily' from public.notification_settings), 'email defaults off/daily';
+  insert into public.notification_settings (user_id, email_enabled, email_frequency) values (auth.uid(), true, 'instant')
+    on conflict (user_id) do update set email_enabled = excluded.email_enabled, email_frequency = excluded.email_frequency;
+  assert (select email_enabled and email_frequency = 'instant' from public.notification_settings), 'own settings upsert';
+  begin
+    insert into public.notification_settings (user_id) values ('29000000-0000-0000-0000-000000000001');
+    raise exception 'forged preference owner allowed';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.notification_settings set email_frequency = 'weekly';
+    raise exception 'invalid frequency allowed';
+  exception when check_violation then null;
+  end;
+  raise notice 'PASS: email defaults, own-row upsert, forged owner and invalid frequency';
+end $$;
 do $$ declare n integer; begin
   update public.messages set read_at = now() where sender_id = auth.uid();
   get diagnostics n = row_count;

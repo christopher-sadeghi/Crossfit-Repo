@@ -114,6 +114,63 @@ test("notification actions handle empty, malformed, unauthenticated and database
   }
 });
 
+test("email preferences upsert only the signed-in user's row, including off and both frequencies", async () => {
+  for (const [enabled, frequency] of [[false, "daily"], [true, "instant"], [true, "daily"]]) {
+    const { client, events } = clientFixture();
+    const paths = [];
+    const { saveNotificationSettings } = loader({
+      "@/lib/supabase/server": { createClient: async () => client },
+      "next/cache": { revalidatePath: (path) => paths.push(path) },
+    })("src/app/notification-actions.ts");
+    const result = await saveNotificationSettings({}, form({ user_id: "forged", email_frequency: frequency, ...(enabled ? { email_enabled: "on" } : {}) }));
+    assert.equal(result.message, "Notification preferences saved.");
+    assert.deepEqual(events, [["upsert", "notification_settings", { user_id: userId, email_enabled: enabled, email_frequency: frequency }]]);
+    assert.deepEqual(paths, ["/settings", "/athlete/messages"]);
+  }
+});
+
+test("email preference saves reject empty, invalid, unauthenticated and failing writes", async () => {
+  for (const [options, data] of [
+    [{}, new FormData()], [{}, form({ email_frequency: "weekly" })], [{}, form({ email_enabled: "bad", email_frequency: "daily" })],
+    [{ anonymous: true }, form({ email_frequency: "daily" })], [{ writeError: new Error("denied") }, form({ email_frequency: "daily" })], [{ thrown: true }, form({ email_frequency: "daily" })],
+  ]) {
+    const { client } = clientFixture({}, options);
+    const { saveNotificationSettings } = loader({
+      "@/lib/supabase/server": { createClient: async () => client },
+      "next/cache": { revalidatePath: () => assert.fail("must not revalidate a failed save") },
+    })("src/app/notification-actions.ts");
+    assert.ok((await saveNotificationSettings({}, data)).error);
+  }
+});
+
+test("shared email card defaults off/daily, loads own preferences, and exposes errors rather than overwriting", async () => {
+  for (const mode of ["default", "existing", "error", "anonymous"]) {
+    const { client } = clientFixture({ notification_settings: [{ user_id: userId, email_enabled: true, email_frequency: "instant" }] }, mode === "error" ? { queryError: new Error("denied") } : mode === "anonymous" ? { anonymous: true } : {});
+    const empty = clientFixture().client;
+    const { NotificationSettings } = loader({
+      "@/lib/supabase/server": { createClient: async () => mode === "default" ? empty : client },
+      "./email-settings-form": { EmailSettingsForm: "email-form" },
+    })("src/components/notifications/email-settings.tsx");
+    const result = await NotificationSettings();
+    if (mode === "anonymous") { assert.equal(result, null); continue; }
+    const formNode = nodes(result).find((node) => node.type === "email-form");
+    if (mode === "error") { assert.equal(formNode, undefined); assert.ok(nodes(result).some((node) => node.props?.role === "alert")); }
+    else { assert.equal(formNode.props.emailEnabled, mode === "existing"); assert.equal(formNode.props.frequency, mode === "existing" ? "instant" : "daily"); }
+  }
+});
+
+test("email form has an off switch, daily default, both frequencies and the inactive-delivery note", () => {
+  const { EmailSettingsForm } = loader({
+    react: { useActionState: () => [{}, () => {}, false], useState: (initial) => [initial, () => {}] },
+    "@/components/ui/button": { Button: "button" }, "@/components/ui/label": { Label: "label" }, "@/app/notification-actions": { saveNotificationSettings: () => {} },
+  })("src/components/notifications/email-settings-form.tsx");
+  const tree = EmailSettingsForm({ emailEnabled: false, frequency: "daily" });
+  assert.equal(nodes(tree).find((node) => node.props?.role === "switch").props.checked, false);
+  assert.equal(nodes(tree).find((node) => node.type === "select").props.value, "daily");
+  assert.deepEqual(nodes(tree).filter((node) => node.type === "option").map((node) => node.props.value), ["instant", "daily"]);
+  assert.ok(nodes(tree).some((node) => node.props?.children === "Email delivery isn't switched on for this demo yet — your choice is saved for when it is."));
+});
+
 function actionHarness(tables = {}, options = {}, overrides = {}) {
   const { client, events } = clientFixture(tables, options);
   const notify = (name) => async (...args) => events.push(["notification", name, ...args.slice(1)]);
