@@ -4,6 +4,7 @@ import { loadLiftMaxes } from "@/lib/benchmarks";
 import { addDays } from "@/lib/nutrition";
 import { getToday } from "@/lib/time-zone";
 import { toKg } from "@/lib/units";
+import { filterMovementsByEquipment } from "@/lib/movement-equipment";
 import type { Database, Json, Tables } from "@/lib/supabase/database.types";
 import { draftProgramInputSchema, draftProgramSchema, programMovementSchema, programWeekSchema, programWorkoutSchema, validateDraftProgram } from "./draft-program-schema";
 import { ApprovalError } from "./errors";
@@ -17,6 +18,7 @@ const SYSTEM = `You draft the first four weeks of a personal CrossFit program fo
 - Return exactly four weeks numbered 1–4, each with exactly days_per_week workouts on distinct day_numbers 1–7. Day 1 is the approved start_date; use the supplied default start_date.
 - Respect injuries and limitations: avoid or modify aggravating movements, and explain modifications. Never diagnose or override medical advice.
 - Only choose movements doable at the stated training location with the available equipment. Do not assume access to missing equipment.
+- The library is filtered to the intake equipment. Custom movements marked "equipment unknown" have no known equipment mapping: do not assume their requirements are available; explain any equipment assumptions for coach review.
 - Fit the entire session, including warm-up and recovery, into session_minutes; explain timing in the description.
 - Progress sensibly over four weeks for this athlete's experience, goals, sleep and stress. Include recovery between hard sessions.
 - Loads are in the coach's units. ${LIFT_LOAD_RULE}
@@ -37,13 +39,15 @@ async function buildRequest(db: SupabaseClient<Database>, { athleteId }: { athle
   const answers = z.object({ days_per_week: z.number().int().min(1).max(7), session_minutes: z.number().positive(), location: z.string(), equipment: z.array(z.string()) }).safeParse(intake.data.answers);
   if (!answers.success) throw new ApprovalError("The intake is missing schedule or equipment answers. Resend it before drafting a program.");
   if (!context.library.length) throw new ApprovalError("Add movements to your library before drafting a program.");
+  const library = filterMovementsByEquipment(context.library, answers.data.location, answers.data.equipment);
+  if (!library.length) throw new ApprovalError("No library movements match the athlete's equipment. Update the intake or movement library before drafting a program.");
   const startDate = addDays(today, (8 - new Date(`${today}T00:00:00Z`).getUTCDay()) % 7);
   const input = {
-    ...context, days_per_week: answers.data.days_per_week, default_start_date: startDate,
+    ...context, library, days_per_week: answers.data.days_per_week, default_start_date: startDate,
     intake: intake.data.answers, goals: goals.data ?? [], lift_maxes: formatLiftMaxes(lifts, context.units),
     athlete: { ...athlete.data, age: athlete.data.birth_date ? ageOn(athlete.data.birth_date, today) : null },
   } satisfies Json;
-  const movement = programMovementSchema.extend({ movement_id: movementIdSchema(context.library.map((m) => m.id)) });
+  const movement = programMovementSchema.extend({ movement_id: movementIdSchema(library.map((m) => m.id)) });
   const workout = programWorkoutSchema.extend({ movements: z.array(movement).min(1).max(15) });
   return {
     input, system: SYSTEM, prompt: `Draft the first four weeks using this athlete and movement library (JSON):\n${JSON.stringify(input)}`,
@@ -58,7 +62,8 @@ async function apply(db: SupabaseClient<Database>, suggestion: Tables<"ai_sugges
   const today = await getToday();
   if (program.start_date < today) throw new ApprovalError("Choose a start date today or later.");
   const context = await loadWorkoutContext(db);
-  try { validateDraftProgram(program, { ...saved, library: context.library }); }
+  const allowedIds = new Set(saved.library.map((movement) => movement.id));
+  try { validateDraftProgram(program, { ...saved, library: context.library.filter((movement) => allowedIds.has(movement.id)) }); }
   catch { throw new ApprovalError("This draft no longer matches the movement library or training schedule. Request a new draft."); }
   const payload = { ...program, weeks: program.weeks.map((week) => ({ ...week, workouts: week.workouts.map((workout) => ({ ...workout,
     movements: workout.movements.map(({ load, ...m }) => ({ ...m, load_kg: load == null ? null : toKg(load, saved.units) })),

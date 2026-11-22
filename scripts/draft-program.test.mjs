@@ -44,10 +44,10 @@ test("draft validation accepts four weeks and rejects empty, unknown movements, 
   assert.throws(() => validateDraftProgram(p, { ...context, days_per_week: 2 }), /Duplicate day/);
 });
 
-function fixture({ status = "completed", athleteStatus = "active", rpcError = null, library = context.library } = {}) {
+function fixture({ status = "completed", athleteStatus = "active", rpcError = null, library = context.library, location = "gym", equipment = ["Barbell"] } = {}) {
   const calls = [];
   const db = { from(table) {
-    const data = table === "athlete_intakes" ? { status, answers: { days_per_week: 1, session_minutes: 60, location: "gym", equipment: ["Barbell"], eating_habits: "Regular meals" } }
+    const data = table === "athlete_intakes" ? { status, answers: { days_per_week: 1, session_minutes: 60, location, equipment, eating_habits: "Regular meals" } }
       : table === "athletes" ? { first_name: "Alex", birth_date: "1990-01-01", status: athleteStatus }
       : table === "goals" ? [] : null;
     const q = { select() { return q; }, eq() { return q; }, maybeSingle: async () => ({ data, error: null }), then(resolve) { return Promise.resolve({ data, error: null }).then(resolve); } };
@@ -103,7 +103,7 @@ test("draft context exposes shared movement variations and prefers appropriate s
   ];
   const f = fixture({ library });
   const request = await f.entry.buildRequest(f.db, { athleteId: "athlete" });
-  assert.deepEqual(request.input.library, library);
+  assert.deepEqual(request.input.library, library.map((movement) => ({ ...movement, equipment_status: "equipment unknown" })));
   assert.match(request.system, /prefer its library easier_movement_id or harder_movement_id/i);
   assert.match(request.system, /Prefer easier variations for beginners or limitations/);
   const draft = proposal();
@@ -113,4 +113,64 @@ test("draft context exposes shared movement variations and prefers appropriate s
   draft.weeks[0].workouts[0].movements[0].movement_id = "unknown-variation";
   assert.equal(request.schema.safeParse(draft).success, false);
   assert.throws(() => f.entry.validate(draft, request.input), /Unknown movement/);
+});
+
+test("equipment mapping covers the seeded library and only uses intake checklist keys", () => {
+  const { MOVEMENT_EQUIPMENT } = load("src/lib/movement-equipment.ts");
+  const { EQUIPMENT } = load("src/lib/athlete-intake.ts");
+  const seed = readFileSync(path.join(root, "supabase/migrations/20261121000100_seed_movement_library.sql"), "utf8");
+  const names = [...seed.matchAll(/\('([^']+)', '(?:weightlifting|gymnastics|monostructural|other)'/g)].map((match) => match[1]);
+  assert.ok(names.length >= 62);
+  assert.deepEqual(Object.keys(MOVEMENT_EQUIPMENT).sort(), names.sort());
+  for (const alternatives of Object.values(MOVEMENT_EQUIPMENT)) {
+    for (const items of alternatives ?? []) for (const item of items) assert.ok(EQUIPMENT.includes(item), item);
+  }
+});
+
+test("equipment filter handles bodyweight, alternatives, specialty gear, empty checklists and unknown custom movements", () => {
+  const { filterMovementsByEquipment } = load("src/lib/movement-equipment.ts");
+  const names = ["Air Squat", "Goblet Squat", "Back Squat", "Row", "Wall Ball", "Custom movement", "toString"];
+  const library = names.map((name, index) => ({ id: String(index), name }));
+  const selected = (location, equipment) => filterMovementsByEquipment(library, location, equipment).map((m) => m.name);
+  assert.deepEqual(selected("home", ["None"]), ["Air Squat", "Custom movement", "toString"]);
+  assert.deepEqual(selected("travel", []), ["Air Squat", "Custom movement", "toString"]);
+  assert.deepEqual(selected("gym", []), names);
+  assert.ok(!selected("gym", ["None"]).includes("Row"));
+  assert.ok(selected("home", ["Rower"]).includes("Row"));
+  assert.ok(!selected("home", ["Barbell", "Plates"]).includes("Back Squat"));
+  assert.ok(selected("home", ["Barbell", "Plates", "Rack"]).includes("Back Squat"));
+  for (const equipment of [["Dumbbells"], ["Kettlebells"]]) assert.ok(selected("home", equipment).includes("Goblet Squat"));
+  assert.equal(filterMovementsByEquipment(library, "home", [])[1].equipment_status, "equipment unknown");
+  assert.deepEqual(filterMovementsByEquipment([], "gym", []), []);
+});
+
+test("off-equipment ids are removed from prompt, variation links and generation enum and rejected on validation and approval", async () => {
+  const library = [
+    { id: movementId, name: "Air Squat", harder_movement_id: "wall-ball" },
+    { id: "row", name: "Row" }, { id: "wall-ball", name: "Wall Ball" },
+    { id: "custom", name: "Custom movement" },
+  ];
+  const f = fixture({ library, location: "home", equipment: ["Dumbbells"] });
+  const request = await f.entry.buildRequest(f.db, { athleteId: "athlete" });
+  assert.deepEqual(request.input.library.map((m) => m.id), [movementId, "custom"]);
+  assert.equal(request.input.library[0].harder_movement_id, null);
+  assert.equal(request.input.library[1].equipment_status, "equipment unknown");
+  assert.ok(!request.prompt.includes('"name":"Row"'));
+  assert.ok(!request.prompt.includes('"name":"Wall Ball"'));
+  f.entry.validate(proposal(), request.input);
+  for (const movement of ["row", "wall-ball"]) {
+    const draft = proposal(); draft.weeks[0].workouts[0].movements[0].movement_id = movement;
+    assert.equal(request.schema.safeParse(draft).success, false);
+    assert.throws(() => f.entry.validate(draft, request.input), /Unknown movement/);
+    await assert.rejects(f.entry.apply(f.db, { athlete_id: "athlete", input: request.input }, draft), /movement library/);
+  }
+  assert.equal(f.calls.length, 0);
+  const gym = fixture({ library, equipment: [] });
+  const gymRequest = await gym.entry.buildRequest(gym.db, { athleteId: "athlete" });
+  assert.deepEqual(gymRequest.input.library.map((m) => m.id), library.map((m) => m.id));
+  const wallBall = proposal(); wallBall.weeks[0].workouts[0].movements[0].movement_id = "wall-ball";
+  assert.equal(gymRequest.schema.safeParse(wallBall).success, true);
+  gym.entry.validate(wallBall, gymRequest.input);
+  const none = fixture({ library: library.slice(1, 3), location: "travel", equipment: [] });
+  await assert.rejects(none.entry.buildRequest(none.db, { athleteId: "athlete" }), /No library movements match/);
 });
