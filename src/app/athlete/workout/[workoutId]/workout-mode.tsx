@@ -70,6 +70,7 @@ type Workout = {
   id: string;
   title: string;
   description: string | null;
+  notes: string | null;
   workout_type: Enums<"workout_type">;
   time_cap_seconds: number | null;
   rounds: number | null;
@@ -415,6 +416,13 @@ export function WorkoutMode({
             ×
           </Link>
         </header>
+        {(workout.description || workout.notes || workout.rounds != null) && (
+          <section className="grid gap-3 rounded-xl bg-slate-900 p-4" aria-label="Workout instructions">
+            {workout.rounds != null && <p className="font-bold">Target: {workout.rounds} rounds</p>}
+            {workout.description && <p className="whitespace-pre-line">{workout.description}</p>}
+            {workout.notes && <p className="whitespace-pre-line text-slate-300">{workout.notes}</p>}
+          </section>
+        )}
         {storageWarning && (
           <p role="alert" className="text-amber-300">
             {storageWarning}
@@ -555,7 +563,7 @@ export function WorkoutMode({
             >
               −
             </button>
-            <p className="text-3xl font-bold">{session.rounds} rounds</p>
+            <p className="text-3xl font-bold">{session.rounds}{workout.rounds != null ? ` / ${workout.rounds}` : ""} rounds</p>
             <button
               aria-label="Add round"
               onClick={() => update({ rounds: session.rounds + 1 })}

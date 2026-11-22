@@ -123,6 +123,19 @@ test("changed movement ordering or scaling invalidates saved progress and Rx", (
   }
 }));
 
+test("workout mode shows instructions, coach notes and the prescribed rounds target", () => {
+  const h = workoutHarness();
+  h.props.workout = { ...h.props.workout, description: "Complete in order\nStay smooth", notes: "Coach: full depth", rounds: 5 };
+  h.states[0] = { ...h.states[0], rounds: 3 };
+  h.states[1] = true;
+  const nodes = elements(h.render());
+  assert.ok(nodes.some((node) => node.props.children === h.props.workout.description));
+  assert.ok(nodes.some((node) => node.props.children === h.props.workout.notes));
+  assert.ok(nodes.some((node) => JSON.stringify(node.props.children) === JSON.stringify([3, " / 5", " rounds"])));
+  h.props.workout = { ...h.props.workout, description: null, notes: null, rounds: null };
+  assert.equal(elements(h.render()).some((node) => node.props["aria-label"] === "Workout instructions"), false);
+});
+
 test("prefill validates numbers, strips control characters and limits notes", () => {
   assert.deepEqual(workoutPrefill({ time_seconds: "125", rounds: "3", load: "105.5", is_rx: "scaled", notes: "Hi\u0000" }), { minutes: "2", seconds: "5", rounds: "3", load: "105.5", is_rx: "scaled", notes: "Hi" });
   assert.deepEqual(workoutPrefill({}), {});
