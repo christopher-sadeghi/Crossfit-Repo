@@ -31,11 +31,12 @@ const sample = { sleep_hours: 7.5, sleep_quality: 4, soreness: 2, stress: 2, ene
 const habitsOnly = { sleep_hours: null, sleep_quality: null, soreness: null, stress: null, energy: null, mood: null, readiness: null, notes: null, soreness_areas: [] };
 test("check-ins require a recovery measurement or non-empty note, including zero hours", () => {
   assert.equal(isCheckIn(habitsOnly), false);
-  assert.equal(isCheckIn({ ...habitsOnly, soreness_areas: ["quads"] }), false);
+  assert.equal(isCheckIn({ ...habitsOnly, soreness_areas: ["quads"] }), true);
   assert.equal(isCheckIn({ ...habitsOnly, notes: "A note" }), true);
   assert.equal(isCheckIn({ ...habitsOnly, notes: "" }), false);
   assert.equal(isCheckIn({ ...habitsOnly, notes: "  \n " }), false);
   assert.ok(CHECK_IN_FILTER.includes("notes.neq."));
+  assert.ok(CHECK_IN_FILTER.includes("soreness_areas.neq.{}"));
   for (const field of Object.keys(sample)) {
     assert.equal(isCheckIn({ ...habitsOnly, [field]: field === "sleep_hours" ? 0 : 1 }), true);
     assert.ok(CHECK_IN_FILTER.includes(`${field}.not.is.null`));
@@ -76,6 +77,12 @@ test("coach check-in sections render empty states, readable dates and directiona
     today: "2026-03-01", entries: [entry("2026-03-01", habitsOnly)],
   }));
   assert.match(habits, /No check-ins yet/);
+  const areasOnly = renderToStaticMarkup(createElement(CheckInsTab, {
+    today: "2026-03-01", entries: [entry("2026-03-01", { ...habitsOnly, soreness_areas: ["quads"] })],
+  }));
+  assert.match(areasOnly, /No complete check-in yet/);
+  assert.match(areasOnly, /quads \(1\)/);
+  assert.doesNotMatch(areasOnly, /null\/5/);
   const { addDays } = load("src/lib/nutrition.ts");
   const entries = Array.from({ length: 31 }, (_, i) => entry(addDays("2025-06-01", -i), { notes: `history-${i}-end` }));
   const history = renderToStaticMarkup(createElement(CheckInsTab, { today: "2026-03-01", entries }));
@@ -146,6 +153,20 @@ test("recent check-ins are compact, trim notes, constrain dates and propagate er
   assert.ok(db.calls.some((c) => c[0] === "gte" && c[2] === "2026-02-23"));
   assert.ok(db.calls.some((c) => c[0] === "or" && c[1] === CHECK_IN_FILTER));
   assert.deepEqual(await loadRecentCheckIns(client([{ entry_on: "2026-03-01", ...habitsOnly }]), "a", "2026-03-01", 7), []);
+  assert.deepEqual(await loadRecentCheckIns(client([
+    { athlete_id: "a", entry_on: "2026-03-01", ...habitsOnly, soreness_areas: ["quads"] },
+  ]), "a", "2026-03-01", 7), [{
+    date: "2026-03-01",
+    sleep_hours: null,
+    sleep_quality: null,
+    soreness: null,
+    soreness_areas: ["quads"],
+    stress: null,
+    energy: null,
+    mood: null,
+    readiness: null,
+    note: null,
+  }]);
   const notesOnly = await loadRecentCheckIns(client([
     { entry_on: "2026-03-01", ...habitsOnly, notes: "  Legacy recovery note  " },
     { entry_on: "2026-02-28", ...habitsOnly, notes: "  " },
@@ -179,6 +200,7 @@ test("check-in and habit actions validate, isolate their payloads, use viewer-lo
   let dbError = null;
   const writes = [], paths = [];
   const overrides = {
+    "@/lib/activity-training-warning": { checkTrainingLoad: async () => {} },
     "@/lib/notifications": { notifyLowReadiness: async () => {} },
     "next/cache": { revalidatePath: (path) => paths.push(path) },
     "@/lib/viewer": { getViewer: async () => viewer },
@@ -206,26 +228,39 @@ test("check-in and habit actions validate, isolate their payloads, use viewer-lo
   assert.deepEqual(writes[0].payload.soreness_areas, ["quads", "hips"]);
   assert.equal(writes[0].options.onConflict, "athlete_id,entry_on");
   assert.deepEqual(paths, ["/athlete", "/athlete/journal", "/athletes/athlete"]);
-  for (const key of Object.keys(sample)) {
-    const data = form();
-    data.delete(key);
-    assert.ok((await saveCheckIn({}, data)).error, key);
-  }
+  const partial = new FormData();
+  partial.set("sleep_hours", "6.25");
+  partial.set("notes", "");
+  partial.set("expected_date", "2026-03-01");
+  assert.equal((await saveCheckIn({}, partial)).message, "Check-in saved.");
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(writes.at(-1).payload).filter(([key]) =>
+      !["athlete_id", "coach_id", "entry_on", "soreness_areas"].includes(key))),
+    { sleep_hours: 6.3, sleep_quality: null, soreness: null, stress: null, energy: null, mood: null, notes: null },
+  );
+  assert.equal(readinessScore(writes.at(-1).payload), null);
+  const areasOnly = new FormData();
+  areasOnly.set("expected_date", "2026-03-01");
+  areasOnly.append("soreness_areas", "quads");
+  assert.equal((await saveCheckIn({}, areasOnly)).message, "Check-in saved.");
+  assert.deepEqual(writes.at(-1).payload.soreness_areas, ["quads"]);
+  assert.equal(readinessScore(writes.at(-1).payload), null);
   const empty = new FormData();
-  assert.ok((await saveCheckIn({}, empty)).error);
+  empty.set("expected_date", "2026-03-01");
+  assert.equal((await saveCheckIn({}, empty)).error, "Fill in at least one answer, or tap Skip today.");
   for (const [key, value] of [["sleep_hours", "25"], ["soreness", "6"], ["stress", "2.5"], ["notes", "n".repeat(501)], ["soreness_areas", "unknown"]]) {
     const data = form();
     data.set(key, value);
     assert.ok((await saveCheckIn({}, data)).error, key);
   }
-  assert.equal(writes.length, 1);
+  assert.equal(writes.length, 3);
   for (const expectedDate of ["2026-02-28", "2026-03-02", null]) {
     const stale = form();
     if (expectedDate == null) stale.delete("expected_date");
     else stale.set("expected_date", expectedDate);
     assert.equal((await saveCheckIn({}, stale)).error, "A new day has started — reload to do today's check-in.");
   }
-  assert.equal(writes.length, 1);
+  assert.equal(writes.length, 3);
   for (const [value, expected] of [["7.56", 7.6], [String(0.1 + 0.2), 0.3], ["0", 0]]) {
     const data = form();
     data.set("sleep_hours", value);
@@ -248,4 +283,41 @@ test("check-in and habit actions validate, isolate their payloads, use viewer-lo
   assert.equal(payload.entry_on, "2026-02-28");
   habits.set("entry_on", "2026-03-02");
   assert.ok((await saveJournalEntry({}, habits)).error);
+});
+
+test("partial saved check-ins render only answered fields and offer an edit action", () => {
+  const React = require("react");
+  const { renderToStaticMarkup } = require("react-dom/server");
+  const tag = (name) => {
+    const Tag = (props) => React.createElement(name, props, props.children);
+    Tag.displayName = name;
+    return Tag;
+  };
+  const { CheckInForm } = load("src/app/athlete/check-in/check-in-form.tsx", {
+    "next/link": "a",
+    "@/components/ui/badge": { Badge: "span" },
+    "@/components/ui/button": { Button: tag("button") },
+    "@/components/ui/card": { Card: "section", CardContent: "div", CardHeader: "header", CardTitle: "h2" },
+    "@/components/ui/input": { Input: "input" },
+    "@/components/ui/label": { Label: "label" },
+    "@/components/ui/textarea": { Textarea: "textarea" },
+    "./actions": { saveCheckIn: async () => ({ message: "Check-in saved." }) },
+  });
+  const entry = { ...habitsOnly, sleep_hours: 6.5 };
+  const html = renderToStaticMarkup(React.createElement(CheckInForm, { entry, today: "2026-03-01", athleteId: "athlete" }));
+  assert.match(html, /Daily check-in \(optional\)/);
+  assert.match(html, /Readiness: answer all six to get a score/);
+  assert.match(html, /Sleep 6\.5h/);
+  assert.match(html, /Edit today&#x27;s check-in/);
+  assert.doesNotMatch(html, /Sleep quality|Soreness|Stress|Energy|Mood|null\/5|Save check-in/);
+  const areasOnly = { ...habitsOnly, soreness_areas: ["quads"] };
+  const areasOnlyHtml = renderToStaticMarkup(React.createElement(CheckInForm, {
+    entry: areasOnly,
+    today: "2026-03-01",
+    athleteId: "athlete",
+  }));
+  assert.match(areasOnlyHtml, /Readiness: answer all six to get a score/);
+  assert.match(areasOnlyHtml, /quads/);
+  assert.match(areasOnlyHtml, /Edit today&#x27;s check-in/);
+  assert.doesNotMatch(areasOnlyHtml, /null\/5|Save check-in/);
 });
