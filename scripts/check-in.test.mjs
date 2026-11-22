@@ -28,10 +28,14 @@ function load(relative, overrides = {}) {
 }
 const { readinessScore, readinessLabel, checkInAttention, isCheckIn, CHECK_IN_FILTER, loadRecentCheckIns, loadCheckInAttention } = load("src/lib/check-in.ts");
 const sample = { sleep_hours: 7.5, sleep_quality: 4, soreness: 2, stress: 2, energy: 4, mood: 4 };
-const habitsOnly = { sleep_hours: null, sleep_quality: null, soreness: null, stress: null, energy: null, mood: null, readiness: null, notes: "Habits", soreness_areas: [] };
-test("check-ins require at least one recovery measurement, including zero hours", () => {
+const habitsOnly = { sleep_hours: null, sleep_quality: null, soreness: null, stress: null, energy: null, mood: null, readiness: null, notes: null, soreness_areas: [] };
+test("check-ins require a recovery measurement or non-empty note, including zero hours", () => {
   assert.equal(isCheckIn(habitsOnly), false);
-  assert.equal(isCheckIn({ ...habitsOnly, notes: "A note", soreness_areas: ["quads"] }), false);
+  assert.equal(isCheckIn({ ...habitsOnly, soreness_areas: ["quads"] }), false);
+  assert.equal(isCheckIn({ ...habitsOnly, notes: "A note" }), true);
+  assert.equal(isCheckIn({ ...habitsOnly, notes: "" }), false);
+  assert.equal(isCheckIn({ ...habitsOnly, notes: "  \n " }), false);
+  assert.ok(CHECK_IN_FILTER.includes("notes.neq."));
   for (const field of Object.keys(sample)) {
     assert.equal(isCheckIn({ ...habitsOnly, [field]: field === "sleep_hours" ? 0 : 1 }), true);
     assert.ok(CHECK_IN_FILTER.includes(`${field}.not.is.null`));
@@ -72,7 +76,6 @@ test("coach check-in sections render empty states, readable dates and directiona
     today: "2026-03-01", entries: [entry("2026-03-01", habitsOnly)],
   }));
   assert.match(habits, /No check-ins yet/);
-  assert.doesNotMatch(habits, /Habits/);
   const { addDays } = load("src/lib/nutrition.ts");
   const entries = Array.from({ length: 31 }, (_, i) => entry(addDays("2025-06-01", -i), { notes: `history-${i}-end` }));
   const history = renderToStaticMarkup(createElement(CheckInsTab, { today: "2026-03-01", entries }));
@@ -99,7 +102,11 @@ test("attention handles empty, stale, future, thresholds and consecutive local c
   assert.deepEqual(attention([]), { flagged: false, reasons: [] });
   assert.deepEqual(attention([{ entry_on: "2026-03-01", ...habitsOnly }]), { flagged: false, reasons: [] });
   assert.equal(attention([{ entry_on: "2026-03-01", ...habitsOnly }, row("2026-02-28", 39)]).flagged, true);
-  assert.equal(attention([{ entry_on: "2026-03-01", ...habitsOnly, sleep_hours: 0 }, row("2026-02-28", 39)]).flagged, false);
+  assert.equal(attention([{ entry_on: "2026-03-01", ...habitsOnly, sleep_hours: 0 }, row("2026-02-28", 39)]).flagged, true);
+  assert.deepEqual(attention([{ entry_on: "2026-03-01", ...habitsOnly, notes: "Legacy note" }]), { flagged: false, reasons: [] });
+  assert.deepEqual(attention([
+    { entry_on: "2026-03-01", ...habitsOnly, notes: "Legacy note" }, row("2026-02-28", 39),
+  ]).reasons, [{ date: "2026-02-28", text: "Low readiness on the latest check-in" }]);
   assert.equal(attention([row("2026-02-27", 1)]).flagged, false);
   assert.equal(attention([row("2026-03-02", 1)]).flagged, false);
   assert.equal(attention([row("2026-02-28", 39)]).flagged, true);
@@ -139,6 +146,12 @@ test("recent check-ins are compact, trim notes, constrain dates and propagate er
   assert.ok(db.calls.some((c) => c[0] === "gte" && c[2] === "2026-02-23"));
   assert.ok(db.calls.some((c) => c[0] === "or" && c[1] === CHECK_IN_FILTER));
   assert.deepEqual(await loadRecentCheckIns(client([{ entry_on: "2026-03-01", ...habitsOnly }]), "a", "2026-03-01", 7), []);
+  const notesOnly = await loadRecentCheckIns(client([
+    { entry_on: "2026-03-01", ...habitsOnly, notes: "  Legacy recovery note  " },
+    { entry_on: "2026-02-28", ...habitsOnly, notes: "  " },
+  ]), "a", "2026-03-01", 7);
+  assert.equal(notesOnly.length, 1);
+  assert.equal(notesOnly[0].note, "Legacy recovery note");
   const unicode = await loadRecentCheckIns(client([{ ...sample, entry_on: "2026-03-01", notes: "n".repeat(299) + "😀extra" }]), "a", "2026-03-01", 7);
   assert.equal(unicode[0].note, "n".repeat(299) + "😀");
   assert.equal(Array.from(unicode[0].note).length, 300);

@@ -29,11 +29,13 @@ export const CHECK_IN_LABELS = {
 export const CHECK_IN_COLUMNS =
   "athlete_id, entry_on, sleep_hours, sleep_quality, soreness, soreness_areas, stress, energy, mood, readiness, notes";
 
-const CHECK_IN_FIELDS = ["sleep_hours", "sleep_quality", "soreness", "stress", "energy", "mood"] as const;
-export const CHECK_IN_FILTER = CHECK_IN_FIELDS.map((field) => `${field}.not.is.null`).join(",");
+const CHECK_IN_FIELDS = ["sleep_hours", "sleep_quality", "soreness", "stress", "energy", "mood", "notes"] as const;
+export const CHECK_IN_FILTER = CHECK_IN_FIELDS
+  .map((field) => field === "notes" ? "notes.neq." : `${field}.not.is.null`)
+  .join(",");
 
 export function isCheckIn(entry: Partial<Pick<CheckIn, (typeof CHECK_IN_FIELDS)[number]>>) {
-  return CHECK_IN_FIELDS.some((field) => entry[field] != null);
+  return CHECK_IN_FIELDS.some((field) => field === "notes" ? Boolean(entry.notes?.trim()) : entry[field] != null);
 }
 
 export type CheckIn = Pick<
@@ -82,7 +84,9 @@ type AttentionEntry = Pick<CheckIn, "entry_on" | "readiness" | "soreness"> &
 
 export function checkInAttention(checkIns: AttentionEntry[], todayIso: string) {
   const recent = checkIns
-    .filter((entry) => entry.entry_on <= todayIso && isCheckIn(entry))
+    .filter((entry) =>
+      entry.entry_on <= todayIso && isCheckIn(entry) && (entry.readiness != null || entry.soreness != null),
+    )
     .sort((a, b) => b.entry_on.localeCompare(a.entry_on));
   const latest = recent[0];
   const yesterday = addDays(todayIso, -1);
