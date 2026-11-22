@@ -1,6 +1,7 @@
 import { Dumbbell, LogOut } from "lucide-react";
 import { redirect } from "next/navigation";
 
+import { CoachChat } from "@/components/assistant/coach-chat";
 import { NavLinks } from "@/components/layout/nav-links";
 import { Button } from "@/components/ui/button";
 import { getViewer } from "@/lib/viewer";
@@ -38,6 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
       <main className="flex-1 overflow-x-hidden p-8">{children}</main>
+      <CoachChat />
     </div>
   );
 }
