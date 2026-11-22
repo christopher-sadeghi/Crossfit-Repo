@@ -99,6 +99,50 @@ test("version resolves date-limited athlete adjustments and coach fallback", () 
   assert.equal(workoutVersion(base, { ...scaling, details: {} }, "2026-01-01").rounds, 5);
 });
 
+test("scaled movements retain original prescription notes without falling back for sets or reps", () => {
+  const original = { movement_id: "a", name: "Squat", notes: "5x3 @75%", sets: 5, reps: 3, load_kg: null };
+  const base = { movements: [{ ...original, movement_id: "unrelated", notes: "@50%" }, original], rounds: null, time_cap_seconds: null };
+  const scaledMovement = { original_movement_id: "a", movement_id: "b", movement_name: "Front squat", sets: null, reps: null, load_kg: null, distance_m: null, calories: null, duration_seconds: null, reason: "Scale" };
+  const scaling = { modifications: "Scaled", athlete_adjusted_at: null, coach_modifications: null, coach_details: null, details: { source: "ai", suggestion_id: "12345678-1234-4234-8234-123456789012", movements: [scaledMovement, { ...scaledMovement, original_movement_id: "missing" }] } };
+  const version = workoutVersion(base, scaling, "2026-01-01");
+  assert.equal(version.movements[0].notes, "5x3 @75%");
+  assert.equal(version.movements[0].sets, null);
+  assert.equal(version.movements[0].reps, null);
+  assert.equal(version.movements[1].notes, null);
+  assert.equal(workoutVersion({ ...base, movements: [] }, scaling, "2026-01-01").movements[0].notes, null);
+});
+
+test("timer settings display minutes and store seconds for caps and strength rest", () => {
+  const elements = (node) => !node || typeof node !== "object" ? [] : [node, ...[node.props?.children].flat(Infinity).flatMap(elements)];
+  for (const [workoutType, key, initial, minutes] of [["for_time", "capSeconds", 10, "12.5"], ["strength", "seconds", 2, "1.5"]]) {
+    let stateIndex = 0;
+    const { WorkoutMode } = load("src/app/athlete/workout/[workoutId]/workout-mode.tsx", {
+      react: { useEffect() {}, useRef: (value) => ({ current: value }), useState: (value) => [stateIndex++ === 1 ? true : typeof value === "function" ? value() : value, () => {}] },
+      "next/link": { default: "a" },
+      "next/navigation": { useRouter: () => ({}) },
+      "@/components/movements/movement-demo-sheet": { MovementDemoSheet: "movement-demo" },
+    });
+    const tree = WorkoutMode({ athleteId: "a", date: "2026-01-01", units: "kg", maxes: [], workout: { id: "w", title: "WOD", workout_type: workoutType, time_cap_seconds: 600, rounds: null, movements: [], isScaled: false } });
+    const settings = elements(tree).find((node) => node.type.name === "TimerSettings");
+    const config = settings.props.config;
+    let changed;
+    const labels = settings.type({ config, onChange: (value) => { changed = value; } });
+    const label = labels.find((node) => node.key === key);
+    assert.match(label.props.children[0], /minutes/);
+    const input = elements(label).find((node) => node.type === "input");
+    assert.equal(input.props.value, initial);
+    input.props.onChange({ target: { value: minutes } });
+    assert.equal(changed[key], Number(minutes) * 60);
+    if (key === "capSeconds") {
+      input.props.onChange({ target: { value: "" } });
+      assert.equal(changed.capSeconds, undefined);
+    }
+    changed = undefined;
+    input.props.onChange({ target: { value: "-1" } });
+    assert.equal(changed, undefined);
+  }
+});
+
 test("workout route gates by viewer, single-date schedule, and resolves scaling", async () => {
   const calls = [];
   let scheduled = true;

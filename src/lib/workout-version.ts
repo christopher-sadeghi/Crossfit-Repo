@@ -15,7 +15,11 @@ export function workoutVersion<T extends BaseWorkout>(base: T, row: Scaling, dat
   if (!details?.success) return { ...base, isScaled: !!scaling, modifications: scaling?.modifications ?? "" };
   return {
     ...base,
-    movements: details.data.movements.map((m) => ({ ...m, name: m.movement_name, notes: null })),
+    movements: details.data.movements.map((m) => ({
+      ...m,
+      name: m.movement_name,
+      notes: base.movements.find((original) => original.movement_id === m.original_movement_id)?.notes ?? null,
+    })),
     rounds: details.data.rounds === undefined ? base.rounds : details.data.rounds,
     time_cap_seconds: details.data.time_cap_seconds === undefined ? base.time_cap_seconds : details.data.time_cap_seconds,
     isScaled: true,
