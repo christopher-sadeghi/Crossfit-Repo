@@ -10,7 +10,7 @@ import { loadLiftMaxes } from "@/lib/benchmarks";
 import { formatLiftMaxes, liftMaxContextSchema, LIFT_LOAD_RULE } from "./lift-context";
 
 import { ApprovalError } from "./errors";
-import { ageOn, loadWorkoutContext } from "./workout-context";
+import { ageOn, loadWorkoutContext, workoutLibraryEntrySchema } from "./workout-context";
 import { movementIdSchema } from "./movement-schema";
 import { scaleWorkoutChangeSchema } from "./scale-workout-schema";
 
@@ -71,14 +71,7 @@ export const scaleWorkoutInputSchema = z.object({
       }),
     ),
   }),
-  library: z.array(
-    z.object({
-      id: z.string(),
-      name: z.string(),
-      category: z.string(),
-      measure: z.string(),
-    }),
-  ),
+  library: z.array(workoutLibraryEntrySchema),
   recent_results: z.array(
     z.object({
       performed_on: z.string(),
@@ -136,6 +129,7 @@ Rules:
 - Keep the WOD's stimulus and format.
 - Return exactly one change for each original movement, in the same order. Copy its original_movement_id exactly.
 - Use only movement IDs from the provided library. Keep the original movement by using the same movement_id; substitute only with a library movement.
+- For substitutions, prefer the original movement's easier_movement_id if it fits the stimulus and athlete's abilities, and avoid the listed harder movement.
 - Never make the workout harder than the original. When keeping a movement, its load, reps, distance, calories, and duration must be no greater than the original. Substitutions must be easier or equal in demand.
 - Scale loads and reps realistically for the athlete's experience level and recent RPE.
 - Never program into a reported injury or recent pain; substitute instead. If pain is recent, include the exact phrase "check with your coach" in the athlete-facing summary.
