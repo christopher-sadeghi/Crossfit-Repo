@@ -23,6 +23,7 @@ import { ageOn, loadWorkoutContext } from "./workout-context";
 import { movementIdSchema } from "./movement-schema";
 import { consistencyContext, foodAverages, trainingVolume, weightTrend } from "./athlete-context";
 import { progressSummaryEntry } from "./progress-summary";
+import { weeklyReportEntry } from "./weekly-report";
 import { athleteAdjustSchema } from "./athlete-adjust-schema";
 import { suggestFoodEntry } from "./suggest-food";
 
@@ -33,6 +34,7 @@ export const SUGGESTION_LABELS: Record<Enums<"suggestion_type">, string> = {
   scale_workout: "Scale workout",
   adjust_macros: "Adjust macros",
   progress_summary: "Progress summary",
+  weekly_report: "Weekly athlete report",
   movement_guide: "Movement how-to",
   athlete_adjust_workout: "Athlete adjusted WOD",
   suggest_food: "Food ideas",
@@ -480,6 +482,7 @@ export const SUGGESTION_REGISTRY: Record<Enums<"suggestion_type">, SuggestionEnt
     apply: applyMacroSuggestion,
   },
   progress_summary: progressSummaryEntry,
+  weekly_report: weeklyReportEntry,
   // Applied by the athlete right away (see athlete-adjust.ts); coaches review it afterwards.
   athlete_adjust_workout: { label: SUGGESTION_LABELS.athlete_adjust_workout, proposalSchema: athleteAdjustSchema },
   suggest_food: suggestFoodEntry,

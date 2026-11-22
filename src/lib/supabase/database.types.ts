@@ -1496,6 +1496,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      athlete_weekly_reports: {
+        Args: Record<PropertyKey, never>;
+        Returns: { id: string; published_at: string; snapshot: Json; content: Json }[];
+      };
       create_notification: {
         Args: { p_athlete_id: string; p_kind: string; p_title: string; p_body?: string | null; p_link?: string | null; p_dedupe_key?: string | null };
         Returns: undefined;
@@ -1588,7 +1592,8 @@ export type Database = {
         | "progress_summary"
         | "movement_guide"
         | "athlete_adjust_workout"
-        | "suggest_food";
+        | "suggest_food"
+        | "weekly_report";
       weight_unit: "lb" | "kg";
       workout_type: "for_time" | "amrap" | "emom" | "strength" | "other";
     };
@@ -1747,6 +1752,7 @@ export const Constants = {
         "progress_summary",
         "athlete_adjust_workout",
         "suggest_food",
+        "weekly_report",
       ],
       weight_unit: ["lb", "kg"],
       workout_type: ["for_time", "amrap", "emom", "strength", "other"],

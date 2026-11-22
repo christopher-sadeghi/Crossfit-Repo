@@ -170,6 +170,16 @@ test("approved progress summary is posted unlinked to messages before notifying,
   }
 });
 
+test("a shared weekly report notification opens its report without posting a message", async () => {
+  const { helpers, client, calls, messages } = fixture({ suggestion: { suggestion_type: "weekly_report", status: "edited" } });
+  await helpers.notifySuggestionApproved(client, "a", "s");
+  assert.equal(messages.length, 0);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].args.p_kind, "progress_report");
+  assert.equal(calls[0].args.p_link, "/athlete/reports?report=s#report-s");
+  assert.equal(calls[0].args.p_dedupe_key, "report:s");
+});
+
 test("failed/malformed report delivery and approval queries never throw or send a broken report link", async () => {
   const suggestion = { suggestion_type: "progress_summary", status: "approved", coach_id: "c", final: { summary: "Report" } };
   for (const options of [

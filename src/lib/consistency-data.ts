@@ -6,7 +6,9 @@ import { computeConsistency, DEFAULT_DRIFT_DAYS, drifting } from "./consistency"
 import { addDays } from "./nutrition";
 
 /** Load a year of RLS-scoped activity for either the coach or athlete viewer. */
-export async function loadConsistency(supabase: SupabaseClient<Database>, athleteId: string, today: string) {
+export async function loadConsistency(
+  supabase: SupabaseClient<Database>, athleteId: string, today: string, { closeToday = false } = {},
+) {
   const from = addDays(today, -364);
   const [schedule, results, attendance] = await Promise.all([
     loadAthleteSchedule(supabase, athleteId, { from, to: today }, "id,source_workout_id,title,week_number,day_number"),
@@ -18,11 +20,13 @@ export async function loadConsistency(supabase: SupabaseClient<Database>, athlet
   return {
     stats: computeConsistency({
       today,
+      closeToday,
       scheduled: schedule.map((item) => ({ date: item.date, workoutId: item.workout.id })),
       results: results.data ?? [],
       attendance: attendance.data ?? [],
     }),
     attendance: attendance.data ?? [],
+    schedule,
   };
 }
 

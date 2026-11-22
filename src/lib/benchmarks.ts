@@ -86,11 +86,13 @@ function summarize(benchmark: Benchmark, attempts: BenchmarkAttempt[], retestWee
   };
 }
 
-async function loadHistory(supabase: Client, athleteId: string) {
+async function loadHistory(supabase: Client, athleteId: string, asOf?: string) {
+  const directQuery = supabase.from("benchmark_results").select("*").eq("athlete_id", athleteId);
+  const scheduledQuery = supabase.from("workout_results").select("id, workout_id, performed_on, created_at, time_seconds, rounds, reps, load_kg, is_rx, notes, workouts(title, workout_type, workout_movements(movement_id, reps))").eq("athlete_id", athleteId);
   const [benchmarks, direct, scheduled, scalings] = await Promise.all([
     supabase.from("benchmarks").select("*").order("name"),
-    supabase.from("benchmark_results").select("*").eq("athlete_id", athleteId),
-    supabase.from("workout_results").select("id, workout_id, performed_on, created_at, time_seconds, rounds, reps, load_kg, is_rx, notes, workouts(title, workout_type, workout_movements(movement_id, reps))").eq("athlete_id", athleteId),
+    asOf ? directQuery.lte("performed_on", asOf) : directQuery,
+    asOf ? scheduledQuery.lte("performed_on", asOf) : scheduledQuery,
     supabase.from("athlete_workout_scalings").select("workout_id, modifications, details, athlete_adjusted_at, coach_modifications, coach_details").eq("athlete_id", athleteId),
   ]);
   for (const r of [benchmarks, direct, scheduled, scalings]) if (r.error) throw r.error;
@@ -98,9 +100,9 @@ async function loadHistory(supabase: Client, athleteId: string) {
   return { benchmarks: benchmarks.data ?? [], direct: direct.data ?? [], scheduled: (scheduled.data ?? []).map((r) => ({ ...r, scaling: scalingByWorkout.get(r.workout_id) ?? null })) };
 }
 
-export async function loadAthleteBenchmarks(supabase: Client, athleteId: string, today: string) {
+export async function loadAthleteBenchmarks(supabase: Client, athleteId: string, today: string, asOf?: string) {
   const [history, athlete] = await Promise.all([
-    loadHistory(supabase, athleteId),
+    loadHistory(supabase, athleteId, asOf),
     supabase.from("athletes").select("coach_id").eq("id", athleteId).single(),
   ]);
   if (athlete.error) throw athlete.error;
@@ -122,8 +124,8 @@ export type LiftMax = {
   isEstimated: boolean;
 };
 
-export async function loadLiftMaxes(supabase: Client, athleteId: string): Promise<LiftMax[]> {
-  const history = await loadHistory(supabase, athleteId);
+export async function loadLiftMaxes(supabase: Client, athleteId: string, asOf?: string): Promise<LiftMax[]> {
+  const history = await loadHistory(supabase, athleteId, asOf);
   const lifts = new Map<string, { name: string; attempts: BenchmarkAttempt[] }>();
   for (const b of history.benchmarks) {
     if (b.kind !== "lift" || !b.movement_id) continue;

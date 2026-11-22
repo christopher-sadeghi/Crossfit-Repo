@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { approveSuggestionWithClient, rejectSuggestionWithClient } from "@/lib/ai/decisions";
+import { requestRegisteredSuggestion } from "@/lib/ai/request";
 import { runSuggestion } from "@/lib/ai/service";
 import { progressSummarySchema } from "@/lib/ai/progress-summary";
 import { SUGGESTION_REGISTRY } from "@/lib/ai/suggestions";
@@ -13,9 +14,11 @@ import { failure, type FormState } from "@/lib/auth/form-state";
 import { notifySuggestionApproved } from "@/lib/notifications";
 import type { Enums } from "@/lib/supabase/database.types";
 import { createClient } from "@/lib/supabase/server";
+import { getViewer } from "@/lib/viewer";
+import { weeklyReportSchema } from "@/lib/weekly-report";
 
 const idSchema = z.string().uuid();
-const typeSchema = z.enum(["write_workout", "scale_workout", "adjust_macros", "progress_summary"]);
+const typeSchema = z.enum(["write_workout", "scale_workout", "adjust_macros", "progress_summary", "weekly_report"]);
 
 function revalidateSuggestion(id: string, athleteId?: string | null) {
   revalidatePath("/suggestions");
@@ -32,28 +35,15 @@ export async function requestSuggestion(type: Enums<"suggestion_type">, athleteI
   const parsedAthleteId = idSchema.safeParse(athleteId);
   if (!parsedType.success || !parsedAthleteId.success) return { error: "Couldn't request an AI suggestion. Please try again." };
 
-  const entry = SUGGESTION_REGISTRY[parsedType.data];
-  if (!entry.buildRequest) return { error: "This suggestion type isn't ready yet." };
+  if (parsedType.data === "weekly_report" && (await getViewer())?.kind !== "coach") {
+    return { error: "Only a coach can draft a weekly report." };
+  }
 
   const supabase = await createClient();
-  let result: Awaited<ReturnType<typeof runSuggestion>>;
-  try {
-    const request = await entry.buildRequest(supabase, { athleteId: parsedAthleteId.data });
-    const { schema: generationSchema, ...context } = request;
-    result = await runSuggestion({
-      type: parsedType.data,
-      athleteId: parsedAthleteId.data,
-      ...context,
-      schema: entry.proposalSchema,
-      generationSchema,
-      validate: entry.validate,
-    });
-  } catch {
-    return { error: "The AI couldn't make a suggestion right now. Please try again in a minute." };
-  }
+  const result = await requestRegisteredSuggestion(supabase, parsedType.data, { athleteId: parsedAthleteId.data });
   if ("error" in result) return { error: result.error };
 
-  revalidatePath("/suggestions");
+  revalidateSuggestion(result.id, parsedAthleteId.data);
   redirect(`/suggestions/${result.id}`);
 }
 
@@ -111,6 +101,7 @@ export async function approveSuggestion(_: FormState, formData: FormData): Promi
   if (!entry.apply) return failure(formData, "This suggestion type isn't ready to approve yet.");
   const isWorkout = suggestion.suggestion_type === "write_workout";
   const isSummary = suggestion.suggestion_type === "progress_summary";
+  const isWeeklyReport = suggestion.suggestion_type === "weekly_report";
   let finalInput: unknown;
   let applyOptions: SuggestionApplyOptions | undefined;
   if (isSummary) {
@@ -118,6 +109,11 @@ export async function approveSuggestion(_: FormState, formData: FormData): Promi
     if (!proposal.success) return failure(formData, "Couldn't save this summary. Please ask for a new one.");
     const final = progressSummarySchema.safeParse({ ...proposal.data, summary: formData.get("summary") });
     if (!final.success) return failure(formData, "Enter a summary of up to 800 characters.");
+    finalInput = final.data;
+  } else if (isWeeklyReport) {
+    const focus = formData.getAll("focus").filter((point) => typeof point === "string" && point.trim());
+    const final = weeklyReportSchema.safeParse({ summary: formData.get("summary"), focus });
+    if (!final.success) return failure(formData, "Enter a summary and two or three focus points.");
     finalInput = final.data;
   } else if (isWorkout) {
     const proposal = entry.proposalSchema.safeParse(suggestion.proposal);
@@ -159,6 +155,10 @@ export async function approveSuggestion(_: FormState, formData: FormData): Promi
     return { message: "WOD saved." };
   }
   if (isSummary) return { message: "Saved to the athlete's notes." };
+  if (isWeeklyReport) {
+    revalidatePath("/athlete/reports");
+    return { message: "Weekly report shared with the athlete." };
+  }
   return { message: result.status === "edited" ? "Your edited targets are approved." : "Targets approved." };
 }
 
