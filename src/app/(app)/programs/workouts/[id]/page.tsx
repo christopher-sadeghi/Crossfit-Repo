@@ -10,6 +10,7 @@ import { RemoveWorkoutScalingForm, ScaleWorkoutRequestForm } from "@/components/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { scaleWorkoutDetailsSchema } from "@/lib/ai/scale-workout";
 import { getCoach } from "@/lib/coach";
+import { loadFormReviews } from "@/lib/form-review-data";
 import { createClient } from "@/lib/supabase/server";
 import { getToday } from "@/lib/time-zone";
 import { compareScores } from "@/lib/results";
@@ -47,6 +48,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
   const units = coach?.units ?? "lb";
   const results = (resultRows ?? []).sort(compareScores(workout.workout_type));
   const resultCount = results.length;
+  const formReviews = await loadFormReviews(supabase, { resultIds: results.map((result) => result.id) });
 
   const movements = workout.workout_movements.map(({ movements: mv, ...m }) => ({
     ...m,
@@ -181,6 +183,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
                             name
                           )}
                           {r.logged_by != null && r.logged_by !== coach?.id && <Badge variant="secondary">Logged by athlete</Badge>}
+                          {formReviews.filter((review) => review.workout_result_id === r.id).map((review) => <Link key={review.id} href={`/form-checks/${review.id}`}><Badge variant={review.status === "reviewed" ? "outline" : "default"}>{review.status === "reviewed" ? "Form video" : "Form video · review"}</Badge></Link>)}
                         </div>
                       </TableCell>
                       <TableCell>{formatScore(r, units)}</TableCell>

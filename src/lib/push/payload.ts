@@ -17,9 +17,9 @@ export function pushCategory(kind: NotificationKind | string): PushCategory {
   switch (kind) {
     case "coach_message": case "message": return "messages";
     case "schedule_changed": return "schedule";
-    case "suggestion_approved": case "progress_report": return "updates";
+    case "suggestion_approved": case "progress_report": case "form_reviewed": return "updates";
     case "progress_check_in": case "check_in_reminder": return "reminders";
-    case "high_training_load": return "alerts";
+    case "high_training_load": case "form_check": return "alerts";
     default: return "alerts";
   }
 }

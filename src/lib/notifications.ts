@@ -8,7 +8,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { getToday } from "@/lib/time-zone";
 
 type Client = SupabaseClient<Database>;
-export type NotificationKind = "result_logged" | "workout_adjusted" | "low_readiness" | "message" | "missed_workouts" | "coach_message" | "schedule_changed" | "suggestion_approved" | "progress_report" | "progress_check_in" | "high_training_load";
+export type NotificationKind = "result_logged" | "workout_adjusted" | "low_readiness" | "message" | "missed_workouts" | "coach_message" | "schedule_changed" | "suggestion_approved" | "progress_report" | "progress_check_in" | "high_training_load" | "form_check" | "form_reviewed";
 export type NotificationInput = {
   athleteId: string;
   kind: NotificationKind;
@@ -20,7 +20,7 @@ export type NotificationInput = {
 
 export async function notify(supabase: Client, input: NotificationInput): Promise<void> {
   try {
-    if (["result_logged", "workout_adjusted", "low_readiness", "message"].includes(input.kind)) {
+    if (["result_logged", "workout_adjusted", "low_readiness", "message", "form_check"].includes(input.kind)) {
       const { data: athlete } = await supabase.from("athletes").select("first_name, last_name").eq("id", input.athleteId).maybeSingle();
       const name = athlete ? `${athlete.first_name} ${athlete.last_name}` : "An athlete";
       const body = input.body?.replace(/Your athlete|your athlete/g, name);

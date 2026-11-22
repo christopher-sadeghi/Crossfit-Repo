@@ -1,10 +1,13 @@
 import { redirect } from "next/navigation";
 
+import Link from "next/link";
+
 import { ActivityForm } from "@/components/activity-form";
 import { ActivityList } from "@/components/activity-list";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { feedbackSummary } from "@/lib/feedback";
+import { loadFormReviews } from "@/lib/form-review-data";
 import { createClient } from "@/lib/supabase/server";
 import { getToday } from "@/lib/time-zone";
 import { gymSessionLoad } from "@/lib/training-load";
@@ -22,7 +25,7 @@ export default async function AthleteHistoryPage() {
   if (viewer.kind === "none") redirect("/no-access");
 
   const supabase = await createClient();
-  const [{ data: claims }, { data: results }, today, activities] = await Promise.all([
+  const [{ data: claims }, { data: results }, today, activities, formReviews] = await Promise.all([
     supabase.auth.getClaims(),
     supabase
       .from("workout_results")
@@ -34,6 +37,7 @@ export default async function AthleteHistoryPage() {
       .order("created_at", { ascending: false }),
     getToday(),
     loadActivities(supabase, viewer.athleteId),
+    loadFormReviews(supabase, { athleteId: viewer.athleteId }),
   ]);
   const userId = claims?.claims?.sub;
 
@@ -88,6 +92,14 @@ export default async function AthleteHistoryPage() {
                   <p className="mt-1 whitespace-pre-line">{result.pain_notes}</p>
                 </div>
               )}
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                {formReviews.filter((review) => review.workout_result_id === result.id).map((review) => (
+                  <Link key={review.id} href={`/athlete/form-checks/${review.id}`} className="font-medium underline underline-offset-4">
+                    {review.status === "reviewed" ? "View coach feedback" : "Form video (awaiting review)"}
+                  </Link>
+                ))}
+                <Link href={`/athlete/form-checks?result=${result.id}`} className="text-muted-foreground underline underline-offset-4">Send form video</Link>
+              </div>
               {result.logged_by === userId && typeof userId === "string" && (
                 <AthleteResultControls
                   resultId={result.id}
