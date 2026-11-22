@@ -19,6 +19,8 @@ export default async function AthleteLayout({
   if (viewer.kind === "none") redirect("/no-access");
 
   const supabase = await createClient();
+  const { count: unreadMessages } = await supabase.from("messages").select("id", { count: "exact", head: true })
+    .eq("athlete_id", viewer.athleteId).eq("sender_id", viewer.coachId).is("read_at", null);
   const { data: coach } = await supabase
     .from("coaches")
     .select("gym_name")
@@ -45,7 +47,7 @@ export default async function AthleteLayout({
         </header>
         {children}
       </main>
-      <AthleteTabs />
+      <AthleteTabs unreadMessages={unreadMessages ?? 0} />
     </div>
   );
 }

@@ -9,6 +9,29 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      messages: {
+        Row: { id: string; athlete_id: string; coach_id: string; sender_id: string; body: string; link_type: string | null; link_id: string | null; read_at: string | null; created_at: string };
+        Insert: { id?: string; athlete_id: string; coach_id: string; sender_id?: string; body: string; link_type?: string | null; link_id?: string | null; read_at?: string | null; created_at?: string };
+        Update: { id?: string; athlete_id?: string; coach_id?: string; sender_id?: string; body?: string; link_type?: string | null; link_id?: string | null; read_at?: string | null; created_at?: string };
+        Relationships: [
+          { foreignKeyName: "messages_athlete_id_fkey"; columns: ["athlete_id"]; isOneToOne: false; referencedRelation: "athletes"; referencedColumns: ["id"] },
+          { foreignKeyName: "messages_coach_id_fkey"; columns: ["coach_id"]; isOneToOne: false; referencedRelation: "coaches"; referencedColumns: ["id"] }
+        ];
+      };
+      notifications: {
+        Row: { id: string; recipient_id: string; athlete_id: string | null; kind: string; title: string; body: string | null; link: string | null; dedupe_key: string | null; read_at: string | null; created_at: string };
+        Insert: { id?: string; recipient_id: string; athlete_id?: string | null; kind: string; title: string; body?: string | null; link?: string | null; dedupe_key?: string | null; read_at?: string | null; created_at?: string };
+        Update: { id?: string; recipient_id?: string; athlete_id?: string | null; kind?: string; title?: string; body?: string | null; link?: string | null; dedupe_key?: string | null; read_at?: string | null; created_at?: string };
+        Relationships: [
+          { foreignKeyName: "notifications_athlete_id_fkey"; columns: ["athlete_id"]; isOneToOne: false; referencedRelation: "athletes"; referencedColumns: ["id"] }
+        ];
+      };
+      notification_settings: {
+        Row: { user_id: string; email_enabled: boolean; email_frequency: string; updated_at: string };
+        Insert: { user_id?: string; email_enabled?: boolean; email_frequency?: string; updated_at?: string };
+        Update: { user_id?: string; email_enabled?: boolean; email_frequency?: string; updated_at?: string };
+        Relationships: [];
+      };
       athlete_workout_overrides: {
         Row: { id: string; coach_id: string; athlete_id: string; workout_id: string; replacement_workout_id: string | null; created_at: string; updated_at: string };
         Insert: { id?: string; coach_id?: string; athlete_id: string; workout_id: string; replacement_workout_id?: string | null; created_at?: string; updated_at?: string };
@@ -1182,6 +1205,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      create_notification: {
+        Args: { p_athlete_id: string; p_kind: string; p_title: string; p_body?: string | null; p_link?: string | null; p_dedupe_key?: string | null };
+        Returns: undefined;
+      };
       copy_workout_for_athlete: { Args: { p_workout_id: string; p_athlete_id: string; p_scheduled_on: string }; Returns: string };
       override_workout_for_athlete: { Args: { p_workout_id: string; p_athlete_id: string; p_mode: string }; Returns: string | null };
       restore_workout_for_athlete: { Args: { p_workout_id: string; p_athlete_id: string }; Returns: undefined };

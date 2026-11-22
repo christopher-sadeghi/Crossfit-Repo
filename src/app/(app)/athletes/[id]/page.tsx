@@ -181,6 +181,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" asChild><Link href={`/messages/${athlete.id}`}>Message</Link></Button>
           <Button variant="outline" asChild>
             <Link href={`/athletes/${athlete.id}/edit`}>
               <Pencil /> Edit
