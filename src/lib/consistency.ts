@@ -5,6 +5,7 @@ export const DECLINING_RATE_DROP = 25;
 
 export type ConsistencyInput = {
   today: string;
+  closeToday?: boolean;
   scheduled: { date: string; workoutId: string }[];
   results: { performed_on: string; workout_id: string }[];
   attendance: { attended_on: string; kind: string }[];
@@ -52,7 +53,7 @@ export function computeConsistency(input: ConsistencyInput): ConsistencyStats {
     const unmatchedSameDayResults = input.results.filter((r) => r.performed_on === date && !workouts.has(r.workout_id)).length;
     const done = Math.min(workouts.size, idMatches + unmatchedSameDayResults);
     const status = attendanceDates.has(date) || done === workouts.size ? "completed"
-      : done > 0 ? "partial" : date < today ? "missed" : "pending";
+      : done > 0 ? "partial" : date < today || input.closeToday ? "missed" : "pending";
     statuses.set(date, status);
     if (status === "pending") continue;
     currentStreak = status === "missed" ? 0 : currentStreak + 1;

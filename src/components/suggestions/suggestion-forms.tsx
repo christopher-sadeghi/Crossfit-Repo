@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { joinProgressNote } from "@/lib/ai/progress-note";
 import type { FormState } from "@/lib/auth/form-state";
+import type { WeeklyReport } from "@/lib/weekly-report";
 import {
   approveSuggestion,
   rejectSuggestion,
@@ -31,7 +32,7 @@ function RequestAthleteSuggestionForm({
   label,
 }: {
   athleteId: string;
-  type: "adjust_macros" | "progress_summary";
+  type: "adjust_macros" | "progress_summary" | "weekly_report";
   label: string;
 }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(
@@ -48,7 +49,7 @@ function RequestAthleteSuggestionForm({
       className="grid justify-items-start gap-3"
     >
       <Button type="submit" disabled={pending}>
-        {pending ? "Thinking… this can take up to 30 seconds" : label}
+        {pending ? "Drafting with AI…" : label}
       </Button>
       <Message state={state} />
     </form>
@@ -83,6 +84,50 @@ export function ApproveProgramForm({ id, name, startDate }: { id: string; name: 
 
 export function RequestProgressSummaryForm({ athleteId }: { athleteId: string }) {
   return <RequestAthleteSuggestionForm athleteId={athleteId} type="progress_summary" label="Summarize progress" />;
+}
+
+export function RequestWeeklyReportForm({ athleteId }: { athleteId: string }) {
+  return <RequestAthleteSuggestionForm athleteId={athleteId} type="weekly_report" label="Draft weekly report" />;
+}
+
+export function ApproveWeeklyReportForm({ id, report }: { id: string; report: WeeklyReport }) {
+  const [state, formAction, pending] = useActionState(approveSuggestion, {});
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        const formData = new FormData(event.currentTarget);
+        startTransition(() => formAction(formData));
+      }}
+      className="grid gap-4"
+    >
+      <input type="hidden" name="id" value={id} />
+      <div className="grid gap-1.5">
+        <Label htmlFor="report-summary">Summary</Label>
+        <Textarea id="report-summary" name="summary" defaultValue={report.summary} rows={5} maxLength={1000} required />
+      </div>
+      <fieldset className="grid gap-3">
+        <legend className="mb-2 text-sm font-medium">Focus for next week</legend>
+        {["First focus point", "Second focus point", "Third focus point (optional)"].map((label, index) => (
+          <div key={label} className="grid gap-1.5">
+            <Label htmlFor={`report-focus-${index}`}>{label}</Label>
+            <Textarea
+              id={`report-focus-${index}`}
+              name="focus"
+              defaultValue={report.focus[index] ?? ""}
+              rows={2}
+              maxLength={240}
+              required={index < 2}
+            />
+          </div>
+        ))}
+      </fieldset>
+      <Message state={state} />
+      <Button type="submit" disabled={pending} className="justify-self-start">
+        {pending ? "Sharing…" : "Approve and share"}
+      </Button>
+    </form>
+  );
 }
 
 export function RequestWorkoutSuggestionForm({ workoutId }: { workoutId?: string }) {

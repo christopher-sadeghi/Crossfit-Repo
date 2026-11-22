@@ -7,8 +7,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { SUGGESTION_LABELS, writeWorkoutInputSchema } from "@/lib/ai/suggestions";
 import { PageHeader } from "@/components/layout/page-header";
 import { athleteAdjustmentStatus } from "@/components/suggestions/athlete-adjustment-review";
+import { WeeklyReportBatch } from "@/components/suggestions/weekly-report-batch";
 import { createClient } from "@/lib/supabase/server";
+import { getToday } from "@/lib/time-zone";
 import { formatDate } from "@/lib/units";
+import { completedReportWeek, formatReportWeek } from "@/lib/weekly-report";
 
 const FILTERS = [
   { value: "pending", label: "Pending" },
@@ -57,6 +60,7 @@ export default async function Page({ searchParams }: Props) {
   return (
     <>
       <PageHeader title="AI Suggestions" description={`${count ?? 0} pending suggestion${count === 1 ? "" : "s"} to review.${athleteCount ? ` ${athleteCount} athlete change${athleteCount === 1 ? "" : "s"} to review.` : ""}`} />
+      <WeeklyReportBatch week={formatReportWeek(completedReportWeek(await getToday()))} />
       <div className="mb-4 flex flex-wrap gap-2" aria-label="Filter suggestions">
         {FILTERS.map((filter) => (
           <Button key={filter.value} variant={filter.value === status ? "default" : "outline"} size="sm" asChild>

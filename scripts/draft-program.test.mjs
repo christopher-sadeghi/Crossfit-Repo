@@ -127,6 +127,25 @@ test("equipment mapping covers the seeded library and only uses intake checklist
   }
 });
 
+test("shared suggestion requests preserve intake errors and catch schedule query failures", async () => {
+  let failure;
+  const loader = createLoader({
+    "./suggestions": { SUGGESTION_REGISTRY: { draft_program: { buildRequest: async () => { if (failure) throw failure; return { input: {}, schema: "generation schema" }; }, proposalSchema: "proposal schema" } } },
+    "./service-core": { runSuggestionWithClient: async (_, options) => { assert.equal(options.generationSchema, "generation schema"); return { id: "pending" }; } },
+  });
+  const { requestRegisteredSuggestion } = loader("src/lib/ai/request.ts");
+  const { ApprovalError } = loader("src/lib/ai/errors.ts");
+  assert.deepEqual(await requestRegisteredSuggestion({}, "draft_program", { athleteId: "athlete" }), { id: "pending" });
+  failure = new ApprovalError("Complete the athlete's intake before drafting their first four weeks.");
+  assert.deepEqual(await requestRegisteredSuggestion({}, "draft_program", { athleteId: "athlete" }), { error: failure.message });
+  failure = new Error("Couldn't load athlete program assignments.");
+  const original = console.error;
+  console.error = () => {};
+  try {
+    assert.deepEqual(await requestRegisteredSuggestion({}, "draft_program", { athleteId: "athlete" }), { error: "The AI couldn't make a suggestion right now. Please try again in a minute." });
+  } finally { console.error = original; }
+});
+
 test("equipment filter handles bodyweight, alternatives, specialty gear, empty checklists and unknown custom movements", () => {
   const { filterMovementsByEquipment } = load("src/lib/movement-equipment.ts");
   const names = ["Air Squat", "Goblet Squat", "Back Squat", "Row", "Wall Ball", "Custom movement", "toString"];

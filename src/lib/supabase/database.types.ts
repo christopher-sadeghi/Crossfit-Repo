@@ -1533,6 +1533,10 @@ export type Database = {
       apply_draft_program: { Args: { p_athlete_id: string; p_program: Json; p_today: string }; Returns: string };
       save_athlete_intake_step: { Args: { p_athlete_id: string; p_step: number; p_data: Json; p_today: string }; Returns: undefined };
       request_linked_athlete_intake: { Args: Record<PropertyKey, never>; Returns: unknown };
+      athlete_weekly_reports: {
+        Args: Record<PropertyKey, never>;
+        Returns: { id: string; published_at: string; snapshot: Json; content: Json }[];
+      };
       create_notification: {
         Args: { p_athlete_id: string; p_kind: string; p_title: string; p_body?: string | null; p_link?: string | null; p_dedupe_key?: string | null };
         Returns: undefined;
@@ -1626,7 +1630,8 @@ export type Database = {
         | "movement_guide"
         | "athlete_adjust_workout"
         | "suggest_food"
-        | "draft_program";
+        | "draft_program"
+        | "weekly_report";
       weight_unit: "lb" | "kg";
       workout_type: "for_time" | "amrap" | "emom" | "strength" | "other";
     };
@@ -1786,6 +1791,7 @@ export const Constants = {
         "athlete_adjust_workout",
         "suggest_food",
         "draft_program",
+        "weekly_report",
       ],
       weight_unit: ["lb", "kg"],
       workout_type: ["for_time", "amrap", "emom", "strength", "other"],
