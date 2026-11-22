@@ -52,6 +52,22 @@ test("lifts match movements and use movement reps, result reps, then one", () =>
   assert.deepEqual(attempts.map((a) => a.rep_max), [5, 3, 1]);
   assert.deepEqual(attempts.map((a) => a.isPr), [false, false, false]);
 });
+test("high-rep lifts fall back to actual loads for bests and PRs while preserving Rx priority", async () => {
+  const direct = [
+    result("first", "2026-01-01", { load_kg: 100, rep_max: 12 }),
+    result("pr", "2026-01-02", { load_kg: 110, rep_max: 12 }),
+    result("tie", "2026-01-03", { load_kg: 110, rep_max: 12 }),
+    result("scaled", "2026-01-04", { load_kg: 150, rep_max: 12, is_rx: false }),
+    result("lower", "2026-01-05", { load_kg: 105, rep_max: 12 }),
+  ];
+  const attempts = normalizeBenchmarkHistory(lift, direct, []);
+  assert.deepEqual(attempts.map((a) => a.estimatedOneRmKg), [null, null, null, null, null]);
+  assert.deepEqual(attempts.map((a) => a.isPr), [false, true, false, false, false]);
+  const [b] = await loadAthleteBenchmarks(client({ benchmarks: [lift], benchmark_results: direct }), "a", "2026-01-06");
+  assert.equal(b.best.id, "pr");
+  const trusted = normalizeBenchmarkHistory(lift, [result("one", "2026-01-01", { load_kg: 110, rep_max: 1 }), result("five", "2026-01-02", { load_kg: 100, rep_max: 5 })], []);
+  assert.equal(trusted[1].isPr, true);
+});
 test("retest uses explicit calendar date and is due strictly after interval", () => {
   assert.equal(retestDue("2026-01-01", 2, "2026-01-15"), false);
   assert.equal(retestDue("2026-01-01", 2, "2026-01-16"), true);

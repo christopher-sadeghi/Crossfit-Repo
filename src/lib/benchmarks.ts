@@ -41,7 +41,7 @@ export function estimateOneRepMax(loadKg: number | null, reps: number | null): n
 function compareAttempts(benchmark: Benchmark) {
   const compare = compareScores(benchmark.workout_type);
   return (a: BenchmarkAttempt, b: BenchmarkAttempt) => benchmark.kind === "lift"
-    ? compare({ ...a, load_kg: a.estimatedOneRmKg }, { ...b, load_kg: b.estimatedOneRmKg })
+    ? compare({ ...a, load_kg: a.estimatedOneRmKg ?? a.load_kg }, { ...b, load_kg: b.estimatedOneRmKg ?? b.load_kg })
     : compare(a, b);
 }
 
