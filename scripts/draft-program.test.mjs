@@ -93,3 +93,24 @@ test("apply validates current library, converts lb, returns target and handles s
     await assert.rejects(failed.entry.apply(failed.db, suggestion, proposal()), expected);
   }
 });
+test("draft context exposes shared movement variations and prefers appropriate scaling without relaxing ids", async () => {
+  const easierId = "35000000-0000-4000-8000-000000000022";
+  const harderId = "35000000-0000-4000-8000-000000000023";
+  const library = [
+    { ...context.library[0], easier_movement_id: easierId, harder_movement_id: harderId },
+    { id: easierId, name: "Air squat", easier_movement_id: null, harder_movement_id: movementId },
+    { id: harderId, name: "Overhead squat", easier_movement_id: movementId, harder_movement_id: null },
+  ];
+  const f = fixture({ library });
+  const request = await f.entry.buildRequest(f.db, { athleteId: "athlete" });
+  assert.deepEqual(request.input.library, library);
+  assert.match(request.system, /prefer its library easier_movement_id or harder_movement_id/i);
+  assert.match(request.system, /Prefer easier variations for beginners or limitations/);
+  const draft = proposal();
+  draft.weeks[0].workouts[0].movements[0].movement_id = easierId;
+  assert.equal(request.schema.safeParse(draft).success, true);
+  f.entry.validate(draft, request.input);
+  draft.weeks[0].workouts[0].movements[0].movement_id = "unknown-variation";
+  assert.equal(request.schema.safeParse(draft).success, false);
+  assert.throws(() => f.entry.validate(draft, request.input), /Unknown movement/);
+});
