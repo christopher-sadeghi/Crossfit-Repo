@@ -5,6 +5,8 @@ import path from "node:path";
 import test from "node:test";
 import ts from "typescript";
 
+import { loadDemoDataWithClipCleanup } from "../src/lib/reset-demo-data.mjs";
+
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, "..");
 const cache = new Map();
@@ -57,6 +59,46 @@ test("coach edits permit empty sections and form lines are normalized", () => {
   const form = new FormData();
   form.set("cues", " Brace.\r\n\n Stand. ");
   assert.deepEqual(readGuideText(form), { ...empty, cues: ["Brace.", "Stand."] });
+});
+
+test("demo reset collects only its coach's custom movement clips before deleting them", async () => {
+  const calls = [];
+  const clip = "coach/custom/clip.mp4";
+  const query = {
+    select: (columns) => { calls.push(["select", columns]); return query; },
+    eq: (...args) => { calls.push(["eq", ...args]); return query; },
+    not: () => query,
+    order: () => query,
+    range: async () => ({ data: [{ clip_path: clip }] }),
+  };
+  let rpcError = null;
+  const client = {
+    auth: { getClaims: async () => ({ data: { claims: { sub: "coach" } } }) },
+    from: () => query,
+    rpc: async (_, params) => {
+      calls.push(["rpc", params.reset]);
+      return { data: { athletes: 12 }, error: rpcError };
+    },
+    storage: { from: (bucket) => ({ remove: async (paths) => {
+      calls.push(["remove", bucket, ...paths]);
+      return { error: null };
+    } }) },
+  };
+
+  await loadDemoDataWithClipCleanup(client, false);
+  assert.deepEqual(calls, [["rpc", false]]);
+  const selection = [
+    ["select", "clip_path, movement:movements!movement_guides_movement_id_fkey!inner(coach_id)"],
+    ["eq", "coach_id", "coach"], ["eq", "movement.coach_id", "coach"],
+  ];
+  calls.length = 0;
+  rpcError = { message: "Reset did not commit." };
+  assert.equal((await loadDemoDataWithClipCleanup(client, true)).error, rpcError);
+  assert.deepEqual(calls, [...selection, ["rpc", true]]);
+  calls.length = 0;
+  rpcError = null;
+  assert.equal((await loadDemoDataWithClipCleanup(client, true)).clipError, null);
+  assert.deepEqual(calls, [...selection, ["rpc", true], ["remove", "movement-demos", clip]]);
 });
 
 test("new demos have 3–5 cues and coaches can save non-cue edits to older AI guides", () => {
