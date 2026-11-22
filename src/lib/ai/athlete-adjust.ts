@@ -12,7 +12,7 @@ import { formatScore, fromKgPrecise, toKg, type Units } from "@/lib/units";
 import { friendlySuggestionError } from "./service-core";
 import { movementIdSchema } from "./movement-schema";
 import { scaleWorkoutChangeSchema, scaleWorkoutDetailsSchema } from "./scale-workout";
-import { ageOn } from "./workout-context";
+import { ageOn, loadWorkoutMovementLibrary } from "./workout-context";
 import {
   athleteAdjustSchema,
   CHECK_WITH_COACH_MESSAGE,
@@ -32,6 +32,7 @@ Rules:
 - Start from "current" (what the athlete was given, which may already include the coach's scaling) and only make it easier from there. Keep the WOD's stimulus and format.
 - Return exactly one change for each original movement, in the same order. Copy its original_movement_id exactly.
 - Use only movement IDs from the provided library. Keep a movement by using its current movement_id; substitute only with an easier library movement that avoids the sore or painful area.
+- For substitutions, prefer the current movement's easier_movement_id if it fits the workout and the athlete can do it safely. Never substitute the listed harder movement.
 - Give every number for kept movements (loads in the athlete's units). rounds and time_cap_minutes are for the whole WOD; use null only when the WOD has none.
 - Use the athlete's experience level, injuries, recent results and feedback (RPE, energy, sleep, soreness, pain notes), and journal.
 - Never program into a reported injury or pain; substitute or remove load instead.
@@ -52,13 +53,13 @@ export async function buildAthleteAdjustRequest(
   params: { athleteId: string; workoutId: string; scheduledOn: string; feeling: string; units: Units; scaling: Scaling },
 ) {
   const [
-    { data: library, error: libraryError },
+    library,
     { data: athlete, error: athleteError },
     { data: workout, error: workoutError },
     { data: resultRows, error: resultsError },
     recentCheckIns,
   ] = await Promise.all([
-    supabase.from("movements").select("id, name, category, measure").order("name"),
+    loadWorkoutMovementLibrary(supabase),
     supabase
       .from("athletes")
       .select("id, first_name, experience_level, injuries, notes, sex, birth_date")
@@ -82,7 +83,6 @@ export async function buildAthleteAdjustRequest(
       .limit(10),
     loadRecentCheckIns(supabase, params.athleteId, params.scheduledOn, 7),
   ]);
-  if (libraryError) throw libraryError;
   if (athleteError || !athlete) throw athleteError ?? new Error("Athlete not found.");
   if (workoutError || !workout) throw workoutError ?? new Error("Workout not found.");
   if (resultsError) throw resultsError;
@@ -93,7 +93,7 @@ export async function buildAthleteAdjustRequest(
     name: movement?.name ?? "",
     load: load_kg == null ? null : fromKgPrecise(load_kg, units),
   }));
-  const names = new Map((library ?? []).map(({ id, name }) => [id, name]));
+  const names = new Map(library.map(({ id, name }) => [id, name]));
   const scaled = params.scaling ? scaleWorkoutDetailsSchema.safeParse(params.scaling.details) : null;
   const scaledMovements = scaled?.success && scaled.data.movements.length === movements.length ? scaled.data : null;
   const current = {
@@ -156,7 +156,7 @@ export async function buildAthleteAdjustRequest(
       movements,
     },
     current,
-    library: library ?? [],
+    library,
     recent_results: (resultRows ?? []).map((result) => ({
       performed_on: result.performed_on,
       workout_title: result.workouts?.title ?? "Workout",
