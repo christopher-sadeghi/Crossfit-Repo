@@ -320,4 +320,14 @@ test("partial saved check-ins render only answered fields and offer an edit acti
   assert.match(areasOnlyHtml, /quads/);
   assert.match(areasOnlyHtml, /Edit today&#x27;s check-in/);
   assert.doesNotMatch(areasOnlyHtml, /null\/5|Save check-in/);
+  const compact = renderToStaticMarkup(React.createElement(CheckInForm, {
+    entry: null,
+    today: "2026-03-01",
+    athleteId: "athlete",
+  }));
+  assert.match(compact, /Daily check-in \(optional\)/);
+  assert.match(compact, /How are you feeling today\? Takes about 30 seconds\./);
+  assert.match(compact, /Fill it in/);
+  assert.match(compact, /Skip today/);
+  assert.doesNotMatch(compact, /Save check-in/);
 });

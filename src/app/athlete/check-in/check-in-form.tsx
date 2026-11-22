@@ -65,6 +65,7 @@ export function CheckInForm({ entry, today, athleteId }: { entry: CheckIn | null
     entry.mood == null ? null : `Mood ${entry.mood}/5`,
   ].filter((item): item is string => item !== null) : [];
   const showSkipped = skipped && !hasSavedEntry && !editing;
+  const showPrompt = !hasSavedEntry && !showSkipped && !editing;
   const skipToday = () => {
     writeSkip(skipKey, true);
     setSkipped(true);
@@ -92,6 +93,23 @@ export function CheckInForm({ entry, today, athleteId }: { entry: CheckIn | null
             Fill it in
           </Button>
         </CardContent>
+      ) : showPrompt ? (
+        <>
+          <CardHeader className="pb-2">
+            <CardTitle>Daily check-in (optional)</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <p className="text-sm text-muted-foreground">How are you feeling today? Takes about 30 seconds.</p>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" onClick={fillItIn}>
+                Fill it in
+              </Button>
+              <Button type="button" variant="outline" onClick={skipToday}>
+                Skip today
+              </Button>
+            </div>
+          </CardContent>
+        </>
       ) : (
         <>
           <CardHeader>
