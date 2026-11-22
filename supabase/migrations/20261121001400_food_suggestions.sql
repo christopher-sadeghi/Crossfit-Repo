@@ -92,6 +92,23 @@ create policy "Athletes can finish their own food ideas" on public.ai_suggestion
     and status::text in ('failed', 'idea')
   );
 
+-- The daily AI limit counts rows by created_at, so signed-in users can't backdate or move it.
+create function public.lock_ai_suggestion_created_at()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if current_user = 'authenticated' then
+    new.created_at = case when tg_op = 'INSERT' then now() else old.created_at end;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger lock_created_at before insert or update on public.ai_suggestions
+  for each row execute function public.lock_ai_suggestion_created_at();
+
 -- Food log: athletes see their own day and add AI ideas to it ------------------
 
 alter table public.food_logs
