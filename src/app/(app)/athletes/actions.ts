@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
+import { getOrigin } from "@/lib/auth/redirect";
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { ftInToCm } from "@/lib/height";
 import { createClient } from "@/lib/supabase/server";
@@ -168,17 +169,41 @@ export async function createAthleteInvite(
     }
   }
 
-  const { error } = await supabase
+  const { data: invite, error } = await supabase
     .from("athlete_invites")
     .insert({ athlete_id: parsed.data, email })
-    .select("id")
+    .select("token")
     .single();
 
-  if (error) return failure(formData, "Couldn't create the invite. Please try again.");
+  if (error || !invite) return failure(formData, "Couldn't create the invite. Please try again.");
+
+  let emailed = false;
+  try {
+    const { emailConfig, sendEmail } = await import("@/lib/email/config");
+    if (emailConfig()) {
+      const coachQuery = user
+        ? supabase.from("coaches").select("full_name").eq("id", user.id).maybeSingle()
+        : Promise.resolve({ data: null });
+      const [{ buildInviteEmail }, { data: coach }] = await Promise.all([
+        import("@/lib/email/builders"),
+        coachQuery,
+      ]);
+      const content = buildInviteEmail({
+        coachName: coach?.full_name,
+        link: `/join/${invite.token}`,
+        origin: await getOrigin(),
+      });
+      emailed = (await sendEmail({ to: email, ...content })).sent;
+    }
+  } catch {}
 
   revalidatePath("/athletes");
   revalidatePath(`/athletes/${parsed.data}`);
-  return { message: `Invite ready for ${email}.` };
+  return {
+    message: emailed
+      ? `Invite emailed to ${email}.`
+      : `Invite ready for ${email}. We couldn't email it, so copy the link below.`,
+  };
 }
 
 export async function revokeAthleteInvite(
