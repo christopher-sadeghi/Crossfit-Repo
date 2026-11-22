@@ -1,6 +1,6 @@
 "use client";
 
-import { Apple, CalendarDays, ClipboardList, History, MessageSquare, NotebookPen, Trophy } from "lucide-react";
+import { Apple, CalendarDays, Camera, ClipboardList, History, MessageSquare, NotebookPen, Trophy } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -11,6 +11,7 @@ const TABS = [
   { href: "/athlete/nutrition", label: "Nutrition", Icon: Apple },
   { href: "/athlete/journal", label: "Journal", Icon: NotebookPen },
   { href: "/athlete/reports", label: "Reports", Icon: ClipboardList },
+  { href: "/athlete/progress", label: "Progress", Icon: Camera },
   { href: "/athlete/messages", label: "Messages", Icon: MessageSquare },
 ];
 
@@ -22,7 +23,7 @@ export function AthleteTabs({ unreadMessages = 0 }: { unreadMessages?: number })
       aria-label="Athlete pages"
       className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur"
     >
-      <div className="mx-auto grid max-w-md grid-cols-7">
+      <div className="mx-auto grid max-w-md grid-cols-8">
         {TABS.map(({ href, label, Icon }) => {
           const active = pathname === href;
           return (
@@ -31,7 +32,7 @@ export function AthleteTabs({ unreadMessages = 0 }: { unreadMessages?: number })
               href={href}
               aria-label={href === "/athlete/prs" ? label : undefined}
               aria-current={active ? "page" : undefined}
-              className={`relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 text-[10px] font-medium sm:text-xs ${
+              className={`relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 text-[9px] font-medium min-[400px]:text-[10px] ${
                 active ? "text-foreground" : "text-muted-foreground"
               }`}
             >

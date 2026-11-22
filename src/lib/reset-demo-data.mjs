@@ -12,6 +12,9 @@ export async function loadDemoDataWithClipCleanup(supabase, reset) {
     const coachId = auth?.claims?.sub;
     if (!coachId) return { data: null, error: { message: "You must be logged in." }, clipError: null };
 
+    const photoError = await removeProgressPhotos(supabase, coachId);
+    if (photoError) return { data: null, error: photoError, clipError: null };
+
     for (let offset = 0; ; offset += PAGE_SIZE) {
       const { data: guides, error } = await supabase.from("movement_guides")
         .select("clip_path, movement:movements!movement_guides_movement_id_fkey!inner(coach_id)")
@@ -37,4 +40,36 @@ export async function loadDemoDataWithClipCleanup(supabase, reset) {
     clipError ??= error;
   }
   return { data, error: null, clipError };
+}
+
+/**
+ * @param {import("@supabase/supabase-js").SupabaseClient<import("./supabase/database.types").Database>} supabase
+ * @param {string} coachId
+ */
+export async function removeProgressPhotos(supabase, coachId) {
+  const bucket = supabase.storage.from("progress-photos");
+  /** @type {string[]} */
+  const prefixes = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const { data: folders, error } = await bucket.list(coachId, {
+      limit: PAGE_SIZE, offset, sortBy: { column: "name", order: "asc" },
+    });
+    if (error) return error;
+    for (const folder of folders) {
+      prefixes.push(`${coachId}/${folder.name}`);
+    }
+    if (folders.length < PAGE_SIZE) break;
+  }
+  for (const prefix of prefixes) {
+    for (;;) {
+      const { data: files, error: listError } = await bucket.list(prefix, {
+        limit: PAGE_SIZE, sortBy: { column: "name", order: "asc" },
+      });
+      if (listError) return listError;
+      if (!files.length) break;
+      const { error: removeError } = await bucket.remove(files.map((file) => `${prefix}/${file.name}`));
+      if (removeError) return removeError;
+    }
+  }
+  return null;
 }
