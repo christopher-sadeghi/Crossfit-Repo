@@ -1,4 +1,4 @@
-import { isStepCount, streamText, tool, type LanguageModel } from "ai";
+import { createUIMessageStream, createUIMessageStreamResponse, isStepCount, streamText, tool, type LanguageModel } from "ai";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadAthleteSchedule } from "@/lib/athlete-schedule";
@@ -29,26 +29,51 @@ export async function streamAthleteAssistant(supabase: Client, viewer: AthleteVi
   const settings = rows?.[0];
   if (!settings) return jsonError("Your active athlete profile could not be found.", 403);
   const config = { ...defaultAssistantSettings, ...settings };
+  const reserveUserMessage = () => supabase.from("athlete_ai_messages").insert({
+    athlete_id: viewer.athleteId, coach_id: viewer.coachId, role: "user", content: message, red_flag: safety.flagged,
+  }).select("id").single();
+  const safetyResponse = async (sourceMessageId?: string) => {
+    if (!sourceMessageId) {
+      const reserved = await reserveUserMessage();
+      if (reserved.error || !reserved.data) return jsonError(FRIENDLY_ERROR, 503);
+      sourceMessageId = reserved.data.id;
+    }
+    const id = crypto.randomUUID();
+    const content = safety.urgent
+      ? "Stop exercising and contact emergency services now. Message your coach as soon as you can."
+      : "Stop exercising and contact your coach or a medical professional before continuing. Message your coach about these symptoms.";
+    const metadata = { cards: [], assistantMessageId: id };
+    const saved = await supabase.from("athlete_ai_messages").insert({
+      id, athlete_id: viewer.athleteId, coach_id: viewer.coachId, role: "assistant", content,
+      metadata: { cards: [], source_message_id: sourceMessageId }, red_flag: true,
+    });
+    if (saved.error) return jsonError(FRIENDLY_ERROR, 503);
+    return createUIMessageStreamResponse({ stream: createUIMessageStream({ execute: ({ writer }) => {
+      writer.write({ type: "start", messageId: id, messageMetadata: metadata });
+      writer.write({ type: "text-start", id: "safety" });
+      writer.write({ type: "text-delta", id: "safety", delta: content });
+      writer.write({ type: "text-end", id: "safety" });
+      writer.write({ type: "finish", finishReason: "stop" });
+    } }) });
+  };
   const bounds = assistantDayBounds(today, timeZone);
   const countToday = () => supabase.from("athlete_ai_messages").select("id", { count: "exact", head: true })
     .eq("athlete_id", viewer.athleteId).eq("role", "user").gte("created_at", bounds.start).lt("created_at", bounds.end);
   const usage = await countToday();
   if (usage.error) return jsonError(FRIENDLY_ERROR, 503);
   if (assistantLimitReached(usage.count ?? 0, config.athlete_ai_daily_limit))
-    return jsonError(aiLimitMessage(config.athlete_ai_daily_limit), 429);
+    return safety.flagged ? safetyResponse() : jsonError(aiLimitMessage(config.athlete_ai_daily_limit), 429);
   const model = resolveModel(injectedModel);
   if (!model) return jsonError(FRIENDLY_ERROR, 503);
   const history = await supabase.from("athlete_ai_messages").select("role, content")
     .eq("athlete_id", viewer.athleteId).order("created_at", { ascending: false }).limit(20);
   if (history.error) return jsonError(FRIENDLY_ERROR, 503);
-  const reserved = await supabase.from("athlete_ai_messages").insert({
-    athlete_id: viewer.athleteId, coach_id: viewer.coachId, role: "user", content: message, red_flag: safety.flagged,
-  }).select("id").single();
+  const reserved = await reserveUserMessage();
   if (reserved.error || !reserved.data) return jsonError(FRIENDLY_ERROR, 503);
   const rechecked = await countToday();
   if (rechecked.error) return jsonError(FRIENDLY_ERROR, 503);
   if (assistantLimitReached(rechecked.count ?? 0, config.athlete_ai_daily_limit, true))
-    return jsonError(aiLimitMessage(config.athlete_ai_daily_limit), 429);
+    return safety.flagged ? safetyResponse(reserved.data.id) : jsonError(aiLimitMessage(config.athlete_ai_daily_limit), 429);
   const cards: AssistantCard[] = [];
   const addCard = (value: AssistantCard) => {
     const card = assistantCardSchema.parse(value);

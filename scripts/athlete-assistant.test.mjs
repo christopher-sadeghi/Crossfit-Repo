@@ -118,7 +118,8 @@ function fixture({ count = 0, reservedCount, settings = defaultAssistantSettings
     },
   };
   const fn = load("src/lib/ai/athlete-assistant.ts", {
-    ai: { isStepCount: sdk?.isStepCount ?? ((n) => n), tool: (t) => t, streamText: (opts) => {
+    ai: { createUIMessageStream: require("ai").createUIMessageStream, createUIMessageStreamResponse: require("ai").createUIMessageStreamResponse,
+      isStepCount: sdk?.isStepCount ?? ((n) => n), tool: (t) => t, streamText: (opts) => {
       events.push("model"); options = opts;
       if (sdk) return sdk.streamText(opts);
       return { toUIMessageStreamResponse: (opts) => { responseOptions = opts; return Response.json({ stream: true }); } };
@@ -162,10 +163,40 @@ test("limits, inactive profiles, missing model and database failures fail closed
   }
 });
 
-test("red flags notify even on quota denial; notification failure never breaks chat", async () => {
-  const denied = fixture({ count: 25 });
-  assert.equal((await denied.run("chest pain")).status, 429);
-  assert.equal(denied.events[0], "notify");
+test("red flags over quota persist safety replies without a model, including quota races and notification failures", async () => {
+  for (const opts of [{ count: 25, model: null }, { reservedCount: 26 }, { count: 25, notifyError: true }]) {
+    for (const message of ["chest pain", "sharp knee pain"]) {
+      const f = fixture(opts);
+      const response = await f.run(message);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("x-vercel-ai-ui-message-stream"), "v1");
+      const { DefaultChatTransport, readUIMessageStream } = require("ai");
+      const transport = new DefaultChatTransport({ fetch: async () => response });
+      const stream = await transport.sendMessages({ trigger: "submit-message", chatId: "safety", messageId: undefined, messages: [] });
+      let last;
+      for await (const reply of readUIMessageStream({ stream })) last = reply;
+      const text = last.parts.filter((part) => part.type === "text").map((part) => part.text).join("");
+      assert.match(text, /Stop exercising/);
+      assert.match(text, /coach/);
+      assert.equal(text.includes("emergency services"), message === "chest pain");
+      assert.ok(!f.events.includes("model"));
+      assert.equal(f.events.filter((event) => event === "notify").length, 1);
+      assert.equal(f.inserted.length, 2);
+      assert.equal(f.inserted[0].role, "user");
+      assert.equal(f.inserted[0].content, message);
+      assert.equal(f.inserted[0].red_flag, true);
+      assert.equal(f.inserted[1].content, text);
+      assert.equal(f.inserted[1].metadata.source_message_id, messageId);
+      assert.equal(f.inserted[1].red_flag, true);
+      assert.equal(last.metadata.assistantMessageId, f.inserted[1].id);
+    }
+  }
+  const failed = fixture({ count: 25, reserveError: true });
+  assert.equal((await failed.run("chest pain")).status, 503);
+  assert.ok(!failed.events.includes("model"));
+});
+
+test("notification failure never breaks an under-quota red-flag chat", async () => {
   const f = fixture({ notifyError: true });
   assert.equal((await f.run("chest pressure")).status, 200);
   assert.equal(f.inserted[0].red_flag, true);
