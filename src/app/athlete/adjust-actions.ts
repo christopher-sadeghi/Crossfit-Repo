@@ -71,5 +71,7 @@ export async function adjustTodaysWorkout(_: AdjustState, formData: FormData): P
   revalidatePath(`/programs/workouts/${workoutId.data}`);
   revalidatePath(`/athletes/${viewer.athleteId}`);
   revalidatePath("/settings/ai-history");
+  revalidatePath("/messages");
+  revalidatePath(`/messages/${viewer.athleteId}`);
   return { message: "Your WOD is adjusted. Your coach has been told and may follow up.", checkWithCoach: result.checkWithCoach };
 }

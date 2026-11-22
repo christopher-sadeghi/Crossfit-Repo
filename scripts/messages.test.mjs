@@ -235,6 +235,31 @@ test("long threads show the latest 100 chronologically, count all unread and mar
   }
 });
 
+test("coach conversation activity includes applied athlete adjustments and flags only those needing review", async () => {
+  const adjustment = { coach_id: coachId, suggestion_type: "athlete_adjust_workout", status: "approved", created_at: "2026-11-19T00:00:00Z" };
+  const { client } = clientFixture({
+    athletes: [athlete, { ...athlete, id: "second", first_name: "Ari" }, { ...athlete, id: "third", first_name: "Ben" }],
+    messages: [{ athlete_id: athleteId, sender_id: userId, body: "Checking in", created_at: "2026-11-21T00:00:00Z", read_at: null }],
+    ai_suggestions: [
+      { ...adjustment, athlete_id: "second", decided_at: "2026-11-23T00:00:00Z", coach_reviewed_at: null },
+      { ...adjustment, athlete_id: "third", decided_at: "2026-11-22T00:00:00Z", coach_reviewed_at: "2026-11-22T01:00:00Z" },
+      { ...adjustment, athlete_id: athleteId, decided_at: "2026-11-24T00:00:00Z", coach_reviewed_at: null, status: "pending" },
+      { ...adjustment, athlete_id: athleteId, decided_at: "2026-11-24T00:00:00Z", coach_reviewed_at: null, coach_id: "another-coach" },
+    ],
+  });
+  const { default: MessagesPage } = loader({
+    "@/lib/supabase/server": { createClient: async () => client },
+    "@/lib/viewer": { getViewer: async () => coach },
+    "@/lib/time-zone": { getTimeZone: async () => "UTC" },
+    "@/components/messages/thread-live": { ThreadLive: "thread-live" },
+  })("src/app/(app)/messages/page.tsx");
+  const rows = treeNodes(await MessagesPage()).filter((node) => node.type === "li").map(treeNodes);
+  assert.deepEqual(rows.map((row) => row.find((node) => node.props.href).props.href), ["/messages/second", "/messages/third", `/messages/${athleteId}`]);
+  assert.deepEqual(rows.map((row) => row.some((node) => node.props.children === "Adjustment to review")), [true, false, false]);
+  assert.ok(rows[0].some((node) => node.props.children === "Athlete adjusted a workout"));
+  assert.ok(rows[2].some((node) => node.props["aria-label"] === "1 unread messages"));
+});
+
 test("athlete suggestion attachments are neutral unlinked text; coach picker warns suggestions are private", async () => {
   const { client } = clientFixture({
     messages: [{ id: itemId, athlete_id: athleteId, sender_id: coachId, body: "Discuss this", read_at: null, created_at: "2026-11-21T10:00:00Z", link_type: "suggestion", link_id: itemId }],
