@@ -4,7 +4,7 @@ import { loadAthleteBenchmarks } from "@/lib/benchmarks";
 import { CHECK_IN_LABELS, loadRecentCheckIns } from "@/lib/check-in";
 import { loadConsistency } from "@/lib/consistency-data";
 import { addDays, onTarget, targetOn, totals } from "@/lib/nutrition";
-import { personalRecords, workoutRecordKey, type Score } from "@/lib/results";
+import { personalRecords, scheduledWorkoutResultMatcher, workoutRecordKey, type Score } from "@/lib/results";
 import type { Database, Tables } from "@/lib/supabase/database.types";
 import { getToday } from "@/lib/time-zone";
 import { formatDate, formatScore, formatWeight, type Units } from "@/lib/units";
@@ -133,7 +133,7 @@ async function buildRequest(supabase: Client, { athleteId }: { athleteId: string
     nutritionRows(supabase, athleteId, week),
     recoveryRows(supabase, athleteId, week),
   ]);
-  const resultIds = new Set(progress.results.map((result) => result.workout_id));
+  const hasResult = scheduledWorkoutResultMatcher(progress.results);
   const weeklySchedule = schedule.filter((item) => item.date >= week.start_on);
   const weeklyResults = progress.results.filter((result) => result.performed_on >= week.start_on);
   const weeklyAttendance = attendance.filter((entry) => entry.attended_on >= week.start_on);
@@ -143,7 +143,7 @@ async function buildRequest(supabase: Client, { athleteId }: { athleteId: string
     sections: {
       training: [
         row("Scheduled workouts", weeklySchedule.length || NOT_LOGGED),
-        row("Scheduled workouts with a logged result by week end", weeklySchedule.length ? weeklySchedule.filter((item) => resultIds.has(item.workout.id)).length : null),
+        row("Scheduled workouts with a logged result by week end", weeklySchedule.length ? weeklySchedule.filter(hasResult).length : null),
         row("Workout results logged during the week", weeklyResults.length || NOT_LOGGED),
         row("Class attendance entries", weeklyAttendance.filter((entry) => entry.kind === "class").length || NOT_LOGGED),
         row("Open gym attendance entries", weeklyAttendance.filter((entry) => entry.kind === "open_gym").length || NOT_LOGGED),

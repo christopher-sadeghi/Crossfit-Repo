@@ -1,3 +1,4 @@
+import type { AthleteScheduleItem } from "@/lib/athlete-schedule";
 import type { Enums } from "@/lib/supabase/database.types";
 
 export type Score = {
@@ -7,6 +8,15 @@ export type Score = {
   load_kg: number | null;
   is_rx: boolean;
 };
+
+/** A copied workout or replacement inherits the original's result on that scheduled date. */
+export function scheduledWorkoutResultMatcher(results: { workout_id: string; performed_on: string }[]) {
+  const logged = new Set(results.map((result) => result.workout_id));
+  const loggedDates = new Set(results.map((result) => `${result.workout_id}:${result.performed_on}`));
+  return ({ workout, date, overrides }: AthleteScheduleItem) =>
+    logged.has(workout.id) ||
+    [workout.source_workout_id, overrides?.workoutId].some((id) => id && loggedDates.has(`${id}:${date}`));
+}
 
 const asc = (a: number | null, b: number | null) => (a ?? Infinity) - (b ?? Infinity);
 const desc = (a: number | null, b: number | null) => (b ?? -Infinity) - (a ?? -Infinity);
