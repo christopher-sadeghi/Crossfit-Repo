@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { NotificationSettings } from "@/components/notifications/email-settings";
+import { PushSettings } from "@/components/notifications/push-settings";
 import { Card, CardContent } from "@/components/ui/card";
 import { getCoach } from "@/lib/coach";
 import { createClient } from "@/lib/supabase/server";
@@ -33,6 +34,7 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
       <div className="mt-6"><NotificationSettings /></div>
+      <div className="mt-6"><PushSettings role="coach" /></div>
       <Card className="mt-6">
         <CardContent>
           <Link href="/settings/ai-history" className="font-medium underline underline-offset-4">AI history</Link>

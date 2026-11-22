@@ -88,6 +88,17 @@ export async function updatePassword(
 
 export async function logout() {
   const supabase = await createClient();
+  try {
+    const store = await cookies();
+    const endpoint = store.get("fitcoach-push-endpoint")?.value;
+    try {
+      if (endpoint) {
+        const { data } = await supabase.auth.getClaims();
+        const userId = data?.claims?.sub;
+        if (typeof userId === "string") await supabase.from("push_subscriptions").delete().eq("user_id", userId).eq("endpoint", endpoint);
+      }
+    } finally { store.delete("fitcoach-push-endpoint"); }
+  } catch { console.error("Push logout cleanup failed"); }
   const { error } = await supabase.auth.signOut();
   if (error) {
     // Revoking on the server failed (e.g. network); still clear this browser's session.
