@@ -90,12 +90,12 @@ test("demo reset collects only its coach's custom movement clips before deleting
   let rpcError = null;
   const client = {
     auth: { getClaims: async () => ({ data: { claims: { sub: "coach" } } }) },
-    from: () => query,
+    from: (table) => table === "progress_photos" ? { delete: () => ({ eq: async () => ({ error: null }) }) } : query,
     rpc: async (_, params) => {
       calls.push(["rpc", params.reset]);
       return { data: { athletes: 12 }, error: rpcError };
     },
-    storage: { from: (bucket) => ({ remove: async (paths) => {
+    storage: { from: (bucket) => ({ list: async () => ({ data: [], error: null }), remove: async (paths) => {
       calls.push(["remove", bucket, ...paths]);
       return { error: null };
     } }) },
