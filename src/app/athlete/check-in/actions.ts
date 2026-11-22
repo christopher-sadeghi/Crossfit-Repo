@@ -97,7 +97,7 @@ export async function setCheckInSkipped(expectedDate: string, skipped: boolean):
   if (expectedDate !== today) return { error: "A new day has started — reload to do today's check-in." };
   if (typeof skipped !== "boolean") return { error: "Invalid skip preference." };
   const supabase = await createClient();
-  if (await syncReminderTimeZone(supabase, viewer.athleteId)) {
+  if (skipped && await syncReminderTimeZone(supabase, viewer.athleteId)) {
     return { error: "Couldn't update your reminder time zone. Please try again." };
   }
   const { error } = skipped
