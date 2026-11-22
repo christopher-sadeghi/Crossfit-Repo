@@ -122,7 +122,7 @@ export function FoodIdeaList({ id, ideas, addedNames }: { id: string; ideas: Foo
         {ideas.ideas.map((idea, index) => (
           <li key={`${index}-${idea.name}`} className="grid gap-2 rounded-lg border p-3">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <p className="font-medium">{idea.name}</p>
+              <p className="min-w-0 font-medium break-words">{idea.name}</p>
               <p className="text-xs text-muted-foreground">
                 {MEAL_LABELS[idea.meal]} · {idea.prep_minutes === 0 ? "no cooking" : `${idea.prep_minutes} min`}
               </p>
@@ -149,7 +149,7 @@ export function FoodIdeaList({ id, ideas, addedNames }: { id: string; ideas: Foo
 export function DeleteOwnFoodButton({ id, name }: { id: string; name: string }) {
   const [error, setError] = useState<string | null>(null);
   return (
-    <>
+    <div className="flex shrink-0 flex-col items-end">
       <Button
         type="button"
         variant="ghost"
@@ -166,6 +166,6 @@ export function DeleteOwnFoodButton({ id, name }: { id: string; name: string }) 
         <Trash2 />
       </Button>
       {error && <span role="alert" className="text-xs text-destructive">{error}</span>}
-    </>
+    </div>
   );
 }

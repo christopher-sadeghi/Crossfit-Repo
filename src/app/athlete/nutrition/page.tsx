@@ -42,7 +42,7 @@ export default async function AthleteNutritionPage() {
   ] as const;
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 grid-cols-1 gap-6">
       <section className="grid gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Nutrition</h1>
@@ -83,12 +83,12 @@ export default async function AthleteNutritionPage() {
         </CardHeader>
         <CardContent>
           {entries.length ? (
-            <ul className="grid gap-2">
+            <ul className="grid grid-cols-1 gap-2">
               {entries.map((entry) => (
-                <li key={entry.id} className="flex items-center justify-between gap-2 border-b pb-2 last:border-0 last:pb-0">
+                <li key={entry.id} className="flex min-w-0 items-center justify-between gap-2 border-b pb-2 last:border-0 last:pb-0">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{entry.food_name}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs break-words text-muted-foreground">
                       {MEAL_LABELS[entry.meal]} · {entry.calories} kcal · P {Number(entry.protein_g)}g · C {Number(entry.carbs_g)}g · F {Number(entry.fat_g)}g
                     </p>
                   </div>
