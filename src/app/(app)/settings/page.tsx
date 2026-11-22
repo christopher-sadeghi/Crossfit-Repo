@@ -13,13 +13,14 @@ import { DemoDataSection } from "./demo-data-section";
 
 import { SettingsForm } from "./settings-form";
 import { AssistantSettings } from "./assistant-settings";
+import { CoachesCard } from "./coaches-card";
 
 export default async function SettingsPage() {
   const coach = await getCoach();
   const supabase = await createClient();
-  const { count } = await supabase
+  const { count } = coach?.role === "owner" ? await supabase
     .from("athletes")
-    .select("id", { count: "exact", head: true });
+    .select("id", { count: "exact", head: true }) : { count: null };
 
   return (
     <>
@@ -32,9 +33,11 @@ export default async function SettingsPage() {
             units={coach?.units ?? "lb"}
             driftDays={coach?.driftDays ?? 5}
             loadWarningRatio={coach?.loadWarningRatio ?? DEFAULT_LOAD_WARNING_RATIO}
+            role={coach?.role ?? "coach"}
           />
         </CardContent>
       </Card>
+      <CoachesCard />
       <AssistantSettings />
       <div className="mt-6"><NotificationSettings /></div>
       <div className="mt-6"><PushSettings role="coach" /></div>
@@ -44,9 +47,9 @@ export default async function SettingsPage() {
           <p className="mt-1 text-sm text-muted-foreground">View pending, decided and failed AI suggestions.</p>
         </CardContent>
       </Card>
-      <DemoDataSection>
+      {coach?.role === "owner" && <DemoDataSection>
         <DemoDataCard hasAthletes={(count ?? 0) > 0} />
-      </DemoDataSection>
+      </DemoDataSection>}
     </>
   );
 }

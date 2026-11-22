@@ -5,8 +5,11 @@ import { revalidatePath } from "next/cache";
 import type { FormState } from "@/lib/auth/form-state";
 import { loadDemoDataWithClipCleanup } from "@/lib/reset-demo-data.mjs";
 import { createClient } from "@/lib/supabase/server";
+import { getViewer } from "@/lib/viewer";
 
 export async function loadDemoData(_: FormState, formData: FormData): Promise<FormState> {
+  const viewer = await getViewer();
+  if (viewer?.kind !== "coach" || viewer.role !== "owner") return { error: "Only the gym owner can manage demo data." };
   const reset = formData.get("mode") === "reset";
   const supabase = await createClient();
   const { data, error, clipError } = await loadDemoDataWithClipCleanup(supabase, reset);

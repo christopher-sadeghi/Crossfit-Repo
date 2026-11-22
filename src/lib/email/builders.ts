@@ -30,6 +30,18 @@ export function buildInviteEmail({ coachName, link, origin }: { coachName?: stri
   };
 }
 
+export function coachInviteEmail({ coachName, gymName, link, origin }: { coachName?: string | null; gymName?: string | null; link: string; origin: string }): EmailContent {
+  const name = coachName?.trim() || "A coach";
+  const gym = gymName?.trim();
+  const url = absoluteLink(link, origin);
+  const invitation = gym ? `${name} invited you to coach at ${gym}.` : `${name} invited you to join their gym on FitCoach.`;
+  return {
+    subject: "Your FitCoach coach invitation",
+    text: `${invitation} Use this link to create your new account:\n\n${url}\n\n${footer}`,
+    html: `<p>${escapeHtml(invitation)} Use this link to create your new account:</p><p><a href="${escapeHtml(url)}">Accept coach invitation</a></p><p>${footer}</p>`,
+  };
+}
+
 export function buildNotificationEmail(notification: NotificationEmailInput, origin: string): EmailContent {
   const title = notification.title;
   const body = notification.body ?? "";
