@@ -110,13 +110,13 @@ export async function replyToFormComment(reviewId: string, parentId: string, bod
     if (viewer.kind !== "athlete") throw new Error("Only the athlete can reply to coach comments.");
     z.uuid().parse(parentId);
     const text = z.string().trim().min(1, "Write a reply first.").max(FORM_COMMENT_MAX, `Replies must be ${FORM_COMMENT_MAX} characters or fewer.`).parse(body);
-    const { error } = await supabase.from("form_review_comments").insert({
+    const { data: reply, error } = await supabase.from("form_review_comments").insert({
       review_id: review.id, coach_id: review.coach_id, athlete_id: review.athlete_id, parent_id: parentId, body: text,
-    });
+    }).select("id").single();
     if (error) throw new Error("Couldn't send your reply. Please try again.");
     await notify(supabase, {
       athleteId: review.athlete_id, kind: "message", title: "Replied to form feedback", body: text.slice(0, 200),
-      link: `/form-checks/${review.id}`, dedupeKey: `form-reply:${review.id}:${parentId}`,
+      link: `/form-checks/${review.id}`, dedupeKey: `form-reply:${reply.id}`,
     });
     refresh(review.athlete_id, review.id);
     return { message: "Reply sent." };
