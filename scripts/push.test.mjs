@@ -37,8 +37,9 @@ function sender({ rows = [], categories, subscriptions = [], status, claimError,
     const query = { select() { return query; }, update(value) { calls.push([table, "update", value]); return query; }, delete() { calls.push([table, "delete"]); return query; }, eq(...args) { calls.push([table, "eq", ...args]); return query; }, is(...args) { calls.push([table, "is", ...args]); return query; }, gt(...args) { calls.push([table, "gt", ...args]); return query; }, maybeSingle() { return Promise.resolve({ data: categories === undefined ? null : { push_categories: categories } }); }, then(resolve) { resolve({ data: table === "notifications" ? rows : subscriptions, error: table === "notifications" ? claimError : null }); } };
     return query;
   } };
-  const helpers = load("src/lib/push/send.ts", { "server-only": {}, "./payload": payload, "@/lib/supabase/admin": { createAdminClient: () => admin }, "web-push": { sendNotification: async (...args) => { sends.push(args); if (status) throw { statusCode: status }; } } }, env);
-  return { ...helpers, calls, sends };
+  const config = load("src/lib/push/config.ts", { "server-only": {} }, env);
+  const helpers = load("src/lib/push/send.ts", { "server-only": {}, "./config": config, "./payload": payload, "@/lib/supabase/admin": { createAdminClient: () => admin }, "web-push": { sendNotification: async (...args) => { sends.push(args); if (status) throw { statusCode: status }; } } }, env);
+  return { ...helpers, ...config, calls, sends };
 }
 const row = { id: "notification", recipient_id: "user", kind: "message", title: "Hi", body: null, link: "/athlete" };
 const subscription = { id: "device", endpoint: "https://fcm.googleapis.com/device", p256dh: "key", auth: "auth" };
@@ -51,6 +52,10 @@ test("unsafe persisted endpoints are deleted without sending", async () => {
 test("unconfigured push is a silent no-op and fallback key works", async () => {
   const f = sender({ env: {} }); await f.pushNewNotifications({ athleteId: "a", kind: "message" }); assert.equal(f.calls.length, 0);
   const fallback = sender({ env: { ...configured, NEXT_PUBLIC_VAPID_PUBLIC_KEY: "", VAPID_PUBLIC_KEY: "fallback" } }); assert.equal(fallback.pushConfig().publicKey, "fallback");
+});
+test("configuration requires every server setting and a mailto subject", () => {
+  for (const key of Object.keys(configured)) assert.equal(sender({ env: { ...configured, [key]: "" } }).pushConfig(), null, key);
+  assert.equal(sender({ env: { ...configured, VAPID_SUBJECT: "https://example.com" } }).pushConfig(), null);
 });
 test("claims only fresh unpushed rows, sends default categories and records success", async () => {
   const f = sender({ rows: [row], subscriptions: [subscription] }); await f.pushNewNotifications({ athleteId: "a", kind: "message" });
