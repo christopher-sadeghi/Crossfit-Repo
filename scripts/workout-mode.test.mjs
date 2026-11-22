@@ -136,6 +136,18 @@ test("workout mode shows instructions, coach notes and the prescribed rounds tar
   assert.equal(elements(h.render()).some((node) => node.props["aria-label"] === "Workout instructions"), false);
 });
 
+test("strength plates are shown for each set's edited weight, not just set one", () => {
+  const h = workoutHarness();
+  h.props.workout = { ...h.props.workout, workout_type: "strength", movements: [{ movement_id: "a", name: "Squat", sets: 3, reps: 3, load_kg: null, notes: null }] };
+  h.states[0] = { ...h.states[0], weights: { "0-0": 100, "0-1": 105, "0-2": 110 } };
+  h.states[1] = true;
+  const plates = elements(h.render()).filter((node) => node.type.name === "PlateDisplay");
+  assert.deepEqual(plates.map((node) => node.props.weight), [100, 105, 110]);
+  for (const plate of plates) assert.equal(plate.type(plate.props).type, "p");
+  h.states[0] = { ...h.states[0], weights: {} };
+  assert.equal(elements(h.render()).filter((node) => node.type.name === "PlateDisplay").length, 0);
+});
+
 test("prefill validates numbers, strips control characters and limits notes", () => {
   assert.deepEqual(workoutPrefill({ time_seconds: "125", rounds: "3", load: "105.5", is_rx: "scaled", notes: "Hi\u0000" }), { minutes: "2", seconds: "5", rounds: "3", load: "105.5", is_rx: "scaled", notes: "Hi" });
   assert.deepEqual(workoutPrefill({}), {});

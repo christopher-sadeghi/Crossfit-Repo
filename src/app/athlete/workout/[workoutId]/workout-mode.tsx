@@ -117,13 +117,23 @@ export function WorkoutMode({
   const storageKey = `workout:${athleteId}:${workout.id}:${date}:${units}`;
   const barKey = `workout-bar:${athleteId}:${units}`;
   const versionFingerprint = JSON.stringify({
-    movements: workout.movements.map(({ movement_id, sets, reps, load_kg, notes }) => ({ movement_id, sets, reps, load_kg, notes })),
+    movements: workout.movements.map(
+      ({ movement_id, sets, reps, load_kg, notes }) => ({
+        movement_id,
+        sets,
+        reps,
+        load_kg,
+        notes,
+      }),
+    ),
     rounds: workout.rounds,
     time_cap_seconds: workout.time_cap_seconds,
     isScaled: workout.isScaled,
     modifications: workout.modifications,
   });
-  const [session, setSession] = useState<Session>(() => createSession(workout, versionFingerprint));
+  const [session, setSession] = useState<Session>(() =>
+    createSession(workout, versionFingerprint),
+  );
   const [loaded, setLoaded] = useState(false);
   const [storageWarning, setStorageWarning] = useState("");
   const [bar, setBar] = useState(defaultBar(units));
@@ -150,11 +160,20 @@ export function WorkoutMode({
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = savedSchema.safeParse(JSON.parse(saved));
-        if (parsed.success && latestResultCreatedAt && Date.parse(latestResultCreatedAt) >= parsed.data.createdAt) {
+        if (
+          parsed.success &&
+          latestResultCreatedAt &&
+          Date.parse(latestResultCreatedAt) >= parsed.data.createdAt
+        ) {
           localStorage.removeItem(storageKey);
-        } else if (parsed.success && parsed.data.versionFingerprint !== versionFingerprint) {
+        } else if (
+          parsed.success &&
+          parsed.data.versionFingerprint !== versionFingerprint
+        ) {
           localStorage.removeItem(storageKey);
-          setStorageWarning("Your workout version changed. Saved progress was reset to match it.");
+          setStorageWarning(
+            "Your workout version changed. Saved progress was reset to match it.",
+          );
         } else if (parsed.success) {
           setSession(parsed.data);
           previousElapsed.current = elapsedTime(parsed.data.clock, timestamp);
@@ -172,7 +191,14 @@ export function WorkoutMode({
     }
     setNow(timestamp);
     setLoaded(true);
-  }, [storageKey, barKey, units, latestResultCreatedAt, workout, versionFingerprint]);
+  }, [
+    storageKey,
+    barKey,
+    units,
+    latestResultCreatedAt,
+    workout,
+    versionFingerprint,
+  ]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -367,11 +393,19 @@ export function WorkoutMode({
       "notes",
       [session.notes, summary].filter(Boolean).join("\n").slice(0, 500),
     );
-    const paused = { ...session, clock: { ...session.clock, pausedAt: session.clock.pausedAt ?? Date.now() } };
+    const paused = {
+      ...session,
+      clock: {
+        ...session.clock,
+        pausedAt: session.clock.pausedAt ?? Date.now(),
+      },
+    };
     try {
       localStorage.setItem(storageKey, JSON.stringify(paused));
     } catch {
-      setStorageWarning("Could not save progress on this device. Keep this page open.");
+      setStorageWarning(
+        "Could not save progress on this device. Keep this page open.",
+      );
     }
     setSession(paused);
     router.push(`/athlete/log/${workout.id}?${params}`);
@@ -417,10 +451,21 @@ export function WorkoutMode({
           </Link>
         </header>
         {(workout.description || workout.notes || workout.rounds != null) && (
-          <section className="grid gap-3 rounded-xl bg-slate-900 p-4" aria-label="Workout instructions">
-            {workout.rounds != null && <p className="font-bold">Target: {workout.rounds} rounds</p>}
-            {workout.description && <p className="whitespace-pre-line">{workout.description}</p>}
-            {workout.notes && <p className="whitespace-pre-line text-slate-300">{workout.notes}</p>}
+          <section
+            className="grid gap-3 rounded-xl bg-slate-900 p-4"
+            aria-label="Workout instructions"
+          >
+            {workout.rounds != null && (
+              <p className="font-bold">Target: {workout.rounds} rounds</p>
+            )}
+            {workout.description && (
+              <p className="whitespace-pre-line">{workout.description}</p>
+            )}
+            {workout.notes && (
+              <p className="whitespace-pre-line text-slate-300">
+                {workout.notes}
+              </p>
+            )}
           </section>
         )}
         {storageWarning && (
@@ -563,7 +608,10 @@ export function WorkoutMode({
             >
               −
             </button>
-            <p className="text-3xl font-bold">{session.rounds}{workout.rounds != null ? ` / ${workout.rounds}` : ""} rounds</p>
+            <p className="text-3xl font-bold">
+              {session.rounds}
+              {workout.rounds != null ? ` / ${workout.rounds}` : ""} rounds
+            </p>
             <button
               aria-label="Add round"
               onClick={() => update({ rounds: session.rounds + 1 })}
@@ -713,6 +761,18 @@ export function WorkoutMode({
                                 }}
                               />
                             </label>
+                            {value !== undefined && (
+                              <div
+                                className="col-span-3"
+                                aria-label={`Set ${j + 1} plates per side`}
+                              >
+                                <PlateDisplay
+                                  weight={value}
+                                  bar={bar}
+                                  units={units}
+                                />
+                              </div>
+                            )}
                           </div>
                         );
                       },
@@ -742,9 +802,10 @@ export function WorkoutMode({
                     />
                   </label>
                 )}
-                {weight !== undefined && (
-                  <PlateDisplay weight={weight} bar={bar} units={units} />
-                )}
+                {workout.workout_type !== "strength" &&
+                  weight !== undefined && (
+                    <PlateDisplay weight={weight} bar={bar} units={units} />
+                  )}
               </article>
             );
           })}
