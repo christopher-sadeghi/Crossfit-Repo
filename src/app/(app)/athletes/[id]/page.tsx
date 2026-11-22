@@ -218,7 +218,6 @@ export default async function AthletePage({ params, searchParams }: Props) {
       </div>
 
       <AthleteTabNav
-        key={tab}
         initialTab={tab && TABS.includes(tab as (typeof TABS)[number]) ? tab : "overview"}
         groups={TAB_GROUPS}
       >

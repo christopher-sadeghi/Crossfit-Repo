@@ -19,6 +19,13 @@ export function AthleteTabNav({
   initialTab: string;
 }) {
   const [value, setValue] = useState(initialTab);
+  const [syncedTab, setSyncedTab] = useState(initialTab);
+
+  if (initialTab !== syncedTab) {
+    setSyncedTab(initialTab);
+    setValue(initialTab);
+  }
+
   const activeGroup = groups.find((group) => group.tabs.some((tab) => tab.value === value)) ?? groups[0];
 
   const selectTab = (nextValue: string) => {
