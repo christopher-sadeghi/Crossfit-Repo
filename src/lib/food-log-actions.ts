@@ -55,7 +55,7 @@ export async function saveFoodToLibrary(athleteId: string, item: LibraryFoodInpu
   const food = parsed.data;
   // PostgREST cannot infer a partial unique index as an upsert conflict target.
   let query = supabase.from("saved_foods").select("id").eq("athlete_id", athleteId);
-  query = food.source_id ? query.eq("source", food.source).eq("source_id", food.source_id) : query.is("source_id", null).eq("name", food.name).eq("serving_label", food.serving_label);
+  query = food.source_id ? query.eq("source", food.source).eq("source_id", food.source_id) : query.is("source_id", null).eq("kind", food.kind).eq("name", food.name).eq("serving_label", food.serving_label);
   const { data: existing, error: readError } = await query.limit(1).maybeSingle();
   if (readError) return { error: "Couldn't save the food. Please try again." };
   const row = { ...food, athlete_id: athleteId, coach_id: who.coachId };
