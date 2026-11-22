@@ -9,6 +9,16 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      athlete_workout_overrides: {
+        Row: { id: string; coach_id: string; athlete_id: string; workout_id: string; replacement_workout_id: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; coach_id?: string; athlete_id: string; workout_id: string; replacement_workout_id?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; coach_id?: string; athlete_id?: string; workout_id?: string; replacement_workout_id?: string | null; created_at?: string; updated_at?: string };
+        Relationships: [
+          { foreignKeyName: "athlete_workout_overrides_athlete_id_coach_id_fkey"; columns: ["athlete_id", "coach_id"]; isOneToOne: false; referencedRelation: "athletes"; referencedColumns: ["id", "coach_id"] },
+          { foreignKeyName: "athlete_workout_overrides_workout_id_fkey"; columns: ["workout_id"]; isOneToOne: false; referencedRelation: "workouts"; referencedColumns: ["id"] },
+          { foreignKeyName: "athlete_workout_overrides_replacement_workout_id_fkey"; columns: ["replacement_workout_id"]; isOneToOne: true; referencedRelation: "workouts"; referencedColumns: ["id"] }
+        ];
+      };
       ai_chat_messages: {
         Row: {
           cleared: boolean;
@@ -229,7 +239,12 @@ export type Database = {
           coach_id: string;
           created_at: string;
           entry_on: string;
-          high_stress: boolean;
+          soreness: number | null;
+          soreness_areas: string[];
+          stress: number | null;
+          energy: number | null;
+          mood: number | null;
+          readiness: number | null;
           hit_water_goal: boolean;
           id: string;
           late_caffeine: boolean;
@@ -248,7 +263,12 @@ export type Database = {
           coach_id: string;
           created_at?: string;
           entry_on?: string;
-          high_stress?: boolean;
+          soreness?: number | null;
+          soreness_areas?: string[];
+          stress?: number | null;
+          energy?: number | null;
+          mood?: number | null;
+          readiness?: never;
           hit_water_goal?: boolean;
           id?: string;
           late_caffeine?: boolean;
@@ -266,7 +286,12 @@ export type Database = {
           coach_id?: string;
           created_at?: string;
           entry_on?: string;
-          high_stress?: boolean;
+          soreness?: number | null;
+          soreness_areas?: string[];
+          stress?: number | null;
+          energy?: number | null;
+          mood?: number | null;
+          readiness?: never;
           hit_water_goal?: boolean;
           id?: string;
           late_caffeine?: boolean;
@@ -1157,6 +1182,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      copy_workout_for_athlete: { Args: { p_workout_id: string; p_athlete_id: string; p_scheduled_on: string }; Returns: string };
+      override_workout_for_athlete: { Args: { p_workout_id: string; p_athlete_id: string; p_mode: string }; Returns: string | null };
+      restore_workout_for_athlete: { Args: { p_workout_id: string; p_athlete_id: string }; Returns: undefined };
+      delete_athlete_workout: { Args: { p_workout_id: string; p_athlete_id: string }; Returns: undefined };
       apply_athlete_workout_adjustment: {
         Args: { p_details: Json; p_modifications: string; p_proposal: Json; p_suggestion_id: string };
         Returns: string;

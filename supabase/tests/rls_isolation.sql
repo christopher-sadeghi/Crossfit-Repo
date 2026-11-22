@@ -165,9 +165,11 @@ begin
   insert into public.athlete_journal_entries (athlete_id, coach_id, sleep_hours, sleep_quality, alcohol)
   values ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-00000000000a', 7.5, 4, true);
 
-  update public.athlete_journal_entries set high_stress = true where athlete_id = '00000000-0000-0000-0000-0000000000a1';
+  update public.athlete_journal_entries set stress = 4, soreness = 4, energy = 3, mood = 3, soreness_areas = array['quads'] where athlete_id = '00000000-0000-0000-0000-0000000000a1';
   get diagnostics n = row_count;
   assert n = 1, 'athlete should be able to update their own journal';
+  assert (select stress = 4 and soreness = 4 and energy = 3 and mood = 3 and soreness_areas = array['quads'] and readiness is not null from public.athlete_journal_entries where athlete_id = '00000000-0000-0000-0000-0000000000a1'),
+    'new check-in columns should be writable and readiness computed under athlete RLS';
 
   begin
     insert into public.athlete_journal_entries (athlete_id, coach_id, sleep_hours)

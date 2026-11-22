@@ -51,6 +51,8 @@ export default async function AthleteLogResultPage({ params, searchParams }: Pro
     supabase.auth.getClaims(),
   ]);
   if (!workout) notFound();
+  const { data: canView } = await supabase.rpc("athlete_can_view_workout", { p_workout_id: workoutId });
+  if (!canView) notFound();
 
   let existingResult: EditableResult | null = null;
   if (resultId) {

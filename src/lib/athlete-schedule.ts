@@ -18,6 +18,9 @@ export type AthleteScheduleItem<TWorkout extends ScheduleWorkout = ScheduleWorko
   source: "group" | "personal" | "one_off";
   programId: string | null;
   programName: string | null;
+  assignmentStartDate?: string;
+  removed?: boolean;
+  overrides?: { workoutId: string; programId: string; programName: string; source: "group" | "personal" };
 };
 
 type ScheduleRange = { from: string; to: string };
@@ -29,6 +32,7 @@ export async function loadAthleteSchedule<TWorkout extends ScheduleWorkout>(
   athleteId: string,
   range: ScheduleRange,
   workoutSelect: string,
+  options: { includeRemoved?: boolean } = {},
 ): Promise<AthleteScheduleItem<TWorkout>[]> {
   const { data: assignmentRows } = await supabase
     .from("program_assignments")
@@ -50,7 +54,7 @@ export async function loadAthleteSchedule<TWorkout extends ScheduleWorkout>(
   }
 
   const programIds = [...assignmentByProgram.keys()];
-  const [{ data: programRows }, { data: oneOffRows }] = await Promise.all([
+  const [{ data: programRows }, { data: oneOffRows }, { data: overrides, error: overrideError }] = await Promise.all([
     programIds.length
       ? supabase.from("workouts").select(`program_id,${workoutSelect}`).in("program_id", programIds)
       : Promise.resolve({ data: [] }),
@@ -61,13 +65,25 @@ export async function loadAthleteSchedule<TWorkout extends ScheduleWorkout>(
       .is("program_id", null)
       .gte("scheduled_on", range.from)
       .lte("scheduled_on", range.to),
+    supabase.from("athlete_workout_overrides").select("workout_id, replacement_workout_id").eq("athlete_id", athleteId),
   ]);
+  if (overrideError) throw new Error("Couldn't load athlete schedule overrides.");
+  const overrideByWorkout = new Map((overrides ?? []).map((row) => [row.workout_id, row]));
+  const replacementSources = new Map<string, NonNullable<AthleteScheduleItem["overrides"]>>();
 
   const items: AthleteScheduleItem<TWorkout>[] = [];
   for (const workout of (programRows ?? []) as unknown as ProgramWorkout<TWorkout>[]) {
     if (!workout.program_id || workout.week_number == null || workout.day_number == null) continue;
     const assignment = assignmentByProgram.get(workout.program_id);
     if (!assignment) continue;
+    const override = overrideByWorkout.get(workout.id);
+    if (override?.replacement_workout_id) {
+      replacementSources.set(override.replacement_workout_id, {
+        workoutId: workout.id, programId: assignment.program.id, programName: assignment.program.name,
+        source: assignment.program.athlete_id ? "personal" : "group",
+      });
+    }
+    if (override && (!options.includeRemoved || override.replacement_workout_id)) continue;
 
     const date = programDate(assignment.startDate, workout.week_number, workout.day_number);
     if (date < range.from || date > range.to) continue;
@@ -77,6 +93,8 @@ export async function loadAthleteSchedule<TWorkout extends ScheduleWorkout>(
       source: assignment.program.athlete_id ? "personal" : "group",
       programId: assignment.program.id,
       programName: assignment.program.name,
+      assignmentStartDate: assignment.startDate,
+      ...(override ? { removed: true } : {}),
     });
   }
 
@@ -88,13 +106,14 @@ export async function loadAthleteSchedule<TWorkout extends ScheduleWorkout>(
       source: "one_off",
       programId: null,
       programName: null,
+      overrides: replacementSources.get(workout.id),
     });
   }
 
   return items.sort((a, b) => a.date.localeCompare(b.date) || a.workout.title.localeCompare(b.workout.title));
 }
 
-export function SCHEDULE_LABEL(item: Pick<AthleteScheduleItem, "source" | "programName">) {
-  if (item.source === "one_off") return "One-off";
+export function SCHEDULE_LABEL(item: Pick<AthleteScheduleItem, "source" | "programName">, audience: "coach" | "athlete" = "coach") {
+  if (item.source === "one_off") return audience === "athlete" ? "Just for you" : "Just this athlete";
   return `${item.source === "group" ? "Group" : "Personal"} · ${item.programName ?? ""}`;
 }
