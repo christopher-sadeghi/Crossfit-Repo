@@ -44,6 +44,23 @@ grant update (performed_on, activity_type, custom_label, duration_minutes, rpe, 
   on public.athlete_activities to authenticated;
 grant select, insert, update, delete on public.athlete_activities to service_role;
 
+create table public.ai_activity_draft_requests (
+  id uuid primary key,
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+create index ai_activity_draft_requests_user_created_idx on public.ai_activity_draft_requests (user_id, created_at);
+alter table public.ai_activity_draft_requests enable row level security;
+create policy "Read own activity draft requests" on public.ai_activity_draft_requests
+  for select to authenticated using (user_id = (select auth.uid()));
+create policy "Reserve own activity draft requests" on public.ai_activity_draft_requests
+  for insert to authenticated with check (user_id = (select auth.uid()));
+
+revoke all on public.ai_activity_draft_requests from anon, authenticated;
+grant select, insert (id) on public.ai_activity_draft_requests to authenticated;
+grant select, insert, update, delete on public.ai_activity_draft_requests to service_role;
+
 alter table public.notifications drop constraint notifications_kind_check;
 alter table public.notifications add constraint notifications_kind_check check (
   kind in ('result_logged', 'workout_adjusted', 'low_readiness', 'message', 'missed_workouts',

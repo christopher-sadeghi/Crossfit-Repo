@@ -14,6 +14,7 @@ select id, coach_id, '2026-11-21', 'walk', 60, 4, 'manual' from public.athletes 
 
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"43000000-0000-0000-0000-000000000001","role":"authenticated"}',true);
+insert into public.ai_activity_draft_requests(id) values ('43000000-0000-0000-0000-000000000021');
 do $$ declare n integer; begin
   assert (select count(*) from public.athlete_activities) = 2;
   update public.athlete_activities set rpe = 5 where athlete_id = '43000000-0000-0000-0000-000000000013';
@@ -37,6 +38,15 @@ do $$ declare n integer; begin
 end $$;
 
 select set_config('request.jwt.claims','{"sub":"43000000-0000-0000-0000-000000000003","role":"authenticated"}',true);
+do $$ begin
+  assert not exists (select 1 from public.ai_activity_draft_requests);
+  insert into public.ai_activity_draft_requests(id) values ('43000000-0000-0000-0000-000000000022');
+  assert (select count(*) from public.ai_activity_draft_requests where user_id = auth.uid()) = 1;
+  assert not has_column_privilege('authenticated', 'public.ai_activity_draft_requests', 'created_at', 'insert');
+  assert not has_column_privilege('authenticated', 'public.ai_activity_draft_requests', 'user_id', 'insert');
+  assert not has_table_privilege('authenticated', 'public.ai_activity_draft_requests', 'update, delete, truncate');
+  raise notice 'PASS: activity draft reservations are isolated, cannot be backdated, and cannot be deleted by clients';
+end $$;
 do $$ declare n integer; begin
   assert (select count(*) from public.athlete_activities) = 1;
   begin
