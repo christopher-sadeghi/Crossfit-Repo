@@ -105,19 +105,19 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
             return (
               <div key={week}>
                 <h2 className="mb-2 text-sm font-semibold">Week {week}</h2>
-                <div className="grid grid-cols-7 gap-2">
+                <div className="grid grid-cols-2 gap-2 lg:grid-cols-7">
                   {Array.from({ length: 7 }, (_, di) => {
                     const day = di + 1;
                     const wods = program.workouts.filter((w) => w.week_number === week && w.day_number === day);
                     return (
                       <div key={day} data-testid={`w${week}d${day}`} className="flex min-h-24 flex-col gap-1 rounded-lg border bg-card p-2 text-xs">
-                        <div className="flex items-center justify-between text-muted-foreground">
+                        <div className="flex items-center justify-between gap-1 text-muted-foreground">
                           <span>{sharedStart ? shortDate(programDate(sharedStart, week, day)) : `Day ${day}`}</span>
                           <Link
                             href={`/programs/workouts/new?program=${program.id}&week=${week}&day=${day}`}
                             aria-label={`New WOD for week ${week} day ${day}`}
                             title="New WOD on this day"
-                            className="rounded p-0.5 hover:bg-muted hover:text-foreground"
+                            className="shrink-0 rounded p-0.5 hover:bg-muted hover:text-foreground"
                           >
                             <Plus className="size-3.5" />
                           </Link>

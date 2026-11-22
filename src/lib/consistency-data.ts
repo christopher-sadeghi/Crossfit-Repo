@@ -30,8 +30,7 @@ export async function loadConsistency(
   };
 }
 
-/** Return only active athletes requiring the coach's attention. */
-export async function loadDriftingAthletes(
+export async function loadCoachConsistency(
   supabase: SupabaseClient<Database>,
   coachId: string,
   today: string,
@@ -44,9 +43,19 @@ export async function loadDriftingAthletes(
   }
   const { data, error } = await supabase.from("athletes").select("id,first_name,last_name").eq("coach_id", coachId).eq("status", "active");
   if (error) throw new Error("Couldn't load active athletes.", { cause: error });
-  const athletes = await Promise.all((data ?? []).map(async (athlete) => {
-    const { stats } = await loadConsistency(supabase, athlete.id, today);
-    return { athlete, stats, ...drifting(stats, { driftDays }) };
-  }));
-  return athletes.filter((athlete) => athlete.drifting);
+  const athletes = [];
+  for (let index = 0; index < data.length; index += 10) {
+    athletes.push(...await Promise.all(data.slice(index, index + 10).map(async (athlete) => {
+      const { stats, schedule } = await loadConsistency(supabase, athlete.id, today);
+      return { athlete, stats, schedule, ...drifting(stats, { driftDays }) };
+    })));
+  }
+  return athletes;
+}
+
+/** Return only active athletes requiring the coach's attention. */
+export async function loadDriftingAthletes(
+  ...args: Parameters<typeof loadCoachConsistency>
+) {
+  return (await loadCoachConsistency(...args)).filter((athlete) => athlete.drifting);
 }

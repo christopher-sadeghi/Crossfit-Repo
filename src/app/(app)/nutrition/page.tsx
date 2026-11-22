@@ -12,11 +12,16 @@ export default async function NutritionPage() {
   const start = addDays(end, -6);
   const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
   const supabase = await createClient();
-  const [{ data: athletes }, { data: targets }, { data: food }] = await Promise.all([
+  const [athleteRows, targetRows, foodRows] = await Promise.all([
     supabase.from("athletes").select("id, first_name, last_name").eq("status", "active").order("first_name").order("last_name"),
     supabase.from("nutrition_targets").select("athlete_id, calories, protein_g, carbs_g, fat_g, start_date, end_date").order("start_date", { ascending: false }),
     supabase.from("food_logs").select("athlete_id, logged_on, calories, protein_g, carbs_g, fat_g").gte("logged_on", start).lte("logged_on", end),
   ]);
+  const error = athleteRows.error ?? targetRows.error ?? foodRows.error;
+  if (error) throw new Error("Couldn't load nutrition.", { cause: error });
+  const { data: athletes } = athleteRows;
+  const { data: targets } = targetRows;
+  const { data: food } = foodRows;
 
   const rows = (athletes ?? []).map((a) => {
     const mine = (targets ?? []).filter((t) => t.athlete_id === a.id);
