@@ -15,7 +15,7 @@ create table public.saved_foods (
   protein_g numeric(6,1) not null check (protein_g >= 0),
   carbs_g numeric(6,1) not null check (carbs_g >= 0),
   fat_g numeric(6,1) not null check (fat_g >= 0),
-  ingredients text check (char_length(ingredients) <= 2000),
+  ingredients text check (char_length(ingredients) <= 8000),
   source text not null check (source in ('custom', 'usda', 'off', 'log')),
   source_id text check (char_length(source_id) <= 64),
   created_at timestamptz not null default now(),

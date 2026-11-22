@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import type { FormState } from "@/lib/auth/form-state";
 import { actor, revalidateFood } from "@/lib/food-actor";
+import { foodIngredients } from "@/lib/food-ingredients";
 import { MEALS } from "@/lib/nutrition";
 import { createClient } from "@/lib/supabase/server";
 import { getToday } from "@/lib/time-zone";
@@ -24,7 +25,7 @@ const librarySchema = z.object({
   brand: z.string().trim().max(120).nullable().default(null),
   serving_label: z.string().trim().min(1).max(80),
   ...macros,
-  ingredients: z.string().trim().max(2000).nullable().default(null),
+  ingredients: z.string().trim().max(8000).nullable().default(null),
   source: z.enum(["custom", "usda", "off", "log"]),
   source_id: z.string().trim().min(1).max(64).nullable().default(null),
 }).refine(v => v.kind !== "food" || v.is_favorite, "Database foods must be favorites.");
@@ -107,5 +108,7 @@ export async function saveMealFromLog(athleteId: string, day: string, mealName: 
   totals.protein_g = Math.round(totals.protein_g * 10) / 10;
   totals.carbs_g = Math.round(totals.carbs_g * 10) / 10;
   totals.fat_g = Math.round(totals.fat_g * 10) / 10;
-  return saveFoodToLibrary(athleteId, { ...totals, name: parsed.data.name, kind: "meal", is_favorite: false, serving_label: "1 meal", ingredients: entries.map(e => [e.food_name, e.ingredients].filter(Boolean).join(": ")).join(", ").slice(0, 2000), source: "log" });
+  const ingredients = foodIngredients(entries.map(e => ({ name: e.food_name, ingredients: e.ingredients })), 8000);
+  if (ingredients === null) return { error: "This meal has too much allergy information to save safely. Choose fewer entries and try again." };
+  return saveFoodToLibrary(athleteId, { ...totals, name: parsed.data.name, kind: "meal", is_favorite: false, serving_label: "1 meal", ingredients, source: "log" });
 }

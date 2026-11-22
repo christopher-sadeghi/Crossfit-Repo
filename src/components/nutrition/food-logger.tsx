@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { matchedAllergies } from "@/lib/ai/food-safety";
 import type { FormState } from "@/lib/auth/form-state";
 import type { FoodItem, FoodServing } from "@/lib/food-db/types";
+import { foodIngredients } from "@/lib/food-ingredients";
 import type { loadFoodLibrary } from "@/lib/food-library";
 import { deleteSavedFood, logFood, saveFoodToLibrary, setFavorite } from "@/lib/food-log-actions";
 import type { Meal } from "@/lib/nutrition";
@@ -90,12 +91,16 @@ export function FoodLogger({ athleteId, date, allergies, recent, saved, todayEnt
   }
   function add(item: Candidate, serving: FoodServing, amount: number, meal: Meal) {
     if (!Number.isFinite(amount) || amount < 0.25 || amount > 20) { setState({ error: "Choose a quantity between 0.25 and 20." }); return; }
-    run(() => logFood(athleteId, { date, meal, name: item.name.slice(0, 120), ingredients: [item.ingredients, item.allergens.length ? `Allergens: ${item.allergens.join(", ")}` : null].filter(Boolean).join("; ").slice(0, 2000) || null, serving: (amount === 1 ? servingLabel(serving) : `${amount} × ${servingLabel(serving)}`).slice(0, 120), ...scaled(serving, amount) }));
+    const ingredients = foodIngredients([item], 2000);
+    if (ingredients === null) { setState({ error: "This food has too much allergy information to log safely. Enter it manually instead." }); return; }
+    run(() => logFood(athleteId, { date, meal, name: item.name.slice(0, 120), ingredients, serving: (amount === 1 ? servingLabel(serving) : `${amount} × ${servingLabel(serving)}`).slice(0, 120), ...scaled(serving, amount) }));
   }
   function saveFavorite(item: Candidate, serving: FoodServing) {
     const row = favoriteRow(item, serving);
+    const ingredients = foodIngredients([item], 8000);
+    if (ingredients === null) { setState({ error: "This food has too much allergy information to save safely." }); return; }
     if (row) run(() => setFavorite(row.id, !row.is_favorite));
-    else run(() => saveFoodToLibrary(athleteId, { kind: "food", is_favorite: true, name: item.name.slice(0, 120), brand: item.brand?.slice(0, 120) ?? null, ingredients: [item.ingredients, item.allergens.length ? `Allergens: ${item.allergens.join(", ")}` : null].filter(Boolean).join("; ").slice(0, 2000) || null, serving_label: servingLabel(serving).slice(0, 80), ...scaled(serving, 1), source: item.source, source_id: item.sourceId }));
+    else run(() => saveFoodToLibrary(athleteId, { kind: "food", is_favorite: true, name: item.name.slice(0, 120), brand: item.brand?.slice(0, 120) ?? null, ingredients, serving_label: servingLabel(serving).slice(0, 80), ...scaled(serving, 1), source: item.source, source_id: item.sourceId }));
   }
   function toggleFavorite(item: Candidate, serving = item.servings[0]) {
     if (item.source === "off" && !item.savedId && item !== selected) {
