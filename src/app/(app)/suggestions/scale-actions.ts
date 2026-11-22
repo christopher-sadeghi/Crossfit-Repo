@@ -6,7 +6,12 @@ import { z } from "zod";
 
 import { approveSuggestionWithClient } from "@/lib/ai/decisions";
 import { runSuggestion } from "@/lib/ai/service";
-import { deleteWorkoutScalingWithClient, scaleWorkoutSchema, scaleWorkoutInputSchema } from "@/lib/ai/scale-workout";
+import {
+  applyScaleWorkoutLoadEdits,
+  deleteWorkoutScalingWithClient,
+  scaleWorkoutSchema,
+  scaleWorkoutInputSchema,
+} from "@/lib/ai/scale-workout";
 import { SUGGESTION_REGISTRY } from "@/lib/ai/suggestions";
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { createClient } from "@/lib/supabase/server";
@@ -78,8 +83,9 @@ export async function approveScaleSuggestion(_: FormState, formData: FormData): 
   const proposal = scaleWorkoutSchema.safeParse(suggestion.proposal);
   const input = scaleWorkoutInputSchema.safeParse(suggestion.input);
   if (!proposal.success || !input.success) return failure(formData, "This scaling suggestion is incomplete. Ask again.");
-  const final = { ...proposal.data, summary: summary.data };
-  const result = await approveSuggestionWithClient(supabase, suggestion, final);
+  const final = applyScaleWorkoutLoadEdits(proposal.data, input.data, formData, summary.data);
+  if ("error" in final) return failure(formData, final.error);
+  const result = await approveSuggestionWithClient(supabase, suggestion, final.data);
   if ("error" in result) return failure(formData, result.error);
 
   revalidatePath("/suggestions");
