@@ -85,7 +85,7 @@ export function FoodLogger({ athleteId, date, allergies, recent, saved, todayEnt
     setSelected(item); setServingIndex(0); setQuantity("1"); setMeal(defaultMeal()); setState({});
   }
   function pick(item: Candidate) {
-    if (item.source === "off" && !item.savedId) void lookup(`/api/foods/barcode/${item.sourceId}`, true);
+    if (item.source === "off" && !item.savedId) void lookup(`/api/foods/barcode/${item.sourceId}`, true, true).then(full => { if (full) showPanel(full); });
     else showPanel(item);
   }
   function add(item: Candidate, serving: FoodServing, amount: number, meal: Meal) {
@@ -99,25 +99,26 @@ export function FoodLogger({ athleteId, date, allergies, recent, saved, todayEnt
   }
   function toggleFavorite(item: Candidate, serving = item.servings[0]) {
     if (item.source === "off" && !item.savedId && item !== selected) {
-      void lookup(`/api/foods/barcode/${item.sourceId}`, true).then(full => { if (full) saveFavorite(full, full.servings[0]); });
+      void lookup(`/api/foods/barcode/${item.sourceId}`, true, true).then(full => { if (full) saveFavorite(full, full.servings[0]); });
     } else saveFavorite(item, serving);
   }
   function star(item: Candidate, serving?: FoodServing) {
     const on = favoriteRow(item, serving)?.is_favorite ?? false;
     return <Button type="button" size="icon" variant="ghost" className="shrink-0" disabled={pending || lookupPending} aria-label={`${on ? "Unfavorite" : "Favorite"} ${item.name}`} aria-pressed={on} onClick={() => toggleFavorite(item, serving)}><Star className={on ? "fill-amber-400 text-amber-600" : ""} /></Button>;
   }
-  async function lookup(url: string, barcode: boolean): Promise<FoodItem | undefined> {
+  async function lookup(url: string, barcode: boolean, detailsOnly = false): Promise<FoodItem | undefined> {
     request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
-    setLookupPending(true); setLookupState({}); setItems([]); setSearched(false); setSelected(null); setState({});
+    setLookupPending(true); setLookupState({}); setState({});
+    if (!detailsOnly) { setItems([]); setSearched(false); setSelected(null); }
     try {
       const response = await fetch(url, { signal: controller.signal });
       const result = await response.json();
       if (controller.signal.aborted) return;
       if (!response.ok) setLookupState({ error: result.error || "Food lookup isn't available right now." });
-      else if (barcode && result.item) { showPanel(result.item); return result.item; }
-      else { setItems(result.items ?? []); setSearched(true); setLookupState({ message: result.notice }); }
+      else if (barcode && result.item) { if (!detailsOnly) showPanel(result.item); return result.item; }
+      else if (!detailsOnly) { setItems(result.items ?? []); setSearched(true); setLookupState({ message: result.notice }); }
     } catch {
       if (!controller.signal.aborted) setLookupState({ error: "Food lookup isn't available right now." });
     } finally { if (!controller.signal.aborted) setLookupPending(false); }
