@@ -113,11 +113,12 @@ export async function addFoodIdea(suggestionId: string, index: number): Promise<
   if (!idea || !input.success) return { error: "This idea couldn't be found." };
 
   // Check again against today's allergy list, in case it changed since the idea was made.
-  const { data: prefsRow } = await supabase
+  const { data: prefsRow, error: prefsError } = await supabase
     .from("athlete_food_preferences")
     .select("diet_type, allergies, dislikes, cooking_minutes")
     .eq("athlete_id", suggestion.athlete_id)
     .maybeSingle();
+  if (prefsError) return { error: "Couldn't check the current allergy list, so nothing was added. Please try again." };
   const hits = matchedAllergies(ideaText(idea), [...new Set([...readPreferences(prefsRow).allergies, ...input.data.allergies])]);
   if (hits.length) return { error: `Not added: this idea may contain ${hits.join(", ")}.` };
 
