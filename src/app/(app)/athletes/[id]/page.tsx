@@ -247,6 +247,11 @@ export default async function AthletePage({ params, searchParams }: Props) {
             invite={invite}
             inviteUrl={inviteUrl}
           />
+          {!athlete.user_id && (
+            <p className="text-xs text-muted-foreground md:col-span-3">
+              Opening the link while you&apos;re signed in as a coach shows a log-out prompt. Use a private window to test it. Only the newest link works; resending cancels older links.
+            </p>
+          )}
           <Card className="md:col-span-3">
             <CardHeader>
               <CardTitle>Injuries / limitations</CardTitle>

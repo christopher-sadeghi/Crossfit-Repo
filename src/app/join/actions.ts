@@ -62,7 +62,7 @@ export async function acceptInvite(
       error.code === "user_already_exists" ||
       message.includes("already registered")
     ) {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
         email: invite.email,
         password: parsed.data.password,
       });
@@ -71,6 +71,19 @@ export async function acceptInvite(
         return failure(
           formData,
           "This email already has an account. Enter that account's password, or use Forgot password on the login page.",
+        );
+      }
+
+      const { data: coach } = await supabase
+        .from("coaches")
+        .select("id")
+        .eq("id", signInData.user.id)
+        .maybeSingle();
+      if (coach) {
+        await supabase.auth.signOut();
+        return failure(
+          formData,
+          "This email is already used by a coach account, so it can't also be an athlete login. Ask your coach to invite you with a different email.",
         );
       }
 
