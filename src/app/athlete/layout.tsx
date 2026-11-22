@@ -23,8 +23,6 @@ export default async function AthleteLayout({
 
   const supabase = await createClient();
   const [notifications, timeZone] = await Promise.all([getNotifications(), getTimeZone()]);
-  const { count: unreadMessages } = await supabase.from("messages").select("id", { count: "exact", head: true })
-    .eq("athlete_id", viewer.athleteId).eq("sender_id", viewer.coachId).is("read_at", null);
   const { data: coach } = await supabase
     .from("coaches")
     .select("gym_name")
@@ -53,7 +51,7 @@ export default async function AthleteLayout({
         </header>
         {children}
       </main>
-      <AthleteTabs unreadMessages={unreadMessages ?? 0} />
+      <AthleteTabs unreadMessages={notifications.unreadMessages} />
     </div>
   );
 }

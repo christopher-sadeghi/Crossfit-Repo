@@ -20,8 +20,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const coach = viewer;
   const supabase = await createClient();
   const [notifications, timeZone] = await Promise.all([getNotifications(), getTimeZone()]);
-  const { count: unreadMessages } = await supabase.from("messages").select("id", { count: "exact", head: true })
-    .eq("coach_id", coach.id).neq("sender_id", coach.id).is("read_at", null);
   const { count: athleteChanges } = await supabase
     .from("ai_suggestions")
     .select("id", { count: "exact", head: true })
@@ -36,7 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Dumbbell className="size-5" />
           FitCoach AI
         </div>
-        <NavLinks badges={{ "/suggestions": athleteChanges ?? 0, "/messages": unreadMessages ?? 0 }} />
+        <NavLinks badges={{ "/suggestions": athleteChanges ?? 0, "/messages": notifications.unreadMessages }} />
         <div className="mt-3"><NotificationBell initial={notifications} timeZone={timeZone} align="start" /></div>
         <div className="mt-auto grid gap-3 border-t pt-4">
           <div className="px-3 text-sm">

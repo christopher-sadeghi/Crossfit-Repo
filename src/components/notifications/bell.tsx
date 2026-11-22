@@ -14,6 +14,7 @@ export function NotificationBell({ initial, timeZone, align = "end" }: { initial
   const [pending, startTransition] = useTransition();
   const disclosure = useRef<HTMLDetailsElement>(null);
   const generation = useRef(0);
+  const unreadMessages = useRef(initial.unreadMessages);
   const router = useRouter();
   const formatter = new Intl.DateTimeFormat("en-US", { timeZone, dateStyle: "medium", timeStyle: "short" });
 
@@ -27,7 +28,13 @@ export function NotificationBell({ initial, timeZone, align = "end" }: { initial
       try {
         const next = await getNotifications();
         if (!cancelled && current === generation.current) {
-          if (!next.error) setFeed(next);
+          if (!next.error) {
+            setFeed(next);
+            if (next.unreadMessages !== unreadMessages.current) {
+              unreadMessages.current = next.unreadMessages;
+              router.refresh();
+            }
+          }
           setError(next.error ?? "");
         }
       } catch {
@@ -39,7 +46,9 @@ export function NotificationBell({ initial, timeZone, align = "end" }: { initial
     const timer = window.setInterval(refresh, 18_000);
     document.addEventListener("visibilitychange", refresh);
     return () => { cancelled = true; window.clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
-  }, []);
+  }, [router]);
+
+  useEffect(() => { unreadMessages.current = initial.unreadMessages; }, [initial.unreadMessages]);
 
   const markRead = (item?: NotificationItem) => startTransition(async () => {
     try {

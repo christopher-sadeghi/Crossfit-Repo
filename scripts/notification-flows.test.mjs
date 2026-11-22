@@ -46,7 +46,7 @@ function clientFixture(tables = {}, options = {}) {
       const filters = [];
       const resolve = () => {
         if (options.thrown) throw new Error("offline");
-        let rows = (tables[table] ?? []).filter((row) => filters.every(([key, value]) => row[key] === value));
+        let rows = (tables[table] ?? []).filter((row) => filters.every(([key, value, not]) => not ? row[key] !== value : row[key] === value));
         const error = operation === "select" ? options.queryError : options.writeError;
         if (operation !== "select") {
           events.push([operation, table, values]);
@@ -62,6 +62,7 @@ function clientFixture(tables = {}, options = {}) {
       const query = {
         select: () => query,
         eq: (key, value) => { filters.push([key, value]); return query; },
+        neq: (key, value) => { filters.push([key, value, true]); return query; },
         is: (key, value) => { filters.push([key, value]); return query; },
         order: (key) => { ordering = key; return query; }, limit: (value) => { limit = value; return query; },
         insert: (value) => { operation = "insert"; values = value; return query; },
@@ -85,6 +86,7 @@ test("notification feed caps the ordered list at 20 but counts all own unread ro
   const actions = loader({ "@/lib/supabase/server": { createClient: async () => client } })("src/app/notification-actions.ts");
   const feed = await actions.getNotifications();
   assert.equal(feed.count, 25);
+  assert.equal(feed.unreadMessages, 0);
   assert.equal(feed.items.length, 20);
   assert.equal(feed.items[0].created_at, "2026-11-25");
   assert.deepEqual(await actions.markNotificationRead(athleteId), {});
@@ -106,12 +108,22 @@ test("notification actions handle empty, malformed, unauthenticated and database
     const actions = loader({ "@/lib/supabase/server": { createClient: async () => client } })("src/app/notification-actions.ts");
     const feed = await actions.getNotifications();
     assert.equal(feed.count, 0);
+    assert.equal(feed.unreadMessages, 0);
     assert.equal(feed.items.length, 0);
     assert.equal(Boolean(feed.error), Object.keys(options).length > 0);
     assert.ok((await actions.markNotificationRead("bad-id")).error);
     assert.equal(events.length, 0);
     const result = await actions.markAllNotificationsRead();
     assert.equal(Boolean(result.error), Object.keys(options).length > 0);
+  }
+});
+
+test("the shared bell feed counts all incoming unread messages for either viewer role", async () => {
+  for (const sender of [athleteId, itemId]) {
+    const messages = Array.from({ length: 1205 }, () => ({ sender_id: sender, read_at: null }));
+    const { client } = clientFixture({ messages: [...messages, { sender_id: userId, read_at: null }, { sender_id: sender, read_at: "read" }] });
+    const actions = loader({ "@/lib/supabase/server": { createClient: async () => client } })("src/app/notification-actions.ts");
+    assert.equal((await actions.getNotifications()).unreadMessages, 1205);
   }
 });
 
@@ -361,7 +373,7 @@ function nodes(tree) {
 
 test("bell polls visible tabs every 18s, displays local times, marks/navigates and handles empty/error/cleanup", async () => {
   const oldWindow = globalThis.window, oldDocument = globalThis.document;
-  let interval, cleared = false, reads = 0, polls = 0, failRead = false;
+  let interval, cleared = false, reads = 0, polls = 0, failRead = false, messageCount = 0, refreshes = 0, failPoll = false;
   const listeners = new Set(), effects = [], tasks = [], states = [], refs = [], pushed = [];
   let cursor = 0, refCursor = 0, mounted = false;
   const item = { id: itemId, title: "New result", body: "Sam logged Fran", created_at: "2026-11-21T12:00:00Z", read_at: null, link: "/athlete" };
@@ -374,15 +386,15 @@ test("bell polls visible tabs every 18s, displays local times, marks/navigates a
         useRef: (initial) => { const index = refCursor++; if (!mounted) refs[index] = { current: initial }; return refs[index]; },
         useEffect: (fn) => { if (!mounted) effects.push(fn); }, useTransition: () => [false, (fn) => tasks.push(fn())],
       },
-      "next/navigation": { useRouter: () => ({ push: (href) => pushed.push(href) }) },
+      "next/navigation": { useRouter: () => ({ push: (href) => pushed.push(href), refresh: () => refreshes++ }) },
       "next/link": "a", "lucide-react": { Bell: "svg" }, "@/components/ui/button": { Button: "button" },
       "@/app/notification-actions": {
-        getNotifications: async () => { polls++; return { items: [], count: 0 }; },
+        getNotifications: async () => { polls++; return { items: [], count: 0, unreadMessages: messageCount, ...(failPoll ? { error: "offline" } : {}) }; },
         markNotificationRead: async (id) => { reads++; assert.equal(id, itemId); return failRead ? { error: "Failed receipt" } : {}; },
         markAllNotificationsRead: async () => ({}),
       },
     })("src/components/notifications/bell.tsx");
-    const render = () => { cursor = 0; refCursor = 0; const result = NotificationBell({ initial: { items: [item], count: 1 }, timeZone: "America/Los_Angeles" }); mounted = true; return result; };
+    const render = () => { cursor = 0; refCursor = 0; const result = NotificationBell({ initial: { items: [item], count: 1, unreadMessages: 0 }, timeZone: "America/Los_Angeles" }); mounted = true; return result; };
     let tree = render();
     const cleanup = effects[0]();
     assert.equal(nodes(tree).find((node) => node.type === "summary").props["aria-label"], "Notifications, 1 unread");
@@ -411,6 +423,14 @@ test("bell polls visible tabs every 18s, displays local times, marks/navigates a
     await interval(); assert.equal(polls, 1);
     assert.ok(nodes(render()).some((node) => node.props?.children === "No notifications yet."));
     await Promise.all([...listeners].map((fn) => fn())); assert.equal(polls, 2);
+    assert.equal(refreshes, 0);
+    messageCount = 4;
+    await interval(); assert.equal(refreshes, 1);
+    await interval(); assert.equal(refreshes, 1);
+    messageCount = 0; failPoll = true;
+    await interval(); assert.equal(refreshes, 1);
+    failPoll = false;
+    await interval(); assert.equal(refreshes, 2);
     cleanup(); assert.equal(cleared, true); assert.equal(listeners.size, 0);
   } finally {
     if (oldWindow === undefined) delete globalThis.window; else globalThis.window = oldWindow;

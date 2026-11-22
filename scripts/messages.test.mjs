@@ -157,6 +157,7 @@ test("send rejects empty, oversized, forged links, strangers and database failur
 });
 
 function treeNodes(node) {
+  if (Array.isArray(node)) return node.flatMap(treeNodes);
   if (!node || typeof node !== "object") return [];
   return [node, ...[node.props?.children].flat().flatMap(treeNodes)];
 }
