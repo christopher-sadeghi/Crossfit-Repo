@@ -2,7 +2,10 @@ import { z } from "zod";
 
 import { toKg, type Units } from "@/lib/units";
 
-import { scaleWorkoutChangeSchema, scaleWorkoutInputSchema } from "./scale-workout";
+import { scaleWorkoutInputSchema } from "./scale-workout";
+import { scaleWorkoutChangeSchema } from "./scale-workout-schema";
+
+export { effectiveScaling } from "@/lib/workout-scaling";
 
 export const athleteAdjustSchema = z.object({
   asked_for_harder: z.boolean(),
@@ -95,31 +98,6 @@ export class NoChangeError extends Error {
     super("The AI didn't find anything to make easier, so your WOD is unchanged.");
     this.name = "NoChangeError";
   }
-}
-
-type ScalingRow = {
-  modifications: string;
-  details: unknown;
-  athlete_adjusted_at: string | null;
-  coach_modifications: string | null;
-  coach_details: unknown;
-};
-
-/** An athlete change only counts on the day it was made; after that the coach's scaling (if any) applies again. */
-export function effectiveScaling<T extends ScalingRow>(row: T | null | undefined, today: string): T | null {
-  if (!row) return null;
-  if (!row.athlete_adjusted_at) return row;
-  const details = row.details as { scheduled_on?: unknown } | null;
-  if (details?.scheduled_on === today) return row;
-  if (row.coach_modifications == null) return null;
-  return {
-    ...row,
-    modifications: row.coach_modifications,
-    details: row.coach_details,
-    athlete_adjusted_at: null,
-    coach_modifications: null,
-    coach_details: null,
-  };
 }
 
 const KEPT_FIELDS = ["sets", "reps", "load", "distance_m", "calories", "duration_seconds"] as const;

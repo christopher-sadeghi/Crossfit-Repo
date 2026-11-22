@@ -458,6 +458,163 @@ export type Database = {
           },
         ];
       };
+      benchmark_results: {
+        Row: {
+          athlete_id: string;
+          benchmark_id: string;
+          coach_id: string;
+          created_at: string;
+          id: string;
+          is_rx: boolean;
+          load_kg: number | null;
+          logged_by: string | null;
+          notes: string | null;
+          performed_on: string;
+          rep_max: number | null;
+          reps: number | null;
+          rounds: number | null;
+          time_seconds: number | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          athlete_id: string;
+          benchmark_id: string;
+          coach_id?: string;
+          created_at?: string;
+          id?: string;
+          is_rx?: boolean;
+          load_kg?: number | null;
+          logged_by?: string | null;
+          notes?: string | null;
+          performed_on: string;
+          rep_max?: number | null;
+          reps?: number | null;
+          rounds?: number | null;
+          time_seconds?: number | null;
+        };
+        Update: {
+          athlete_id?: string;
+          benchmark_id?: string;
+          coach_id?: string;
+          created_at?: string;
+          id?: string;
+          is_rx?: boolean;
+          load_kg?: number | null;
+          logged_by?: string | null;
+          notes?: string | null;
+          performed_on?: string;
+          rep_max?: number | null;
+          reps?: number | null;
+          rounds?: number | null;
+          time_seconds?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "benchmark_results_athlete_id_coach_id_fkey";
+            columns: ["athlete_id", "coach_id"];
+            isOneToOne: false;
+            referencedRelation: "athletes";
+            referencedColumns: ["id", "coach_id"];
+          },
+          {
+            foreignKeyName: "benchmark_results_benchmark_id_fkey";
+            columns: ["benchmark_id"];
+            isOneToOne: false;
+            referencedRelation: "benchmarks";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "benchmark_results_coach_id_fkey";
+            columns: ["coach_id"];
+            isOneToOne: false;
+            referencedRelation: "coaches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      benchmark_settings: {
+        Row: {
+          benchmark_id: string;
+          coach_id: string;
+          retest_weeks: number | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          benchmark_id: string;
+          coach_id?: string;
+          retest_weeks?: number | null;
+        };
+        Update: {
+          benchmark_id?: string;
+          coach_id?: string;
+          retest_weeks?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "benchmark_settings_benchmark_id_fkey";
+            columns: ["benchmark_id"];
+            isOneToOne: false;
+            referencedRelation: "benchmarks";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "benchmark_settings_coach_id_fkey";
+            columns: ["coach_id"];
+            isOneToOne: false;
+            referencedRelation: "coaches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      benchmarks: {
+        Row: {
+          coach_id: string | null;
+          created_at: string;
+          description: string | null;
+          id: string;
+          kind: Database["public"]["Enums"]["benchmark_kind"];
+          movement_id: string | null;
+          name: string;
+          workout_type: Database["public"]["Enums"]["workout_type"];
+        };
+        ComputedFields: never;
+        Insert: {
+          coach_id?: string | null;
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          kind: Database["public"]["Enums"]["benchmark_kind"];
+          movement_id?: string | null;
+          name: string;
+          workout_type: Database["public"]["Enums"]["workout_type"];
+        };
+        Update: {
+          coach_id?: string | null;
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          kind?: Database["public"]["Enums"]["benchmark_kind"];
+          movement_id?: string | null;
+          name?: string;
+          workout_type?: Database["public"]["Enums"]["workout_type"];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "benchmarks_coach_id_fkey";
+            columns: ["coach_id"];
+            isOneToOne: false;
+            referencedRelation: "coaches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "benchmarks_movement_id_fkey";
+            columns: ["movement_id"];
+            isOneToOne: false;
+            referencedRelation: "movements";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       body_metrics: {
         Row: {
           athlete_id: string;
@@ -1330,6 +1487,7 @@ export type Database = {
     };
     Enums: {
       athlete_status: "active" | "archived";
+      benchmark_kind: "girl" | "hero" | "lift" | "custom";
       experience_level: "beginner" | "intermediate" | "advanced" | "competitor";
       goal_status: "active" | "achieved" | "abandoned";
       goal_type: "performance" | "body_composition" | "skill";
@@ -1482,6 +1640,7 @@ export const Constants = {
   public: {
     Enums: {
       athlete_status: ["active", "archived"],
+      benchmark_kind: ["girl", "hero", "lift", "custom"],
       experience_level: ["beginner", "intermediate", "advanced", "competitor"],
       goal_status: ["active", "achieved", "abandoned"],
       goal_type: ["performance", "body_composition", "skill"],

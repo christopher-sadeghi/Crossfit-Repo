@@ -6,6 +6,7 @@ import { z } from "zod";
 import { CHECK_IN_COLUMNS, CHECK_IN_FILTER, checkInAttention, isCheckIn, loadRecentCheckIns } from "@/lib/check-in";
 import { addDays } from "@/lib/nutrition";
 import { goalProgress } from "@/lib/progress";
+import { loadAthleteBenchmarks, loadLiftMaxes } from "@/lib/benchmarks";
 import { personalRecords } from "@/lib/results";
 import { loadAthleteSchedule } from "@/lib/athlete-schedule";
 import { fromKgPrecise } from "@/lib/units";
@@ -13,6 +14,7 @@ import type { Database, Json } from "@/lib/supabase/database.types";
 
 import { aiDailyLimit, aiLimitMessage, countAiUsageToday, runSuggestionWithClient } from "./service-core";
 import { SUGGESTION_REGISTRY } from "./suggestions";
+import { formatLiftMaxes, LIFT_LOAD_RULE } from "./lift-context";
 
 export const chatContextSchema = z.object({
   athleteId: z.string().uuid().optional(),
@@ -32,6 +34,7 @@ type Units = "lb" | "kg";
 const CHAT_SYSTEM = `You are the programming assistant for a CrossFit coach. You talk to the coach, not to athletes.
 
 Rules:
+- ${LIFT_LOAD_RULE}
 - Use the tool outputs' last_7_days average_readiness, latest_readiness and needs_attention, plus recent_check_ins readiness, sleep, soreness areas, stress, energy and mood. Lower readiness or high soreness means scale down and avoid sore areas.
 - Only use real data from your tools. Never invent athletes, results, PRs, injuries, goals or workouts. If data is missing, say so.
 - Look data up before answering questions about athletes, programs or workouts.
@@ -125,6 +128,8 @@ async function listAthletes(supabase: Supabase, today: string) {
 
 async function getAthlete(supabase: Supabase, athleteId: string, today: string, units: Units) {
   const [
+    benchmarks,
+    liftMaxes,
     { data: athlete, error },
     { data: metrics },
     { data: goals },
@@ -132,6 +137,8 @@ async function getAthlete(supabase: Supabase, athleteId: string, today: string, 
     { data: journal },
     recentCheckIns,
   ] = await Promise.all([
+    loadAthleteBenchmarks(supabase, athleteId, today),
+    loadLiftMaxes(supabase, athleteId),
     supabase
       .from("athletes")
       .select("id, first_name, last_name, experience_level, injuries, notes, status, sex, birth_date")
@@ -173,11 +180,17 @@ async function getAthlete(supabase: Supabase, athleteId: string, today: string, 
     "id, source_workout_id, title, week_number, day_number, workout_type",
   );
   const allResults = results ?? [];
-  const goalData = { metrics: metrics ?? [], results: allResults };
+  const goalData = { metrics: metrics ?? [], results: allResults, liftMaxes };
   const kgValue = (value: number | null, unit: string | null) => (unit === "kg" ? load(value, units) : value);
 
   return {
     recent_check_ins: recentCheckIns,
+    lift_maxes: formatLiftMaxes(liftMaxes, units),
+    benchmark_bests: benchmarks.flatMap((b) => b.best ? [{
+      name: b.name, workout_type: b.workout_type, date: b.best.performed_on,
+      time_seconds: b.best.time_seconds, rounds: b.best.rounds, reps: b.best.reps,
+      load: load(b.best.load_kg, units), units, rep_max: b.best.rep_max, rx: b.best.is_rx,
+    }] : []),
     athlete_id: athlete.id,
     name: `${athlete.first_name} ${athlete.last_name}`,
     experience_level: athlete.experience_level,

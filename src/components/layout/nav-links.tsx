@@ -2,6 +2,7 @@
 
 import {
   CalendarDays,
+  Trophy,
   LayoutDashboard,
   Salad,
   Settings,
@@ -17,6 +18,7 @@ const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/athletes", label: "Athletes", icon: Users },
   { href: "/programs", label: "Programs", icon: CalendarDays },
+  { href: "/benchmarks", label: "Benchmarks", icon: Trophy },
   { href: "/nutrition", label: "Nutrition", icon: Salad },
   { href: "/suggestions", label: "AI Suggestions", icon: Sparkles },
   { href: "/settings", label: "Settings", icon: Settings },

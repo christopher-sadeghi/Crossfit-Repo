@@ -8,6 +8,8 @@ import { WORKOUT_TYPES } from "@/app/(app)/programs/options";
 import { fromKgPrecise, toKg } from "@/lib/units";
 import type { Database, Enums, Json, Tables } from "@/lib/supabase/database.types";
 import { getToday } from "@/lib/time-zone";
+import { loadLiftMaxes } from "@/lib/benchmarks";
+import { formatLiftMaxes, liftMaxContextSchema, LIFT_LOAD_RULE } from "./lift-context";
 
 import { movementGuideEntry } from "./movement-guides";
 import { ApprovalError } from "./errors";
@@ -70,6 +72,7 @@ export const writeWorkoutSchema = z.object({
 });
 
 export const writeWorkoutInputSchema = z.object({
+  lift_maxes: liftMaxContextSchema.optional(),
   mode: z.enum(["write", "adjust"]),
   request: z.string(),
   units: z.enum(["lb", "kg"]),
@@ -231,6 +234,7 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
 
 const WRITE_WORKOUT_SYSTEM = `You help a CrossFit coach program WODs. The coach reviews every suggestion before anything changes.
 Rules:
+- ${LIFT_LOAD_RULE}
 - Use recent_check_ins: readiness, sleep, soreness areas, stress, energy and mood. Lower readiness or high soreness means scale down and avoid sore areas.
 - Use ONLY movements from the provided library list, referenced by movement_id. Never invent movements.
 - Loads are in the coach's preferred units (<units>). Use realistic barbell, dumbbell, and kettlebell numbers (Rx loads for an intermediate athlete unless the request says otherwise).
@@ -241,8 +245,9 @@ Rules:
 - Write the rationale for the coach in 2–4 short, plain-English sentences.`;
 
 async function loadAthleteProgrammingContext(supabase: SupabaseClient<Database>, athleteId: string, units: "lb" | "kg") {
-  const [{ data: athlete, error: athleteError }, { data: goals, error: goalsError }, { data: results, error: resultsError }] =
+  const [liftMaxes, { data: athlete, error: athleteError }, { data: goals, error: goalsError }, { data: results, error: resultsError }] =
     await Promise.all([
+      loadLiftMaxes(supabase, athleteId),
       supabase
         .from("athletes")
         .select("first_name, experience_level, injuries, notes")
@@ -261,6 +266,7 @@ async function loadAthleteProgrammingContext(supabase: SupabaseClient<Database>,
   if (resultsError) throw resultsError;
   return {
     ...athlete,
+    lift_maxes: formatLiftMaxes(liftMaxes, units),
     recent_check_ins: await loadRecentCheckIns(supabase, athleteId, await getToday(), 7),
     goals: goals ?? [],
     recent_results: (results ?? []).map(({ workouts: resultWorkout, load_kg, ...result }) => ({
@@ -315,6 +321,7 @@ async function buildWorkoutRequest(
   const athlete = athleteId ? await loadAthleteProgrammingContext(supabase, athleteId, units) : null;
   const input = {
     mode: workoutId ? "adjust" : "write",
+    ...(athlete ? { lift_maxes: athlete.lift_maxes } : {}),
     request,
     units,
     library: library ?? [],
