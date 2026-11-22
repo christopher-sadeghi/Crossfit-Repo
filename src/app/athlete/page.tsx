@@ -154,32 +154,6 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
 
   return (
     <div className="grid gap-6">
-      <Link href="/athlete/assistant" className="rounded-lg border bg-card p-4 hover:bg-muted">
-        <span className="font-semibold">Ask AI</span>
-        <p className="mt-1 text-sm text-muted-foreground">Questions about training or recovery? Your coach can see this chat.</p>
-      </Link>
-      <details id="log-activity" key={`log-activity-${activityDay}`} open={activityDate != null} className="rounded-lg border bg-card p-4">
-        <summary className="w-fit cursor-pointer font-semibold">Log activity</summary>
-        <div className="mt-4 grid gap-4">
-          <nav aria-label="Outside activity calendar" className="grid grid-cols-4 gap-1 sm:grid-cols-7">
-            {Array.from({ length: 7 }, (_, index) => {
-              const date = loadDate(currentDate, 6 - index);
-              const count = activities.filter((entry) => entry.performed_on === date).length;
-              return (
-                <Link key={date} href={`/athlete?activityDate=${date}#log-activity`} aria-current={date === activityDay ? "date" : undefined}
-                  className={`grid min-h-11 content-center rounded-md border px-1 py-1 text-center text-xs ${date === activityDay ? "border-primary bg-primary/10" : ""}`}>
-                  <time dateTime={date}>{date === currentDate ? "Today" : new Intl.DateTimeFormat("en", { weekday: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`))}</time>
-                  {count > 0 && <span className="text-muted-foreground">{count} logged</span>}
-                </Link>
-              );
-            })}
-          </nav>
-          <ActivityForm key={activityDay} athleteId={viewer.athleteId} today={currentDate} defaultDate={activityDay} units={viewer.units} />
-          <ActivityList activities={activities.filter((entry) => entry.performed_on === activityDay)} today={currentDate} units={viewer.units} />
-        </div>
-      </details>
-      <CheckInForm key={currentDate} entry={todayJournal} today={currentDate} athleteId={viewer.athleteId} />
-      <AthleteConsistencyCard athleteId={viewer.athleteId} compact />
       <section className="grid gap-3">
         <h1 className="text-xl font-semibold tracking-tight">Today&apos;s WOD</h1>
         {todayWods.length ? (
@@ -323,7 +297,33 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
             </CardContent>
           </Card>
         )}
+        <Link href="/athlete/assistant" className="rounded-lg border bg-card p-4 hover:bg-muted">
+          <span className="font-semibold">Ask AI</span>
+          <p className="mt-1 text-sm text-muted-foreground">Questions about training or recovery? Your coach can see this chat.</p>
+        </Link>
       </section>
+      <CheckInForm key={currentDate} entry={todayJournal} today={currentDate} athleteId={viewer.athleteId} />
+      <AthleteConsistencyCard athleteId={viewer.athleteId} compact />
+      <details id="log-activity" key={`log-activity-${activityDay}`} open={activityDate != null} className="rounded-lg border bg-card p-4">
+        <summary className="w-fit cursor-pointer font-semibold">Log activity</summary>
+        <div className="mt-4 grid gap-4">
+          <nav aria-label="Outside activity calendar" className="grid grid-cols-4 gap-1 sm:grid-cols-7">
+            {Array.from({ length: 7 }, (_, index) => {
+              const date = loadDate(currentDate, 6 - index);
+              const count = activities.filter((entry) => entry.performed_on === date).length;
+              return (
+                <Link key={date} href={`/athlete?activityDate=${date}#log-activity`} aria-current={date === activityDay ? "date" : undefined}
+                  className={`grid min-h-11 content-center rounded-md border px-1 py-1 text-center text-xs ${date === activityDay ? "border-primary bg-primary/10" : ""}`}>
+                  <time dateTime={date}>{date === currentDate ? "Today" : new Intl.DateTimeFormat("en", { weekday: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`))}</time>
+                  {count > 0 && <span className="text-muted-foreground">{count} logged</span>}
+                </Link>
+              );
+            })}
+          </nav>
+          <ActivityForm key={activityDay} athleteId={viewer.athleteId} today={currentDate} defaultDate={activityDay} units={viewer.units} />
+          <ActivityList activities={activities.filter((entry) => entry.performed_on === activityDay)} today={currentDate} units={viewer.units} />
+        </div>
+      </details>
       {recentWithoutResults.length > 0 && (
         <section className="grid gap-3">
           <h2 className="text-lg font-semibold">Recent</h2>

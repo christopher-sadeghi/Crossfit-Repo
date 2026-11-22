@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SUGGESTION_LABELS } from "@/lib/ai/suggestions";
 import { CHECK_IN_COLUMNS, CHECK_IN_FILTER, checkInAttention } from "@/lib/check-in";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabsContent } from "@/components/ui/tabs";
 import { getCoach } from "@/lib/coach";
 import { getOrigin } from "@/lib/auth/redirect";
 import { loadAthleteSchedule } from "@/lib/athlete-schedule";
@@ -42,9 +42,17 @@ import { AthleteCalendar } from "./athlete-calendar";
 import { LoadTab } from "./load-tab";
 import { addDays, monday } from "./calendar-dates";
 import { LEVEL_LABELS } from "../options";
+import { AthleteTabNav, type AthleteTabGroup } from "./athlete-tab-nav";
 import { AssistantTab } from "./assistant-tab";
 
-const TABS = ["overview", "check-ins", "workouts", "load", "journal", "nutrition", "goals", "ai", "assistant", "benchmarks", "intake", "consistency", "reports", "form"] as const;
+const TAB_GROUPS = [
+  { label: "Overview", tabs: [{ value: "overview", label: "Overview" }, { value: "intake", label: "Intake" }, { value: "ai", label: "AI History" }, { value: "assistant", label: "AI chat" }] },
+  { label: "Training", tabs: [{ value: "workouts", label: "Workouts" }, { value: "load", label: "Load" }, { value: "consistency", label: "Consistency" }, { value: "form", label: "Form checks" }] },
+  { label: "Health", tabs: [{ value: "check-ins", label: "Check-ins" }, { value: "journal", label: "Journal" }] },
+  { label: "Nutrition", tabs: [{ value: "nutrition", label: "Nutrition" }] },
+  { label: "Progress", tabs: [{ value: "goals", label: "Goals" }, { value: "benchmarks", label: "Benchmarks" }, { value: "reports", label: "Reports" }] },
+] as const satisfies readonly AthleteTabGroup[];
+const TABS = TAB_GROUPS.flatMap((group) => group.tabs.map((tab) => tab.value));
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; week?: string; date?: string; checkins?: string }> };
 type ProfileScheduleWorkout = WhiteboardWorkout & {
@@ -209,25 +217,10 @@ export default async function AthletePage({ params, searchParams }: Props) {
         </div>
       </div>
 
-      <Tabs key={tab} defaultValue={TABS.includes(tab as (typeof TABS)[number]) ? tab : "overview"}>
-        <div className="mb-4 max-w-full overflow-x-auto">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="workouts">Workouts</TabsTrigger>
-          <TabsTrigger value="load">Load</TabsTrigger>
-          <TabsTrigger value="check-ins">Check-ins</TabsTrigger>
-          <TabsTrigger value="journal">Journal</TabsTrigger>
-          <TabsTrigger value="nutrition">Nutrition</TabsTrigger>
-          <TabsTrigger value="goals">Goals</TabsTrigger>
-          <TabsTrigger value="ai">AI History</TabsTrigger>
-          <TabsTrigger value="assistant">AI chat</TabsTrigger>
-          <TabsTrigger value="benchmarks">Benchmarks</TabsTrigger>
-          <TabsTrigger value="intake">Intake</TabsTrigger>
-          <TabsTrigger value="consistency">Consistency</TabsTrigger>
-          <TabsTrigger value="reports">Reports</TabsTrigger>
-          <TabsTrigger value="form">Form checks</TabsTrigger>
-        </TabsList>
-        </div>
+      <AthleteTabNav
+        initialTab={tab && TABS.includes(tab as (typeof TABS)[number]) ? tab : "overview"}
+        groups={TAB_GROUPS}
+      >
 
         <TabsContent value="overview" className="grid gap-4 md:grid-cols-3">
           {attention.flagged && (
@@ -524,7 +517,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
             </Table>
           </ListCard>
         </TabsContent>
-      </Tabs>
+      </AthleteTabNav>
     </>
   );
 }

@@ -117,10 +117,12 @@ test("stream hook displays JSON 429/403/503 and stream failures without leaving 
 test("entry points and coach tab preserve scoped thread cards without expanding athlete navigation", () => {
   const today = readFileSync(path.join(root, "src/app/athlete/page.tsx"), "utf8");
   const athlete = readFileSync(path.join(root, "src/app/(app)/athletes/[id]/page.tsx"), "utf8");
+  const athleteTabs = readFileSync(path.join(root, "src/app/(app)/athletes/[id]/athlete-tab-nav.tsx"), "utf8");
   const thread = readFileSync(path.join(root, "src/components/messages/thread.tsx"), "utf8");
   assert.match(today, /href="\/athlete\/assistant"/);
   assert.match(today, /id={`adjust-\$\{workout.id\}`}/);
-  assert.match(athlete, /TabsTrigger value="assistant"/);
+  assert.match(athlete, /value: "assistant", label: "AI chat"/);
+  assert.match(athleteTabs, /TabsTrigger key=\{tab\.value\} value=\{tab\.value\}/);
   assert.match(athlete, /TabsContent value="assistant"/);
   assert.match(thread, /input->>source_message_id.not.is.null/);
   assert.match(thread, /cardsByMessage.get\(row.id\)/);
