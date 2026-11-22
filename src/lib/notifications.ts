@@ -7,7 +7,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { getToday } from "@/lib/time-zone";
 
 type Client = SupabaseClient<Database>;
-export type NotificationKind = "result_logged" | "workout_adjusted" | "low_readiness" | "message" | "missed_workouts" | "coach_message" | "schedule_changed" | "suggestion_approved" | "progress_report" | "progress_check_in" | "high_training_load";
+export type NotificationKind = "result_logged" | "workout_adjusted" | "low_readiness" | "message" | "missed_workouts" | "coach_message" | "schedule_changed" | "suggestion_approved" | "progress_report" | "progress_check_in" | "high_training_load" | "assistant_red_flag";
 export type NotificationInput = {
   athleteId: string;
   kind: NotificationKind;

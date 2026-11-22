@@ -9,6 +9,16 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      athlete_ai_messages: {
+        Row: { id: string; athlete_id: string; coach_id: string; role: string; content: string; metadata: Json; red_flag: boolean; created_at: string };
+        Insert: { id?: string; athlete_id: string; coach_id: string; role: string; content: string; metadata?: Json; red_flag?: boolean; created_at?: string };
+        Update: { id?: string; athlete_id?: string; coach_id?: string; role?: string; content?: string; metadata?: Json; red_flag?: boolean; created_at?: string };
+        Relationships: [
+          { foreignKeyName: "athlete_ai_messages_athlete_id_fkey"; columns: ["athlete_id"]; isOneToOne: false; referencedRelation: "athletes"; referencedColumns: ["id"] },
+          { foreignKeyName: "athlete_ai_messages_coach_id_fkey"; columns: ["coach_id"]; isOneToOne: false; referencedRelation: "coaches"; referencedColumns: ["id"] },
+          { foreignKeyName: "athlete_ai_messages_athlete_id_coach_id_fkey"; columns: ["athlete_id", "coach_id"]; isOneToOne: false; referencedRelation: "athletes"; referencedColumns: ["id", "coach_id"] }
+        ];
+      };
       ai_activity_draft_requests: {
         Row: { id: string; user_id: string; created_at: string };
         Insert: { id: string; user_id?: string; created_at?: string };
@@ -510,6 +520,7 @@ export type Database = {
       };
       athletes: {
         Row: {
+          assistant_rules: string | null;
           birth_date: string | null;
           coach_id: string;
           created_at: string;
@@ -528,6 +539,7 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          assistant_rules?: string | null;
           birth_date?: string | null;
           coach_id?: string;
           created_at?: string;
@@ -545,6 +557,7 @@ export type Database = {
           user_id?: string | null;
         };
         Update: {
+          assistant_rules?: string | null;
           birth_date?: string | null;
           coach_id?: string;
           created_at?: string;
@@ -786,6 +799,11 @@ export type Database = {
       };
       coaches: {
         Row: {
+          assistant_rules: string | null;
+          assistant_training: boolean;
+          assistant_nutrition: boolean;
+          assistant_recovery: boolean;
+          athlete_ai_daily_limit: number;
           drift_days: number;
           load_warning_ratio: number;
           created_at: string;
@@ -797,6 +815,11 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          assistant_rules?: string | null;
+          assistant_training?: boolean;
+          assistant_nutrition?: boolean;
+          assistant_recovery?: boolean;
+          athlete_ai_daily_limit?: number;
           drift_days?: number;
           load_warning_ratio?: number;
           created_at?: string;
@@ -807,6 +830,11 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          assistant_rules?: string | null;
+          assistant_training?: boolean;
+          assistant_nutrition?: boolean;
+          assistant_recovery?: boolean;
+          athlete_ai_daily_limit?: number;
           drift_days?: number;
           load_warning_ratio?: number;
           created_at?: string;
@@ -1621,6 +1649,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      athlete_assistant_settings: {
+        Args: Record<PropertyKey, never>;
+        Returns: { coach_rules: string | null; athlete_rules: string | null; assistant_training: boolean; assistant_nutrition: boolean; assistant_recovery: boolean; athlete_ai_daily_limit: number }[];
+      };
       apply_draft_program: { Args: { p_athlete_id: string; p_program: Json; p_today: string }; Returns: string };
       save_athlete_intake_step: { Args: { p_athlete_id: string; p_step: number; p_data: Json; p_today: string }; Returns: undefined };
       request_linked_athlete_intake: { Args: Record<PropertyKey, never>; Returns: unknown };
