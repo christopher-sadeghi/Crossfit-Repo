@@ -23,16 +23,19 @@ export type FormReviewSummary = {
 export type FormReviewComment = { id: string; parent_id: string | null; author_id: string; at_seconds: number | null; body: string; created_at: string };
 
 export async function loadFormReviews(supabase: Client, filter: { coachId?: string; athleteId?: string; resultIds?: string[] }): Promise<FormReviewSummary[]> {
-  let query = supabase.from("form_reviews").select(`${FORM_REVIEW_COLUMNS}, comments:form_review_comments(count)`).order("created_at", { ascending: false }).limit(200);
-  if (filter.coachId) query = query.eq("coach_id", filter.coachId);
-  if (filter.athleteId) query = query.eq("athlete_id", filter.athleteId);
-  if (filter.resultIds) {
-    if (!filter.resultIds.length) return [];
-    query = query.in("workout_result_id", filter.resultIds);
-  }
-  const { data, error } = await query;
-  if (error) throw new Error("Couldn't load form checks.");
-  return sortReviewQueue(data.map(({ comments, ...review }) => ({
+  if (filter.resultIds && !filter.resultIds.length) return [];
+  const select = (status: FormReviewStatus) => {
+    let query = supabase.from("form_reviews").select(`${FORM_REVIEW_COLUMNS}, comments:form_review_comments(count)`)
+      .eq("status", status).order("created_at", { ascending: false });
+    if (filter.coachId) query = query.eq("coach_id", filter.coachId);
+    if (filter.athleteId) query = query.eq("athlete_id", filter.athleteId);
+    if (filter.resultIds) query = query.in("workout_result_id", filter.resultIds);
+    return query;
+  };
+  // Every awaiting video stays visible; only the reviewed history is capped.
+  const [awaiting, reviewed] = await Promise.all([select("awaiting_review"), select("reviewed").limit(200)]);
+  if (awaiting.error || reviewed.error) throw new Error("Couldn't load form checks.");
+  return sortReviewQueue([...awaiting.data, ...reviewed.data].map(({ comments, ...review }) => ({
     ...review,
     duration_seconds: Number(review.duration_seconds),
     status: review.status as FormReviewStatus,
