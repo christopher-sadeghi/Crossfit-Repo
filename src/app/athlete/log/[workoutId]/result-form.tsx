@@ -40,6 +40,7 @@ export function AthleteResultForm({
   defaultDate,
   units,
   existingResult,
+  prefill,
   inline = false,
 }: {
   workoutId: string;
@@ -49,6 +50,7 @@ export function AthleteResultForm({
   defaultDate: string;
   units: Units;
   existingResult: WorkoutResult | null;
+  prefill?: Record<string, string>;
   inline?: boolean;
 }) {
   const id = (field: string) => (inline ? `${workoutId}-${field}` : field);
@@ -70,6 +72,7 @@ export function AthleteResultForm({
     rpe: existingResult?.rpe == null ? "" : String(existingResult.rpe),
     energy: existingResult?.energy == null ? "" : String(existingResult.energy),
     soreness: existingResult?.soreness == null ? "" : String(existingResult.soreness),
+    ...(!existingResult ? prefill : {}),
   };
   const values = state.error ? state.values ?? {} : initialValues;
 

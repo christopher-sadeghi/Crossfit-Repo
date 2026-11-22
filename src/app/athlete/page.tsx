@@ -174,6 +174,9 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
               <div key={workout.id} className="grid gap-3">
                 <p className="text-sm text-muted-foreground">{SCHEDULE_LABEL(item, "athlete")}</p>
                 <Whiteboard workout={workout} movements={movements} units={viewer.units} showDemoSheet />
+                <Button asChild className="min-h-12 text-base">
+                  <Link href={`/athlete/workout/${workout.id}?date=${currentDate}`}>Start workout</Link>
+                </Button>
                 <Link href={`/athlete/messages?link=workout:${workout.id}`} className="text-sm underline underline-offset-4">Message coach about this WOD</Link>
                 {scaling && (
                   <Card>
@@ -300,6 +303,9 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                   </p>
                   <ScheduledMovementDemos workout={item.workout} />
                 </div>
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`/athlete/workout/${item.workout.id}?date=${item.date}`}>Start</Link>
+                </Button>
                 <Button asChild size="sm">
                   <Link href={`/athlete/log/${item.workout.id}?date=${item.date}`}>Log result</Link>
                 </Button>

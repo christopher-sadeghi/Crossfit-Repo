@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { getViewer } from "@/lib/viewer";
 import { createClient } from "@/lib/supabase/server";
 import { getToday } from "@/lib/time-zone";
+import { workoutPrefill } from "@/lib/workout-prefill";
 import { formatHeadline } from "@/app/(app)/programs/workouts/whiteboard";
 import type { Tables } from "@/lib/supabase/database.types";
 
@@ -14,7 +15,7 @@ import { AthleteResultForm } from "./result-form";
 
 type Props = {
   params: Promise<{ workoutId: string }>;
-  searchParams: Promise<{ result?: string; date?: string }>;
+  searchParams: Promise<{ result?: string; date?: string } & Record<string, string | string[] | undefined>>;
 };
 
 type EditableResult = Pick<
@@ -35,7 +36,8 @@ type EditableResult = Pick<
 >;
 
 export default async function AthleteLogResultPage({ params, searchParams }: Props) {
-  const [{ workoutId }, { result: resultId, date: requestedDate }] = await Promise.all([params, searchParams]);
+  const [{ workoutId }, query] = await Promise.all([params, searchParams]);
+  const { result: resultId, date: requestedDate } = query;
   const viewer = await getViewer();
   if (!viewer) redirect("/login");
   if (viewer.kind === "coach") redirect("/");
@@ -115,6 +117,7 @@ export default async function AthleteLogResultPage({ params, searchParams }: Pro
         defaultDate={defaultDate}
         units={viewer.units}
         existingResult={existingResult}
+        prefill={existingResult ? undefined : workoutPrefill(query)}
       />
     </div>
   );
