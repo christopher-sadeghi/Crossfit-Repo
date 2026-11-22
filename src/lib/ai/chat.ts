@@ -3,7 +3,7 @@ import { openai } from "@ai-sdk/openai";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
-import { checkInAttention, loadRecentCheckIns } from "@/lib/check-in";
+import { CHECK_IN_COLUMNS, CHECK_IN_FILTER, checkInAttention, isCheckIn, loadRecentCheckIns } from "@/lib/check-in";
 import { addDays } from "@/lib/nutrition";
 import { goalProgress } from "@/lib/progress";
 import { personalRecords } from "@/lib/results";
@@ -74,7 +74,8 @@ async function listAthletes(supabase: Supabase, today: string) {
         .lte("performed_on", today),
       supabase
         .from("athlete_journal_entries")
-        .select("athlete_id, entry_on, sleep_hours, stress, soreness, readiness")
+        .select(CHECK_IN_COLUMNS)
+        .or(CHECK_IN_FILTER)
         .gte("entry_on", since)
         .lte("entry_on", today)
         .order("entry_on", { ascending: false }),
@@ -84,7 +85,7 @@ async function listAthletes(supabase: Supabase, today: string) {
   if (journalError) throw journalError;
   return (athletes ?? []).map((athlete) => {
     const week = (results ?? []).filter((r) => r.athlete_id === athlete.id);
-    const days = (journal ?? []).filter((j) => j.athlete_id === athlete.id);
+    const days = (journal ?? []).filter((j) => j.athlete_id === athlete.id && isCheckIn(j));
     // One sleep value per night: the journal entry if there is one, otherwise the first result that day.
     const sleepByNight = new Map<string, number | null>();
     for (const entry of days) {
@@ -112,7 +113,7 @@ async function listAthletes(supabase: Supabase, today: string) {
         average_sleep_hours: average([...sleepByNight.values()]),
         max_soreness: soreness.length ? Math.max(...soreness) : null,
         average_readiness: average(days.map((j) => j.readiness)),
-        latest_readiness: days[0]?.readiness ?? null,
+        latest_readiness: days.find((entry) => entry.readiness != null)?.readiness ?? null,
         needs_attention: attention.flagged,
         attention_reasons: attention.reasons,
         pain_notes: week.filter((r) => r.pain_notes).map((r) => `${r.performed_on}: ${r.pain_notes}`),

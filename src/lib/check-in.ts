@@ -29,6 +29,13 @@ export const CHECK_IN_LABELS = {
 export const CHECK_IN_COLUMNS =
   "athlete_id, entry_on, sleep_hours, sleep_quality, soreness, soreness_areas, stress, energy, mood, readiness, notes";
 
+const CHECK_IN_FIELDS = ["sleep_hours", "sleep_quality", "soreness", "stress", "energy", "mood"] as const;
+export const CHECK_IN_FILTER = CHECK_IN_FIELDS.map((field) => `${field}.not.is.null`).join(",");
+
+export function isCheckIn(entry: Partial<Pick<CheckIn, (typeof CHECK_IN_FIELDS)[number]>>) {
+  return CHECK_IN_FIELDS.some((field) => entry[field] != null);
+}
+
 export type CheckIn = Pick<
   Tables<"athlete_journal_entries">,
   | "athlete_id"
@@ -70,11 +77,12 @@ export function readinessLabel(score: number | null) {
   return score == null ? "Incomplete" : score < 40 ? "Low" : score < 70 ? "Moderate" : "Good";
 }
 
-type AttentionEntry = Pick<CheckIn, "entry_on" | "readiness" | "soreness">;
+type AttentionEntry = Pick<CheckIn, "entry_on" | "readiness" | "soreness"> &
+  Partial<Pick<CheckIn, (typeof CHECK_IN_FIELDS)[number]>>;
 
 export function checkInAttention(checkIns: AttentionEntry[], todayIso: string) {
   const recent = checkIns
-    .filter((entry) => entry.entry_on <= todayIso && (entry.readiness != null || entry.soreness != null))
+    .filter((entry) => entry.entry_on <= todayIso && isCheckIn(entry))
     .sort((a, b) => b.entry_on.localeCompare(a.entry_on));
   const latest = recent[0];
   const yesterday = addDays(todayIso, -1);
@@ -116,7 +124,8 @@ export async function loadCheckInAttention(
 
   let query = supabase
     .from("athlete_journal_entries")
-    .select("athlete_id, entry_on, soreness, readiness")
+    .select(CHECK_IN_COLUMNS)
+    .or(CHECK_IN_FILTER)
     .gte("entry_on", addDays(todayIso, -2))
     .lte("entry_on", todayIso);
   if (athleteIds) query = query.in("athlete_id", athleteIds);
@@ -140,13 +149,14 @@ export async function loadRecentCheckIns(
   const { data, error } = await supabase
     .from("athlete_journal_entries")
     .select(CHECK_IN_COLUMNS)
+    .or(CHECK_IN_FILTER)
     .eq("athlete_id", athleteId)
     .gte("entry_on", addDays(asOf, 1 - days))
     .lte("entry_on", asOf)
     .order("entry_on", { ascending: false });
   if (error) throw error;
 
-  return (data ?? []).map((entry) => ({
+  return (data ?? []).filter(isCheckIn).map((entry) => ({
     date: entry.entry_on,
     sleep_hours: entry.sleep_hours,
     sleep_quality: entry.sleep_quality,
@@ -156,6 +166,6 @@ export async function loadRecentCheckIns(
     energy: entry.energy,
     mood: entry.mood,
     readiness: entry.readiness,
-    note: entry.notes?.trim().slice(0, 300) || null,
+    note: entry.notes ? Array.from(entry.notes.trim()).slice(0, 300).join("") || null : null,
   }));
 }

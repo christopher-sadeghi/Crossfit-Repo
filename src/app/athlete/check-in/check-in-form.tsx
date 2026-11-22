@@ -14,7 +14,7 @@ import type { FormState } from "@/lib/auth/form-state";
 
 import { saveCheckIn } from "./actions";
 
-export function CheckInForm({ entry }: { entry: CheckIn | null }) {
+export function CheckInForm({ entry, today }: { entry: CheckIn | null; today: string }) {
   const [editing, setEditing] = useState(false);
   const [hours, setHours] = useState(entry?.sleep_hours == null ? "" : String(entry.sleep_hours));
   const [ratings, setRatings] = useState(() =>
@@ -62,6 +62,7 @@ export function CheckInForm({ entry }: { entry: CheckIn | null }) {
           </>
         ) : (
           <form action={action} className="grid gap-4">
+            <input type="hidden" name="expected_date" value={today} />
             <div className="grid gap-1.5">
               <Label htmlFor="check_in_sleep_hours">Sleep (h)</Label>
               <Input

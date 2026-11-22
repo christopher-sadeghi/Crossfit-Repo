@@ -1,7 +1,9 @@
+import Link from "next/link";
+
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CHECK_IN_LABELS, checkInAttention, readinessLabel, type CheckIn } from "@/lib/check-in";
+import { CHECK_IN_LABELS, checkInAttention, isCheckIn, readinessLabel, type CheckIn } from "@/lib/check-in";
 import { addDays } from "@/lib/nutrition";
 import { formatDate } from "@/lib/units";
 
@@ -21,9 +23,9 @@ function trendLabel(current: number | null, previous: number | null, key: Metric
   return `${current > previous ? "↑" : "↓"} ${better ? "Better" : "Worse"} vs ${previous}`;
 }
 
-export function CheckInsTab({ entries, today }: { entries: CheckIn[]; today: string }) {
+export function CheckInsTab({ entries, today, showAll = false }: { entries: CheckIn[]; today: string; showAll?: boolean }) {
   const sorted = entries
-    .filter((entry) => entry.entry_on <= today)
+    .filter((entry) => entry.entry_on <= today && isCheckIn(entry))
     .sort((a, b) => b.entry_on.localeCompare(a.entry_on));
   const attention = checkInAttention(sorted, today);
   const latest = sorted.find((entry) => entry.readiness != null);
@@ -161,7 +163,7 @@ export function CheckInsTab({ entries, today }: { entries: CheckIn[]; today: str
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sorted.map((entry) => (
+                {(showAll ? sorted : sorted.slice(0, 30)).map((entry) => (
                   <TableRow key={entry.entry_on}>
                     <TableCell>{formatDate(entry.entry_on)}</TableCell>
                     <TableCell>{entry.readiness ?? "—"}</TableCell>
@@ -187,6 +189,11 @@ export function CheckInsTab({ entries, today }: { entries: CheckIn[]; today: str
             </Table>
           ) : (
             <p className="text-sm text-muted-foreground">No check-ins yet.</p>
+          )}
+          {!showAll && sorted.length > 30 && (
+            <Link href="?tab=check-ins&checkins=all" className="mt-3 inline-block text-sm underline">
+              Show all
+            </Link>
           )}
         </CardContent>
       </Card>

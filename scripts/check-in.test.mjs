@@ -26,8 +26,17 @@ function load(relative, overrides = {}) {
   new Function("require", "module", "exports", js)(localRequire, loaded, loaded.exports);
   return loaded.exports;
 }
-const { readinessScore, readinessLabel, checkInAttention, loadRecentCheckIns, loadCheckInAttention } = load("src/lib/check-in.ts");
+const { readinessScore, readinessLabel, checkInAttention, isCheckIn, CHECK_IN_FILTER, loadRecentCheckIns, loadCheckInAttention } = load("src/lib/check-in.ts");
 const sample = { sleep_hours: 7.5, sleep_quality: 4, soreness: 2, stress: 2, energy: 4, mood: 4 };
+const habitsOnly = { sleep_hours: null, sleep_quality: null, soreness: null, stress: null, energy: null, mood: null, readiness: null, notes: "Habits", soreness_areas: [] };
+test("check-ins require at least one recovery measurement, including zero hours", () => {
+  assert.equal(isCheckIn(habitsOnly), false);
+  assert.equal(isCheckIn({ ...habitsOnly, notes: "A note", soreness_areas: ["quads"] }), false);
+  for (const field of Object.keys(sample)) {
+    assert.equal(isCheckIn({ ...habitsOnly, [field]: field === "sleep_hours" ? 0 : 1 }), true);
+    assert.ok(CHECK_IN_FILTER.includes(`${field}.not.is.null`));
+  }
+});
 test("coach check-in sections render empty states, readable dates and directional recovery trends", () => {
   const { createElement } = require("react");
   const { renderToStaticMarkup } = require("react-dom/server");
@@ -59,6 +68,22 @@ test("coach check-in sections render empty states, readable dates and directiona
     entries: [entry("2026-02-28", { readiness: 30 })],
   }));
   assert.ok(yesterday.includes(`${formatDate("2026-02-28")}</span>: Low readiness`));
+  const habits = renderToStaticMarkup(createElement(CheckInsTab, {
+    today: "2026-03-01", entries: [entry("2026-03-01", habitsOnly)],
+  }));
+  assert.match(habits, /No check-ins yet/);
+  assert.doesNotMatch(habits, /Habits/);
+  const { addDays } = load("src/lib/nutrition.ts");
+  const entries = Array.from({ length: 31 }, (_, i) => entry(addDays("2025-06-01", -i), { notes: `history-${i}-end` }));
+  const history = renderToStaticMarkup(createElement(CheckInsTab, { today: "2026-03-01", entries }));
+  assert.match(history, /78\/100/);
+  assert.ok(history.includes(formatDate("2025-06-01")));
+  assert.match(history, /history-29-end/);
+  assert.doesNotMatch(history, /history-30-end/);
+  assert.match(history, /\?tab=check-ins&amp;checkins=all/);
+  const all = renderToStaticMarkup(createElement(CheckInsTab, { today: "2026-03-01", entries, showAll: true }));
+  assert.match(all, /history-30-end/);
+  assert.doesNotMatch(all, /Show all/);
 });
 test("readiness matches SQL sample, bounds, labels and incomplete cases", () => {
   assert.equal(readinessScore(sample), 78);
@@ -72,6 +97,9 @@ const row = (entry_on, readiness = 70, soreness = 1) => ({ entry_on, readiness, 
 test("attention handles empty, stale, future, thresholds and consecutive local calendar dates", () => {
   const attention = (rows) => checkInAttention(rows, "2026-03-01");
   assert.deepEqual(attention([]), { flagged: false, reasons: [] });
+  assert.deepEqual(attention([{ entry_on: "2026-03-01", ...habitsOnly }]), { flagged: false, reasons: [] });
+  assert.equal(attention([{ entry_on: "2026-03-01", ...habitsOnly }, row("2026-02-28", 39)]).flagged, true);
+  assert.equal(attention([{ entry_on: "2026-03-01", ...habitsOnly, sleep_hours: 0 }, row("2026-02-28", 39)]).flagged, false);
   assert.equal(attention([row("2026-02-27", 1)]).flagged, false);
   assert.equal(attention([row("2026-03-02", 1)]).flagged, false);
   assert.equal(attention([row("2026-02-28", 39)]).flagged, true);
@@ -99,7 +127,7 @@ test("attention handles empty, stale, future, thresholds and consecutive local c
 function client(data, error = null) {
   const calls = [];
   const query = { then(resolve) { return Promise.resolve({ data, error }).then(resolve); } };
-  for (const method of ["select", "eq", "gte", "lte", "order", "in"]) query[method] = (...args) => { calls.push([method, ...args]); return query; };
+  for (const method of ["select", "eq", "gte", "lte", "order", "in", "or"]) query[method] = (...args) => { calls.push([method, ...args]); return query; };
   return { calls, from(table) { calls.push(["from", table]); return query; } };
 }
 test("recent check-ins are compact, trim notes, constrain dates and propagate errors", async () => {
@@ -109,6 +137,12 @@ test("recent check-ins are compact, trim notes, constrain dates and propagate er
   assert.equal(rows[0].note.length, 300);
   assert.equal("athlete_id" in rows[0], false);
   assert.ok(db.calls.some((c) => c[0] === "gte" && c[2] === "2026-02-23"));
+  assert.ok(db.calls.some((c) => c[0] === "or" && c[1] === CHECK_IN_FILTER));
+  assert.deepEqual(await loadRecentCheckIns(client([{ entry_on: "2026-03-01", ...habitsOnly }]), "a", "2026-03-01", 7), []);
+  const unicode = await loadRecentCheckIns(client([{ ...sample, entry_on: "2026-03-01", notes: "n".repeat(299) + "😀extra" }]), "a", "2026-03-01", 7);
+  assert.equal(unicode[0].note, "n".repeat(299) + "😀");
+  assert.equal(Array.from(unicode[0].note).length, 300);
+  assert.equal(JSON.parse(JSON.stringify(unicode))[0].note, unicode[0].note);
   assert.deepEqual(await loadRecentCheckIns(client([]), "a", "2026-03-01", 7), []);
   assert.deepEqual(await loadRecentCheckIns(client([]), "a", "2026-03-01", 0), []);
   await assert.rejects(loadRecentCheckIns(client(null, new Error("db error")), "a", "2026-03-01", 7), /db error/);
@@ -120,6 +154,7 @@ test("attention loader uses one query, supports requested empty athletes and err
   assert.deepEqual(map.get("a").reasons, [{ date: "2026-03-01", text: "Low readiness on the latest check-in" }]);
   assert.equal(map.get("b").flagged, false);
   assert.equal(db.calls.filter((c) => c[0] === "from").length, 1);
+  assert.ok(db.calls.some((c) => c[0] === "or" && c[1] === CHECK_IN_FILTER));
   const empty = client([]);
   assert.equal((await loadCheckInAttention(empty, "2026-03-01", [])).size, 0);
   assert.equal(empty.calls.length, 0);
@@ -142,6 +177,7 @@ test("check-in and habit actions validate, isolate their payloads, use viewer-lo
     for (const [key, value] of Object.entries(sample)) data.set(key, String(value));
     data.set("notes", " Feeling good ");
     data.set("entry_on", "1999-01-01");
+    data.set("expected_date", "2026-03-01");
     data.set("alcohol", "on");
     data.append("soreness_areas", "quads");
     data.append("soreness_areas", "hips");
@@ -152,6 +188,7 @@ test("check-in and habit actions validate, isolate their payloads, use viewer-lo
   assert.equal(writes[0].payload.notes, "Feeling good");
   assert.equal("alcohol" in writes[0].payload, false);
   assert.equal("readiness" in writes[0].payload, false);
+  assert.equal("expected_date" in writes[0].payload, false);
   assert.deepEqual(writes[0].payload.soreness_areas, ["quads", "hips"]);
   assert.equal(writes[0].options.onConflict, "athlete_id,entry_on");
   assert.deepEqual(paths, ["/athlete", "/athlete/journal", "/athletes/athlete"]);
@@ -166,6 +203,13 @@ test("check-in and habit actions validate, isolate their payloads, use viewer-lo
     const data = form();
     data.set(key, value);
     assert.ok((await saveCheckIn({}, data)).error, key);
+  }
+  assert.equal(writes.length, 1);
+  for (const expectedDate of ["2026-02-28", "2026-03-02", null]) {
+    const stale = form();
+    if (expectedDate == null) stale.delete("expected_date");
+    else stale.set("expected_date", expectedDate);
+    assert.equal((await saveCheckIn({}, stale)).error, "A new day has started — reload to do today's check-in.");
   }
   assert.equal(writes.length, 1);
   for (const [value, expected] of [["7.56", 7.6], [String(0.1 + 0.2), 0.3], ["0", 0]]) {

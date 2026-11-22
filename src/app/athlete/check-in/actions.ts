@@ -40,6 +40,9 @@ export async function saveCheckIn(_: FormState, data: FormData): Promise<FormSta
   }
 
   const entry_on = await getToday();
+  if (data.get("expected_date") !== entry_on) {
+    return failure(data, "A new day has started — reload to do today's check-in.");
+  }
   const supabase = await createClient();
   const { error } = await supabase
     .from("athlete_journal_entries")

@@ -7,8 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SUGGESTION_LABELS } from "@/lib/ai/suggestions";
-import { CHECK_IN_COLUMNS, checkInAttention } from "@/lib/check-in";
-import { addDays } from "@/lib/nutrition";
+import { CHECK_IN_COLUMNS, CHECK_IN_FILTER, checkInAttention } from "@/lib/check-in";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCoach } from "@/lib/coach";
 import { getOrigin } from "@/lib/auth/redirect";
@@ -31,7 +30,7 @@ import { LEVEL_LABELS } from "../options";
 
 const TABS = ["overview", "check-ins", "workouts", "journal", "nutrition", "goals", "ai"] as const;
 
-type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> };
+type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; checkins?: string }> };
 type ProfileScheduleWorkout = WhiteboardWorkout & {
   id: string;
   source_workout_id: string | null;
@@ -40,7 +39,7 @@ type ProfileScheduleWorkout = WhiteboardWorkout & {
 };
 
 export default async function AthletePage({ params, searchParams }: Props) {
-  const [{ id }, { tab }] = await Promise.all([params, searchParams]);
+  const [{ id }, { tab, checkins }] = await Promise.all([params, searchParams]);
   const supabase = await createClient();
   const coach = await getCoach();
   const units: Units = coach?.units ?? "lb";
@@ -113,10 +112,11 @@ export default async function AthletePage({ params, searchParams }: Props) {
     supabase
       .from("athlete_journal_entries")
       .select(CHECK_IN_COLUMNS)
+      .or(CHECK_IN_FILTER)
       .eq("athlete_id", id)
-      .gte("entry_on", addDays(today, -55))
       .lte("entry_on", today)
-      .order("entry_on", { ascending: false }),
+      .order("entry_on", { ascending: false })
+      .limit(365),
   ]);
 
   const athlete = athleteRes.data;
@@ -387,7 +387,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
         </TabsContent>
 
         <TabsContent value="check-ins">
-          <CheckInsTab entries={checkIns} today={today} />
+          <CheckInsTab entries={checkIns} today={today} showAll={checkins === "all"} />
         </TabsContent>
         <TabsContent value="journal" className="grid gap-4">
           <ListCard title="Daily journal" empty="No journal entries yet. Athletes fill these in from their Journal tab." show={journal.length > 0}>
