@@ -202,6 +202,29 @@ test("long threads show the latest 100 chronologically, count all unread and mar
   }
 });
 
+test("athlete suggestion attachments are neutral unlinked text; coach picker warns suggestions are private", async () => {
+  const { client } = clientFixture({
+    messages: [{ id: itemId, athlete_id: athleteId, sender_id: coachId, body: "Discuss this", read_at: null, created_at: "2026-11-21T10:00:00Z", link_type: "suggestion", link_id: itemId }],
+    ai_suggestions: [{ id: itemId, athlete_id: athleteId, suggestion_type: "scale_workout" }],
+  });
+  const messageHelpers = loader({ "@/lib/athlete-schedule": { loadAthleteSchedule: async () => [] } })("src/lib/messages.ts");
+  const options = await messageHelpers.messageLinkOptions(client, athleteId, "2026-11-21", true);
+  assert.equal(options[0].label, "scale workout (only you can open this)");
+  assert.deepEqual(await messageHelpers.messageLinkOptions(client, athleteId, "2026-11-21", false), []);
+  const { MessageThread } = loader({
+    "@/lib/supabase/server": { createClient: async () => client },
+    "@/lib/viewer": { getViewer: async () => ({ kind: "athlete", athleteId }) },
+    "@/lib/time-zone": { getToday: async () => "2026-11-21", getTimeZone: async () => "UTC" },
+    "@/lib/messages": { ...messageHelpers, messageAthlete: async () => athlete },
+    "@/components/messages/composer": { MessageComposer: "composer" },
+    "@/components/messages/thread-live": { ThreadLive: "thread-live" },
+  })("src/components/messages/thread.tsx");
+  const nodes = treeNodes(await MessageThread({}));
+  assert.ok(nodes.some((node) => node.props?.children === "AI suggestion (your coach is reviewing it)"));
+  assert.ok(!nodes.some((node) => node.props?.href === `/suggestions/${itemId}`));
+  assert.ok(!nodes.some((node) => node.props?.children === "Linked item unavailable"));
+});
+
 test("thread polls every 10s only while visible, marks incoming messages read and cleans up", async () => {
   const effects = [];
   const listeners = new Set();

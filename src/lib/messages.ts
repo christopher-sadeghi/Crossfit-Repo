@@ -77,5 +77,6 @@ export async function messageLinkOptions(supabase: Client, athleteId: string, to
     ...(results.data ?? []).map(({ id }) => ({ type: "result" as const, id })),
     ...(suggestions.data ?? []).map(({ id }) => ({ type: "suggestion" as const, id })),
   ];
-  return [...(await resolveMessageLinks(supabase, athleteId, links, isCoach)).values()];
+  return [...(await resolveMessageLinks(supabase, athleteId, links, isCoach)).values()].map((option) =>
+    option.type === "suggestion" ? { ...option, label: `${option.label} (only you can open this)` } : option);
 }

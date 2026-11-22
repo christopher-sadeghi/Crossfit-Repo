@@ -43,7 +43,7 @@ export async function MessageThread({ athleteId: requestedAthleteId, requestedLi
     const prefilled = (await resolveMessageLinks(supabase, athleteId, [prefill], isCoach)).get(`${prefill.type}:${prefill.id}`);
     if (prefilled) {
       initialLink = `${prefill.type}:${prefill.id}`;
-      if (!options.some((option) => option.type === prefill.type && option.id === prefill.id)) options.push(prefilled);
+      if (!options.some((option) => option.type === prefill.type && option.id === prefill.id)) options.push({ ...prefilled, label: prefilled.type === "suggestion" ? `${prefilled.label} (only you can open this)` : prefilled.label });
     }
   }
   const dateFormat = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
@@ -74,7 +74,7 @@ export async function MessageThread({ athleteId: requestedAthleteId, requestedLi
               <article className={`max-w-[90%] rounded-xl px-4 py-3 ${mine ? "justify-self-end bg-primary text-primary-foreground" : "justify-self-start border bg-background"}`}>
                 <p className="mb-1 text-xs opacity-75">{mine ? "You" : row.sender_id === athlete.coach_id ? coachName : athleteName}</p>
                 <p className="whitespace-pre-wrap break-words text-sm [overflow-wrap:anywhere]">{row.body}</p>
-                {row.link_type && (linked ? <Link href={linked.href} className="mt-2 block break-words text-sm underline underline-offset-4">{linked.label}</Link> : <p className="mt-2 text-xs opacity-75">Linked item unavailable</p>)}
+                {row.link_type && (row.link_type === "suggestion" && !isCoach ? <p className="mt-2 text-xs opacity-75">AI suggestion (your coach is reviewing it)</p> : linked ? <Link href={linked.href} className="mt-2 block break-words text-sm underline underline-offset-4">{linked.label}</Link> : <p className="mt-2 text-xs opacity-75">Linked item unavailable</p>)}
                 <p className="mt-2 text-right text-xs opacity-75"><time dateTime={row.created_at}>{timeFormat.format(date)}</time>{mine && row.read_at ? " · Read" : ""}</p>
               </article>
             </li>
