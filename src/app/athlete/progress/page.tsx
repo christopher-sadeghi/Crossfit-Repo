@@ -11,11 +11,12 @@ export default async function AthleteProgressPage() {
   const viewer = await getViewer();
   if (viewer?.kind !== "athlete") redirect("/login");
   const { supabase, athlete } = await progressAccess(viewer.athleteId);
-  const [{ measurements, photos }, today] = await Promise.all([loadProgressCheckIns(supabase, athlete.id), getToday()]);
+  const today = await getToday();
+  const { measurements, photos, measurementTrendRows } = await loadProgressCheckIns(supabase, athlete.id, today);
   return <div className="grid min-w-0 gap-5">
     <header><p className="mb-1 text-xs font-medium uppercase tracking-widest text-muted-foreground">Your journey</p><h1 className="text-2xl font-semibold tracking-tight">Progress</h1><p className="mt-2 text-sm text-muted-foreground">More than a number. Notice the changes, at your own pace.</p></header>
     <ProgressPhotos athleteId={athlete.id} coachId={athlete.coach_id} today={today} measurements={measurements} photos={photos} />
-    <MeasurementChart measurements={measurements} units={viewer.units} />
+    <MeasurementChart measurements={measurements} measurementTrendRows={measurementTrendRows} units={viewer.units} />
     <MeasurementLog athleteId={athlete.id} today={today} measurements={measurements} units={viewer.units} />
   </div>;
 }

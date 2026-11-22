@@ -54,7 +54,7 @@ export default async function AthleteProgressPage({ params }: Props) {
   const athlete = athleteRes.data;
   if (!athlete) notFound();
   const [checkIns, reminder] = await Promise.all([
-    loadProgressCheckIns(supabase, id),
+    loadProgressCheckIns(supabase, id, now),
     supabase.from("progress_reminders").select("cadence_weeks").eq("athlete_id", id).maybeSingle(),
   ]);
   if (reminder.error) throw new Error("Couldn't load the reminder setting.");
@@ -107,7 +107,7 @@ export default async function AthleteProgressPage({ params }: Props) {
             {weightData.length ? <WeightChart data={weightData} units={units} /> : <Empty text="Log a measurement below to start this chart." />}
           </CardContent>
         </Card>
-        <MeasurementChart measurements={checkIns.measurements} units={units} />
+        <MeasurementChart measurements={checkIns.measurements} measurementTrendRows={checkIns.measurementTrendRows} units={units} />
         <Card>
           <CardHeader>
             <CardTitle>Personal records by movement</CardTitle>

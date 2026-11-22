@@ -12,18 +12,19 @@ export const SITE_LABELS: Record<(typeof MEASUREMENT_SITES)[number], string> = {
 export const PHOTO_POSES = ["front", "side", "back"] as const;
 export const PROGRESS_PHOTO_BUCKET = "progress-photos";
 export type Measurement = Tables<"body_measurements">;
+export type MeasurementValue = Pick<Measurement, "site" | "measured_on" | "value_cm">;
 export type ProgressPhoto = Tables<"progress_photos"> & { url: string | null };
 
 export function progressDateSchema(today: string) {
   return z.iso.date("Choose a valid date.").refine((date) => date <= today, "Choose today or an earlier date.");
 }
 
-export function measurementTrend(rows: Measurement[], site: string, units: Units) {
+export function measurementTrend(rows: MeasurementValue[], site: string, units: Units) {
   const entries = rows.filter((row) => row.site === site).sort((a, b) => a.measured_on.localeCompare(b.measured_on));
   const latest = entries.at(-1);
   if (!latest) return null;
-  const display = (row: Measurement) => fromCm(Number(row.value_cm), units);
-  const change = (row: Measurement) => Math.round((display(latest) - display(row)) * 10) / 10;
+  const display = (row: MeasurementValue) => fromCm(Number(row.value_cm), units);
+  const change = (row: MeasurementValue) => Math.round((display(latest) - display(row)) * 10) / 10;
   return {
     latest: display(latest), date: latest.measured_on,
     sinceFirst: entries.length > 1 ? change(entries[0]) : null,
@@ -35,7 +36,7 @@ export function checkInDates(measurements: Measurement[], photos: ProgressPhoto[
   return [...new Set([...measurements.map((row) => row.measured_on), ...photos.map((row) => row.taken_on)])].sort();
 }
 
-export function measurementTrends(rows: Pick<Measurement, "site" | "measured_on" | "value_cm">[], units: Units, asOf: string) {
+export function measurementTrends(rows: MeasurementValue[], units: Units, asOf: string) {
   return MEASUREMENT_SITES.flatMap((site) => {
     const entries = rows.filter((row) => row.site === site && row.measured_on <= asOf).sort((a, b) => a.measured_on.localeCompare(b.measured_on));
     const latest = entries.at(-1);
@@ -56,12 +57,34 @@ export function measurementTrends(rows: Pick<Measurement, "site" | "measured_on"
   });
 }
 
-export async function loadProgressCheckIns(supabase: SupabaseClient<Database>, athleteId: string) {
+export async function loadMeasurementTrendRows(supabase: SupabaseClient<Database>, athleteId: string, asOf: string) {
+  // One entry per site/day: 36 newest entries cover the 28 ±7 day baseline.
+  const rows = await Promise.all(MEASUREMENT_SITES.map(async (site) => {
+    const query = () => supabase.from("body_measurements").select("site, measured_on, value_cm")
+      .eq("athlete_id", athleteId).eq("site", site).lte("measured_on", asOf);
+    const [recent, first] = await Promise.all([
+      query().order("measured_on", { ascending: false }).limit(36),
+      query().order("measured_on").limit(1),
+    ]);
+    if (recent.error || first.error) throw recent.error ?? first.error;
+    return [...(recent.data ?? []), ...(first.data ?? [])];
+  }));
+  return [...new Map(rows.flat().map((row) => [`${row.site}:${row.measured_on}`, row])).values()];
+}
+
+export async function loadProgressCheckIns(supabase: SupabaseClient<Database>, athleteId: string, asOf: string) {
+  const [history, measurementTrendRows] = await Promise.all([
+    loadCheckInHistory(supabase, athleteId), loadMeasurementTrendRows(supabase, athleteId, asOf),
+  ]);
+  return { ...history, measurementTrendRows };
+}
+
+async function loadCheckInHistory(supabase: SupabaseClient<Database>, athleteId: string) {
   const measurements: Measurement[] = [];
   const photos: Tables<"progress_photos">[] = [];
   for (let offset = 0; ; offset += 1000) {
     const [m, p] = await Promise.all([
-      supabase.from("body_measurements").select("*").eq("athlete_id", athleteId).order("measured_on").order("id").range(offset, offset + 999),
+      supabase.from("body_measurements").select("*").eq("athlete_id", athleteId).order("measured_on", { ascending: false }).order("id").range(offset, offset + 999),
       supabase.from("progress_photos").select("*").eq("athlete_id", athleteId).order("taken_on").order("id").range(offset, offset + 999),
     ]);
     if (m.error || p.error) throw new Error("Couldn't load progress. Please refresh and try again.");
@@ -75,5 +98,5 @@ export async function loadProgressCheckIns(supabase: SupabaseClient<Database>, a
       .createSignedUrls(photos.slice(offset, offset + 100).map((photo) => photo.storage_path), 3600);
     for (const signed of data ?? []) if (signed.path && signed.signedUrl && !signed.error) urls.set(signed.path, signed.signedUrl);
   }
-  return { measurements, photos: photos.map((photo): ProgressPhoto => ({ ...photo, url: urls.get(photo.storage_path) ?? null })) };
+  return { measurements: measurements.sort((a, b) => a.measured_on.localeCompare(b.measured_on)), photos: photos.map((photo): ProgressPhoto => ({ ...photo, url: urls.get(photo.storage_path) ?? null })) };
 }

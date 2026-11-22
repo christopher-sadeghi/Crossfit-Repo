@@ -7,7 +7,7 @@ import { deleteMeasurement, saveMeasurements } from "@/app/progress-actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { MEASUREMENT_SITES, SITE_LABELS, measurementTrend, type Measurement } from "@/lib/measurements";
+import { MEASUREMENT_SITES, SITE_LABELS, measurementTrend, type Measurement, type MeasurementValue } from "@/lib/measurements";
 import { formatDate, fromCm, lengthUnit, type Units } from "@/lib/units";
 
 import { ActionFeedback, useProgressAction } from "./action-feedback";
@@ -16,10 +16,10 @@ type Props = { measurements: Measurement[]; units: Units };
 const selectClass = "h-10 rounded-md border bg-background px-3 text-sm";
 const delta = (value: number | null, unit: string) => value === null ? "—" : `${value > 0 ? "+" : ""}${value.toFixed(1)} ${unit}`;
 
-export function MeasurementChart({ measurements, units }: Props) {
+export function MeasurementChart({ measurements, units, measurementTrendRows }: Props & { measurementTrendRows: MeasurementValue[] }) {
   const [site, setSite] = useState<(typeof MEASUREMENT_SITES)[number]>("waist");
   const unit = lengthUnit(units);
-  const trend = measurementTrend(measurements, site, units);
+  const trend = measurementTrend(measurementTrendRows, site, units);
   const points = measurements.filter((row) => row.site === site).sort((a, b) => a.measured_on.localeCompare(b.measured_on))
     .map((row) => ({ date: row.measured_on, value: fromCm(Number(row.value_cm), units) }));
   return <Card className="min-w-0">

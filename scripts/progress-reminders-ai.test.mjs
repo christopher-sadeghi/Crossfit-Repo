@@ -107,9 +107,22 @@ function aiFixture(rows = measurements, errorTable) {
     const data = table === "coaches" ? { units: "lb" } : table === "athletes" ? { first_name: "Jamie", experience_level: "intermediate" }
       : table === "body_measurements" ? rows : [];
     const result = { data, error: table === errorTable ? new Error("denied") : null };
-    const q = { then: (resolve) => Promise.resolve(result).then(resolve),
+    const operations = [];
+    const response = () => {
+      if (table !== "body_measurements") return result;
+      let selected = [...data];
+      for (const [method, column, value] of operations) {
+        if (method === "eq" && column === "site") selected = selected.filter((row) => row.site === value);
+        if (method === "lte" && column === "measured_on") selected = selected.filter((row) => row.measured_on <= value);
+        if (method === "order" && column === "measured_on") selected.sort((a, b) => a.measured_on.localeCompare(b.measured_on) * (value?.ascending === false ? -1 : 1));
+        if (method === "limit") selected = selected.slice(0, column);
+        if (method === "range") selected = selected.slice(column, value + 1);
+      }
+      return { ...result, data: selected.slice(0, 1000) };
+    };
+    const q = { then: (resolve) => Promise.resolve(response()).then(resolve),
       single: async () => result, maybeSingle: async () => ({ ...result, data: Array.isArray(data) ? null : data }) };
-    for (const method of ["select", "eq", "or", "lte", "order", "limit", "gte"]) q[method] = (...args) => { filters.push([table, method, ...args]); return q; };
+    for (const method of ["select", "eq", "or", "lte", "order", "limit", "gte", "range"]) q[method] = (...args) => { operations.push([method, ...args]); filters.push([table, method, ...args]); return q; };
     return q;
   } };
   const overrides = {
@@ -132,6 +145,37 @@ test("shared AI loader fetches numeric-only measurements and surfaces failures",
   assert.ok(!f.queries.includes("progress_photos"));
   const failed = aiFixture([], "body_measurements");
   await assert.rejects(load("src/lib/ai/progress-data.ts", failed.overrides).loadProgressData(failed.client, "a", today), /denied/);
+});
+
+test("AI and page trends remain current beyond the row cap, including a sparse site's first entry", async () => {
+  const { addDays } = load("src/lib/nutrition.ts");
+  const history = Array.from({ length: 1500 }, (_, index) => ({
+    site: "waist", measured_on: addDays(today, index - 1499), value_cm: Math.round((100 + index / 10) * 10) / 10,
+  }));
+  history.push({ site: "hips", measured_on: "2020-01-01", value_cm: 99 });
+  const f = aiFixture(history);
+  const { loadMeasurementTrendRows, measurementTrend } = load("src/lib/measurements.ts");
+  const rows = await loadMeasurementTrendRows(f.client, "a", today);
+  assert.equal(rows.length, 38);
+  const trends = measurementTrends(rows, "kg", today);
+  assert.equal(trends[0].latest.value, 249.9);
+  assert.equal(trends[0].latest.date, today);
+  assert.equal(trends[0].change_since_four_weeks, 2.8);
+  assert.equal(trends[0].change_since_first, 149.9);
+  assert.equal(trends[0].first_date, history[0].measured_on);
+  assert.equal(trends[1].latest.value, 99);
+  assert.equal(trends[1].first_date, "2020-01-01");
+  assert.deepEqual(measurementTrend(rows, "waist", "kg"), { latest: 249.9, date: today, sinceFirst: 149.9, sincePrevious: 0.1 });
+  const ai = await load("src/lib/ai/progress-data.ts", f.overrides).loadProgressData(f.client, "a", today);
+  assert.deepEqual(ai.measurementTrends, measurementTrends(rows, "lb", today));
+  const pageFixture = aiFixture(history);
+  const page = await load("src/lib/measurements.ts").loadProgressCheckIns(pageFixture.client, "a", today);
+  assert.deepEqual(page.measurementTrendRows, rows);
+  assert.equal(page.measurements.length, 1501);
+  assert.equal(page.measurements.at(-1).measured_on, today);
+  assert.ok(f.filters.some((f) => f[0] === "body_measurements" && f[1] === "order" && f[3]?.ascending === false));
+  assert.ok(f.filters.some((f) => f.join() === "body_measurements,limit,36"));
+  assert.ok(f.filters.some((f) => f.join() === "body_measurements,limit,1"));
 });
 
 test("both actual AI requests include trends only when present, never photos, and keep schemas valid", async () => {

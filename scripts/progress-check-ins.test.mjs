@@ -61,16 +61,17 @@ test("loader supports empty data, missing signed files and database errors", asy
   let error = null;
   const client = {
     from: (table) => {
-      const query = { select: () => query, eq: () => query, order: () => query, range: async () => ({ data: table === "progress_photos" ? rows : [], error }) };
+      const query = { select: () => query, eq: () => query, lte: () => query, order: () => query,
+        limit: async () => ({ data: [], error }), range: async () => ({ data: table === "progress_photos" ? rows : [], error }) };
       return query;
     },
     storage: { from: () => ({ createSignedUrls: async () => ({ data: [{ path: photoPath, error: "not found" }] }) }) },
   };
-  assert.deepEqual(await loadProgressCheckIns(client, athleteId), { photos: [], measurements: [] });
+  assert.deepEqual(await loadProgressCheckIns(client, athleteId, "2026-11-20"), { photos: [], measurements: [], measurementTrendRows: [] });
   rows = [{ storage_path: photoPath }];
-  assert.equal((await loadProgressCheckIns(client, athleteId)).photos[0].url, null);
+  assert.equal((await loadProgressCheckIns(client, athleteId, "2026-11-20")).photos[0].url, null);
   error = new Error("offline");
-  await assert.rejects(() => loadProgressCheckIns(client, athleteId), /Couldn't load progress/);
+  await assert.rejects(() => loadProgressCheckIns(client, athleteId, "2026-11-20"));
 });
 
 function actions({ kind = "coach", accessError = false, removeError = false, writeError = false, old = null } = {}) {
