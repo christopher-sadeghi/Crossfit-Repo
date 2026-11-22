@@ -14,7 +14,7 @@ function fixture({ anonymous = false, error = null, found = true } = {}) {
   vm.runInNewContext(ts.transpileModule(readFileSync(new URL("../src/lib/push/payload.ts", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports: payloadExports, URL });
   const exports = {};
   const source = ts.transpileModule(readFileSync(new URL("../src/app/push-actions.ts", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  vm.runInNewContext(source, { exports, require: (id) => id === "@/lib/supabase/server" ? { createClient: async () => client } : id === "@/lib/push/payload" ? payloadExports : require(id) });
+  vm.runInNewContext(source, { exports, process: { env: { NODE_ENV: "production" } }, require: (id) => id === "next/headers" ? { cookies: async () => ({ set: (...args) => calls.push(["cookie-set", ...args]), delete: (...args) => calls.push(["cookie-delete", ...args]) }) } : id === "@/lib/supabase/server" ? { createClient: async () => client } : id === "@/lib/push/payload" ? payloadExports : require(id) });
   return { ...exports, calls };
 }
 const sub = { endpoint: "https://fcm.googleapis.com/device", keys: { p256dh: "key", auth: "auth" }, userAgent: "test" };
@@ -23,8 +23,12 @@ test("subscription actions register with the RPC and restrict reads/deletes to c
   assert.equal((await f.savePushSubscription(sub)).error, undefined);
   assert.equal(f.calls[0][1], "register_push_subscription");
   assert.equal(f.calls[0][2].p_endpoint, sub.endpoint);
+  const cookie = f.calls.find((c) => c[0] === "cookie-set");
+  assert.equal(cookie[1], "fitcoach-push-endpoint"); assert.equal(cookie[2], sub.endpoint);
+  assert.equal(cookie[3].httpOnly, true); assert.equal(cookie[3].secure, true); assert.equal(cookie[3].sameSite, "lax");
   assert.equal((await f.hasPushSubscription(sub.endpoint)).enabled, true);
   assert.equal((await f.deletePushSubscription(sub.endpoint)).error, undefined);
+  assert.ok(f.calls.some((c) => c[0] === "cookie-delete" && c[1] === "fitcoach-push-endpoint"));
   assert.equal(f.calls.filter((c) => c[0] === "eq" && c[1] === "user_id" && c[2] === "user").length, 2);
   assert.equal((await fixture({ found: false }).hasPushSubscription(sub.endpoint)).enabled, false);
 });

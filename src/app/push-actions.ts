@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { isAllowedPushEndpoint, PUSH_CATEGORIES } from "@/lib/push/payload";
 
@@ -27,6 +28,7 @@ export async function savePushSubscription(input: unknown) {
     const { endpoint, keys, userAgent } = parsed.data;
     const { error } = await supabase.rpc("register_push_subscription", { p_endpoint: endpoint, p_p256dh: keys.p256dh, p_auth: keys.auth, p_user_agent: userAgent });
     if (error) throw error;
+    (await cookies()).set("fitcoach-push-endpoint", endpoint, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365 });
     return {};
   } catch { return { error: "Couldn't enable push notifications. Please try again." }; }
 }
@@ -38,6 +40,7 @@ export async function deletePushSubscription(endpoint: unknown) {
     const { supabase, userId } = await context();
     const { error } = await supabase.from("push_subscriptions").delete().eq("user_id", userId).eq("endpoint", parsed.data);
     if (error) throw error;
+    (await cookies()).delete("fitcoach-push-endpoint");
     return {};
   } catch { return { error: "Couldn't disable push notifications. Please try again." }; }
 }
