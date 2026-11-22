@@ -1,7 +1,10 @@
 import { CalendarDays } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { z } from "zod";
 
+import { ActivityForm } from "@/components/activity-form";
+import { ActivityList } from "@/components/activity-list";
 import { MovementDemoSheet } from "@/components/movements/movement-demo-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +17,8 @@ import { CHECK_IN_COLUMNS } from "@/lib/check-in";
 import { getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
 import { feedbackSummary } from "@/lib/feedback";
+import { loadDate } from "@/lib/training-load";
+import { loadActivities } from "@/lib/training-load-data";
 import { formatDate, formatScore } from "@/lib/units";
 import { getViewer } from "@/lib/viewer";
 
@@ -54,8 +59,8 @@ function ScheduledMovementDemos({ workout }: { workout: TodayWorkout }) {
   );
 }
 
-export default async function AthleteTodayPage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
-  const { saved } = await searchParams;
+export default async function AthleteTodayPage({ searchParams }: { searchParams: Promise<{ saved?: string; activityDate?: string }> }) {
+  const { saved, activityDate } = await searchParams;
   const viewer = await getViewer();
   if (!viewer) redirect("/login");
   if (viewer.kind === "coach") redirect("/");
@@ -63,15 +68,22 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
 
   const supabase = await createClient();
   const currentDate = await getToday();
+  const activityWeekStart = loadDate(currentDate, 6);
+  const requestedDay = z.iso.date().safeParse(activityDate);
+  const activityDay = requestedDay.success && requestedDay.data >= activityWeekStart && requestedDay.data <= currentDate
+    ? requestedDay.data : currentDate;
   const recentStart = new Date(`${currentDate}T00:00:00Z`);
   recentStart.setUTCDate(recentStart.getUTCDate() - 7);
   const recentStartIso = recentStart.toISOString().slice(0, 10);
-  const scheduled = await loadAthleteSchedule<TodayWorkout>(
-    supabase,
-    viewer.athleteId,
-    { from: recentStartIso, to: "9999-12-31" },
-    "id, source_workout_id, title, workout_type, time_cap_seconds, rounds, description, notes, week_number, day_number, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(id, name))",
-  );
+  const [scheduled, activities] = await Promise.all([
+    loadAthleteSchedule<TodayWorkout>(
+      supabase,
+      viewer.athleteId,
+      { from: recentStartIso, to: "9999-12-31" },
+      "id, source_workout_id, title, workout_type, time_cap_seconds, rounds, description, notes, week_number, day_number, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(id, name))",
+    ),
+    loadActivities(supabase, viewer.athleteId, { from: activityWeekStart, to: currentDate }),
+  ]);
 
   const todayWods = scheduled
     .filter((item) => item.date === currentDate)
@@ -142,6 +154,26 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
 
   return (
     <div className="grid gap-6">
+      <details id="log-activity" key={`log-activity-${activityDay}`} open={activityDate != null} className="rounded-lg border bg-card p-4">
+        <summary className="w-fit cursor-pointer font-semibold">Log activity</summary>
+        <div className="mt-4 grid gap-4">
+          <nav aria-label="Outside activity calendar" className="grid grid-cols-4 gap-1 sm:grid-cols-7">
+            {Array.from({ length: 7 }, (_, index) => {
+              const date = loadDate(currentDate, 6 - index);
+              const count = activities.filter((entry) => entry.performed_on === date).length;
+              return (
+                <Link key={date} href={`/athlete?activityDate=${date}#log-activity`} aria-current={date === activityDay ? "date" : undefined}
+                  className={`grid min-h-11 content-center rounded-md border px-1 py-1 text-center text-xs ${date === activityDay ? "border-primary bg-primary/10" : ""}`}>
+                  <time dateTime={date}>{date === currentDate ? "Today" : new Intl.DateTimeFormat("en", { weekday: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`))}</time>
+                  {count > 0 && <span className="text-muted-foreground">{count} logged</span>}
+                </Link>
+              );
+            })}
+          </nav>
+          <ActivityForm key={activityDay} athleteId={viewer.athleteId} today={currentDate} defaultDate={activityDay} units={viewer.units} />
+          <ActivityList activities={activities.filter((entry) => entry.performed_on === activityDay)} today={currentDate} units={viewer.units} />
+        </div>
+      </details>
       <CheckInForm key={currentDate} entry={todayJournal} today={currentDate} />
       <AthleteConsistencyCard athleteId={viewer.athleteId} compact />
       <section className="grid gap-3">

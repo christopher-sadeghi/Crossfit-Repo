@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
+import { checkTrainingLoad } from "@/lib/activity-training-warning";
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { notifyResultLogged } from "@/lib/notifications";
 import { buildScore, feedbackFields, scoreFields } from "@/lib/result-score";
@@ -95,6 +96,7 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
       .select("workout_id, athlete_id")
       .maybeSingle();
     if (error || !data) return failure(formData, "Couldn't update the result. Please try again.");
+    await checkTrainingLoad(supabase, data.athlete_id);
     revalidateResultPaths(data.workout_id, data.athlete_id);
   } else {
     const { data, error } = await supabase
@@ -103,7 +105,7 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
       .select("id, workout_id, athlete_id")
       .maybeSingle();
     if (error || !data) return failure(formData, "Couldn't save the result. Please try again.");
-    await notifyResultLogged(supabase, data.athlete_id, data.id);
+    await Promise.all([notifyResultLogged(supabase, data.athlete_id, data.id), checkTrainingLoad(supabase, data.athlete_id)]);
     revalidateResultPaths(data.workout_id, data.athlete_id);
   }
 
@@ -130,6 +132,7 @@ export async function deleteAthleteResult(id: string): Promise<FormState> {
     .maybeSingle();
   if (error || !data) return { error: "Couldn't delete the result. Please try again." };
 
+  await checkTrainingLoad(supabase, data.athlete_id);
   revalidateResultPaths(data.workout_id, data.athlete_id);
   return { message: "Result deleted." };
 }

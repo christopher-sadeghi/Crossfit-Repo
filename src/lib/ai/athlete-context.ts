@@ -1,13 +1,39 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { activityLabel } from "@/lib/athlete-activities";
 import { drifting, type ConsistencyWindow } from "@/lib/consistency";
 import { loadConsistency } from "@/lib/consistency-data";
 import { addDays, totals } from "@/lib/nutrition";
 import type { Database } from "@/lib/supabase/database.types";
+import { sessionLoad } from "@/lib/training-load";
+import { loadTrainingLoad } from "@/lib/training-load-data";
 
 export const TRAINING_DAYS = 28;
 
 type FoodRow = Parameters<typeof totals>[0][number];
+
+export async function trainingLoadContext(supabase: SupabaseClient<Database>, athleteId: string, asOf: string) {
+  const load = await loadTrainingLoad(supabase, athleteId, asOf, 4);
+  const week = load.weekly[3];
+  return {
+    as_of: asOf,
+    gym_load_last_7_days: Math.round(week.gym),
+    outside_load_last_7_days: Math.round(week.outside),
+    total_load_last_7_days: Math.round(load.acute),
+    weekly_average_load_last_28_days: Math.round(load.chronic),
+    acute_chronic_ratio: load.ratio == null ? null : Number(load.ratio.toFixed(2)),
+    estimated_gym_sessions_last_7_days: week.estimatedGymSessions,
+    estimated_gym_sessions_last_28_days: load.estimatedGymSessions28,
+    recent_outside_activities: load.activities.slice(0, 5).map((activity) => ({
+      date: activity.performed_on,
+      type: activity.activity_type,
+      label: activityLabel(activity).slice(0, 80),
+      duration_minutes: activity.duration_minutes,
+      rpe: activity.rpe,
+      session_load: sessionLoad(activity.duration_minutes, activity.rpe),
+    })),
+  };
+}
 
 /** Compact, RLS-scoped attendance and scheduled-day consistency for AI prompts. */
 export async function consistencyContext(supabase: SupabaseClient<Database>, athleteId: string, asOf: string) {

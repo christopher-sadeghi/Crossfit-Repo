@@ -80,20 +80,21 @@ async function failReservation(
 export const aiDailyLimit = () => Number(process.env.AI_DAILY_LIMIT ?? 25);
 export const aiLimitMessage = (limit: number) => `You've used today's ${limit} AI requests. You can ask for more tomorrow.`;
 
-/** AI requests today: suggestions plus coach chat messages share one daily cap. */
+/** AI requests today: suggestions, coach chat messages, and activity drafts share one daily cap. */
 export async function countAiUsageToday(supabase: SupabaseClient<Database>) {
   const now = new Date();
   const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
-  const [suggestions, chats] = await Promise.all([
+  const [suggestions, chats, activityDrafts] = await Promise.all([
     supabase.from("ai_suggestions").select("id", { count: "exact", head: true }).gte("created_at", startOfToday),
     supabase
       .from("ai_chat_messages")
       .select("id", { count: "exact", head: true })
       .eq("role", "user")
       .gte("created_at", startOfToday),
+    supabase.from("ai_activity_draft_requests").select("id", { count: "exact", head: true }).gte("created_at", startOfToday),
   ]);
-  const error = suggestions.error ?? chats.error;
-  return { count: (suggestions.count ?? 0) + (chats.count ?? 0), error };
+  const error = suggestions.error ?? chats.error ?? activityDrafts.error;
+  return { count: (suggestions.count ?? 0) + (chats.count ?? 0) + (activityDrafts.count ?? 0), error };
 }
 
 export async function runSuggestionWithClient<S extends z.ZodType>(

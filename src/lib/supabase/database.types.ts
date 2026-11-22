@@ -9,6 +9,12 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      ai_activity_draft_requests: {
+        Row: { id: string; user_id: string; created_at: string };
+        Insert: { id: string; user_id?: string; created_at?: string };
+        Update: { id?: string; user_id?: string; created_at?: string };
+        Relationships: [];
+      };
       body_measurements: {
         Row: { id: string; coach_id: string; athlete_id: string; measured_on: string; site: string; value_cm: number; created_by: string | null; created_at: string; updated_at: string };
         Insert: { id?: string; coach_id: string; athlete_id: string; measured_on: string; site: string; value_cm: number; created_by?: string | null; created_at?: string; updated_at?: string };
@@ -293,6 +299,58 @@ export type Database = {
           },
           {
             foreignKeyName: "athlete_invites_coach_id_fkey";
+            columns: ["coach_id"];
+            isOneToOne: false;
+            referencedRelation: "coaches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      athlete_activities: {
+        Row: {
+          activity_type: string;
+          athlete_id: string;
+          coach_id: string;
+          created_at: string;
+          created_by: string | null;
+          custom_label: string | null;
+          distance_m: number | null;
+          duration_minutes: number;
+          id: string;
+          notes: string | null;
+          performed_on: string;
+          rpe: number;
+          source: string;
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          activity_type: string;
+          athlete_id: string;
+          coach_id: string;
+          created_at?: string;
+          created_by?: string | null;
+          custom_label?: string | null;
+          distance_m?: number | null;
+          duration_minutes: number;
+          id?: string;
+          notes?: string | null;
+          performed_on: string;
+          rpe: number;
+          source: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["athlete_activities"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "athlete_activities_athlete_id_coach_id_fkey";
+            columns: ["athlete_id", "coach_id"];
+            isOneToOne: false;
+            referencedRelation: "athletes";
+            referencedColumns: ["id", "coach_id"];
+          },
+          {
+            foreignKeyName: "athlete_activities_coach_id_fkey";
             columns: ["coach_id"];
             isOneToOne: false;
             referencedRelation: "coaches";
@@ -735,6 +793,7 @@ export type Database = {
       coaches: {
         Row: {
           drift_days: number;
+          load_warning_ratio: number;
           created_at: string;
           full_name: string | null;
           gym_name: string | null;
@@ -745,6 +804,7 @@ export type Database = {
         ComputedFields: never;
         Insert: {
           drift_days?: number;
+          load_warning_ratio?: number;
           created_at?: string;
           full_name?: string | null;
           gym_name?: string | null;
@@ -754,6 +814,7 @@ export type Database = {
         };
         Update: {
           drift_days?: number;
+          load_warning_ratio?: number;
           created_at?: string;
           full_name?: string | null;
           gym_name?: string | null;

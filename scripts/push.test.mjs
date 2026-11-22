@@ -23,6 +23,9 @@ test("categories cover notification kinds and future alerts", () => {
     for (const kind of kinds) assert.equal(payload.pushCategory(kind), category);
   }
 });
+test("high training load notifications are coach alerts", () => {
+  assert.equal(payload.pushCategory("high_training_load"), "alerts");
+});
 test("payload preserves safe paths, truncates text and rejects unsafe links", () => {
   for (const link of [undefined, null, "", "https://evil.test", "//evil.test", "/\\evil.test", "/\n/evil.test", "javascript:alert(1)"]) assert.equal(payload.safePushLink(link), "/");
   assert.equal(payload.safePushLink("/athlete/messages?q=1#latest"), "/athlete/messages?q=1#latest");

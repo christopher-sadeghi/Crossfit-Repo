@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { checkTrainingLoad } from "@/lib/activity-training-warning";
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { getCoach } from "@/lib/coach";
 import { buildScore, scoreFields } from "@/lib/result-score";
@@ -42,6 +43,7 @@ export async function logResult(_: FormState, formData: FormData): Promise<FormS
   });
   if (error) return failure(formData, "Couldn't save the result. Please try again.");
 
+  await checkTrainingLoad(supabase, r.athlete_id);
   revalidatePath(`/programs/workouts/${r.workout_id}`);
   revalidatePath(`/athletes/${r.athlete_id}`);
   return { message: "Result logged." };
@@ -51,6 +53,7 @@ export async function deleteResult(id: string) {
   const supabase = await createClient();
   const { data } = await supabase.from("workout_results").delete().eq("id", id).select("workout_id, athlete_id").maybeSingle();
   if (data) {
+    await checkTrainingLoad(supabase, data.athlete_id);
     revalidatePath(`/programs/workouts/${data.workout_id}`);
     revalidatePath(`/athletes/${data.athlete_id}`);
   }

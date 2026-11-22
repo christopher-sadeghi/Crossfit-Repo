@@ -172,6 +172,7 @@ test("calendar renders Logged for matching results on any date, including today'
       source: "one_off", programId: null, programName: null, date, removed,
       overrides: { workoutId: "original", programId: "group", programName: "Shared plan", source: "group" },
     }],
+    activities: [{ id: "walk", performed_on: today, activity_type: "walk", custom_label: "Trail walk", duration_minutes: 45 }],
     results, library: [], programs: [],
   }));
   for (const date of ["2026-12-01", today, "2026-12-03"]) {
@@ -189,4 +190,51 @@ test("calendar renders Logged for matching results on any date, including today'
     assert.doesNotMatch(render(date, [{ workout_id: "unrelated", performed_on: date }]), /<span>(Logged|Not logged)<\/span>/);
   }
   assert.doesNotMatch(render("2026-12-01", [], true), /<span>Not logged<\/span>/);
+  assert.match(render(today, []), /Trail walk.*Outside · 45 min/);
+  assert.match(render(today, []), /tab=workouts&amp;week=2026-11-30&amp;date=2026-12-02#calendar-log-activity/);
+  assert.doesNotMatch(render(today, []), /date=2026-12-03#calendar-log-activity/);
+});
+
+test("athlete Today keeps distinct disclosure and check-in keys across a local date refresh", async () => {
+  const instant = new Date("2026-11-22T12:00:00Z");
+  let timeZone = "UTC";
+  const query = { select: () => query, eq: () => query, maybeSingle: async () => ({ data: null }) };
+  const Empty = () => null;
+  const AthleteTodayPage = createLoader({
+    "@/lib/viewer": { getViewer: async () => ({ kind: "athlete", athleteId, units: "kg" }) },
+    "@/lib/supabase/server": { createClient: async () => ({ from: () => query }) },
+    "@/lib/time-zone": { getToday: async () => new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(instant) },
+    "@/lib/athlete-schedule": { loadAthleteSchedule: async () => [] },
+    "@/lib/training-load-data": { loadActivities: async () => [] },
+    "@/lib/ai/scale-workout": {},
+    "@/components/activity-form": { ActivityForm: Empty },
+    "@/components/activity-list": { ActivityList: Empty },
+    "@/components/movements/movement-demo-sheet": { MovementDemoSheet: Empty },
+    "./log/[workoutId]/result-form": { AthleteResultForm: Empty },
+    "./adjust-form": { AdjustWorkoutForm: Empty },
+    "./check-in/check-in-form": { CheckInForm: Empty },
+    "./consistency-card": { AthleteConsistencyCard: Empty },
+  })("src/app/athlete/page.tsx").default;
+
+  async function inspect(activityDate, today, selectedDay = today) {
+    const page = await AthleteTodayPage({ searchParams: Promise.resolve({ activityDate }) });
+    const children = page.props.children;
+    const keys = children.flatMap((child) => child?.key == null ? [] : [child.key]);
+    assert.equal(new Set(keys).size, keys.length, `Duplicate sibling keys: ${keys.join(", ")}`);
+    const disclosures = children.filter((child) => child?.props?.id === "log-activity");
+    assert.equal(disclosures.length, 1);
+    const [disclosure] = disclosures;
+    assert.equal(disclosure.props.open, activityDate != null);
+    const [calendar, form] = disclosure.props.children[1].props.children;
+    const links = calendar.props.children;
+    assert.equal(new Set(links.map((link) => link.key)).size, 7);
+    assert.equal(links.at(-1).props.children[0].props.dateTime, today);
+    assert.equal(links.find((link) => link.props["aria-current"] === "date").key, selectedDay);
+    assert.equal(form.props.defaultDate, selectedDay);
+  }
+
+  await inspect(undefined, "2026-11-22");
+  timeZone = "Pacific/Kiritimati";
+  await inspect(undefined, "2026-11-23");
+  await inspect("2026-11-22", "2026-11-23", "2026-11-22");
 });
