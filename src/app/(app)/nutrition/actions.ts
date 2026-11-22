@@ -47,6 +47,7 @@ const foodSchema = z.object({
   logged_on: date,
   meal: z.enum(MEALS, { message: "Choose a meal." }),
   food_name: z.string().trim().min(1, "Name the food.").max(120),
+  serving: z.string().trim().max(120).nullable().optional(),
   calories: z.coerce.number().int("Calories must be a whole number.").min(0, "Calories can't be negative.").max(10_000),
   protein_g: grams("Protein"),
   carbs_g: grams("Carbs"),
@@ -58,9 +59,15 @@ export async function saveFood(_: FormState, formData: FormData): Promise<FormSt
   if (!parsed.success) return failure(formData, parsed.error.issues[0]?.message ?? "Please check the form.");
   const { id, ...food } = parsed.data;
   const supabase = await createClient();
+  let clearIngredients = false;
+  if (id) {
+    const { data: existing, error } = await supabase.from("food_logs").select("food_name").eq("id", id).single();
+    if (error || !existing) return failure(formData, "Couldn't load the entry. Please try again.");
+    clearIngredients = existing.food_name !== food.food_name;
+  }
 
   const { error } = id
-    ? await supabase.from("food_logs").update(food).eq("id", id).select("id").single()
+    ? await supabase.from("food_logs").update({ ...food, ...(clearIngredients ? { ingredients: null } : {}) }).eq("id", id).select("id").single()
     : await supabase.from("food_logs").insert(food);
   if (error) return failure(formData, "Couldn't save the entry. Please try again.");
 
