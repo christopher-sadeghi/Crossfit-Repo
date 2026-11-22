@@ -156,10 +156,6 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
     <div className="grid gap-6">
       <section className="grid gap-3">
         <h1 className="text-xl font-semibold tracking-tight">Today&apos;s WOD</h1>
-        <Link href="/athlete/assistant" className="rounded-lg border bg-card p-4 hover:bg-muted">
-          <span className="font-semibold">Ask AI</span>
-          <p className="mt-1 text-sm text-muted-foreground">Questions about training or recovery? Your coach can see this chat.</p>
-        </Link>
         {todayWods.length ? (
           todayWods.map((item) => {
             const workout = item.workout;
@@ -301,6 +297,10 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
             </CardContent>
           </Card>
         )}
+        <Link href="/athlete/assistant" className="rounded-lg border bg-card p-4 hover:bg-muted">
+          <span className="font-semibold">Ask AI</span>
+          <p className="mt-1 text-sm text-muted-foreground">Questions about training or recovery? Your coach can see this chat.</p>
+        </Link>
       </section>
       <CheckInForm key={currentDate} entry={todayJournal} today={currentDate} athleteId={viewer.athleteId} />
       <AthleteConsistencyCard athleteId={viewer.athleteId} compact />
