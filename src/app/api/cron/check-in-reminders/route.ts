@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   if (!timingSafeEqual(hash(request.headers.get("authorization") ?? ""), hash(`Bearer ${secret}`))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const counts = { scanned: 0, due: 0, suppressed: 0, alreadySent: 0, sent: 0 };
+  const counts = { scanned: 0, invalid: 0, due: 0, suppressed: 0, alreadySent: 0, sent: 0 };
   try {
     const admin = createAdminClient();
     const now = new Date();
@@ -29,10 +29,15 @@ export async function POST(request: Request) {
       counts.scanned += rows.length;
       const byDate = new Map<string, typeof rows>();
       for (const row of rows) {
-        const { due, localDate } = reminderDue(now, row.remind_at!, row.time_zone);
-        if (!due) continue;
-        counts.due++;
-        byDate.set(localDate, [...(byDate.get(localDate) ?? []), row]);
+        try {
+          const { due, localDate } = reminderDue(now, row.remind_at!, row.time_zone);
+          if (!due) continue;
+          counts.due++;
+          byDate.set(localDate, [...(byDate.get(localDate) ?? []), row]);
+        } catch {
+          counts.invalid++;
+          console.warn("Skipping invalid check-in reminder schedule");
+        }
       }
       for (const [localDate, dueRows] of byDate) {
         const ids = dueRows.map((row) => row.athlete_id);
