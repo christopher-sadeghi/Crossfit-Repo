@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useActionState, useState } from "react";
+import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,6 +58,28 @@ function RequestAthleteSuggestionForm({
 
 export function RequestMacroSuggestionForm({ athleteId }: { athleteId: string }) {
   return <RequestAthleteSuggestionForm athleteId={athleteId} type="adjust_macros" label="Suggest macros" />;
+}
+
+export function RequestIntakeAiForm({ athleteId, type, label }: { athleteId: string; type: "draft_program" | "adjust_macros"; label: string }) {
+  const [state, action, pending] = useActionState<FormState & { suggestionId?: string }, FormData>(
+    async () => requestSuggestion(type, athleteId, true), {},
+  );
+  return <form action={action} className="grid justify-items-start gap-3">
+    <Button disabled={pending}>{pending ? "Thinking… (up to 45 s)" : label}</Button>
+    <Message state={state} />
+    {state.suggestionId && <Link className="text-sm underline" href={`/suggestions/${state.suggestionId}`}>Review pending suggestion</Link>}
+  </form>;
+}
+
+export function ApproveProgramForm({ id, name, startDate }: { id: string; name: string; startDate: string }) {
+  const [state, action, pending] = useActionState(approveSuggestion, {});
+  return <form action={action} className="grid gap-4">
+    <input type="hidden" name="id" value={id} />
+    <label className="grid gap-2 text-sm">Program name<Input name="name" defaultValue={state.values?.name ?? name} maxLength={80} required /></label>
+    <label className="grid gap-2 text-sm">Start date<Input name="start_date" type="date" defaultValue={state.values?.start_date ?? startDate} required /></label>
+    <Button disabled={pending}>{pending ? "Saving…" : "Approve & assign personal program"}</Button>
+    <Message state={state} />
+  </form>;
 }
 
 export function RequestProgressSummaryForm({ athleteId }: { athleteId: string }) {
