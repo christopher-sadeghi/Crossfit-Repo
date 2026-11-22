@@ -1,0 +1,133 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database, Tables } from "@/lib/supabase/database.types";
+import { compareScores, type Score } from "@/lib/results";
+import { addDays } from "@/lib/nutrition";
+
+type Client = SupabaseClient<Database>;
+type Benchmark = Tables<"benchmarks">;
+type DirectResult = Tables<"benchmark_results">;
+export type ScheduledBenchmarkResult = Score & {
+  id: string;
+  performed_on: string;
+  created_at: string;
+  notes: string | null;
+  workouts: {
+    title: string;
+    workout_type: Benchmark["workout_type"];
+    workout_movements: { movement_id: string; reps: number | null }[];
+  } | null;
+};
+export type BenchmarkAttempt = Score & {
+  id: string;
+  source: "direct" | "workout";
+  performed_on: string;
+  created_at: string;
+  rep_max: number | null;
+  estimatedOneRmKg: number | null;
+  notes: string | null;
+  isPr: boolean;
+};
+
+export function estimateOneRepMax(loadKg: number | null, reps: number | null): number | null {
+  if (loadKg == null || !Number.isFinite(loadKg) || loadKg < 0 || reps == null || !Number.isInteger(reps) || reps < 1 || reps > 10) return null;
+  return reps === 1 ? loadKg : loadKg * (1 + reps / 30);
+}
+
+function compareAttempts(benchmark: Benchmark) {
+  const compare = compareScores(benchmark.workout_type);
+  return (a: BenchmarkAttempt, b: BenchmarkAttempt) => benchmark.kind === "lift"
+    ? compare({ ...a, load_kg: a.estimatedOneRmKg }, { ...b, load_kg: b.estimatedOneRmKg })
+    : compare(a, b);
+}
+
+export function normalizeBenchmarkHistory(benchmark: Benchmark, direct: DirectResult[], scheduled: ScheduledBenchmarkResult[]): BenchmarkAttempt[] {
+  const attempts: BenchmarkAttempt[] = direct.filter((r) => r.benchmark_id === benchmark.id).map((r) => ({
+    ...r, source: "direct", estimatedOneRmKg: benchmark.kind === "lift" ? estimateOneRepMax(r.load_kg, r.rep_max) : null, isPr: false,
+  }));
+  for (const r of scheduled) {
+    const w = r.workouts;
+    if (!w) continue;
+    const movement = w.workout_movements.find((m) => m.movement_id === benchmark.movement_id);
+    if (benchmark.kind === "lift" ? w.workout_type !== "strength" || !movement : w.workout_type !== benchmark.workout_type || w.title.trim().toLowerCase() !== benchmark.name.trim().toLowerCase()) continue;
+    const reps = benchmark.kind === "lift" ? movement?.reps ?? r.reps ?? 1 : null;
+    attempts.push({ ...r, source: "workout", rep_max: reps, estimatedOneRmKg: benchmark.kind === "lift" ? estimateOneRepMax(r.load_kg, reps) : null, isPr: false });
+  }
+  attempts.sort((a, b) => a.performed_on.localeCompare(b.performed_on) || a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+  const compare = compareAttempts(benchmark);
+  let best: BenchmarkAttempt | null = null;
+  for (const a of attempts) {
+    a.isPr = best != null && compare(a, best) < 0;
+    if (!best || compare(a, best) < 0) best = a;
+  }
+  return attempts;
+}
+
+export function retestDue(lastDate: string | null, retestWeeks: number | null, today: string): boolean {
+  return lastDate != null && retestWeeks != null && today > addDays(lastDate, retestWeeks * 7);
+}
+
+function summarize(benchmark: Benchmark, attempts: BenchmarkAttempt[], retestWeeks: number | null, today: string) {
+  const best = [...attempts].sort(compareAttempts(benchmark))[0] ?? null;
+  const last = attempts.at(-1) ?? null;
+  const actualMax = (reps: number) => [...attempts].filter((a) => a.rep_max === reps && a.load_kg != null)
+    .sort(compareScores("strength"))[0] ?? null;
+  return {
+    ...benchmark, attempts, best, last, retestWeeks, retestDue: retestDue(last?.performed_on ?? null, retestWeeks, today),
+    bestActual: { one: actualMax(1), three: actualMax(3), five: actualMax(5) },
+    trendPoints: attempts.map((a) => ({ date: a.performed_on, time_seconds: a.time_seconds, rounds: a.rounds, reps: a.reps, load_kg: a.load_kg, estimatedOneRmKg: a.estimatedOneRmKg, is_rx: a.is_rx, isPr: a.isPr })),
+  };
+}
+
+async function loadHistory(supabase: Client, athleteId: string) {
+  const [benchmarks, direct, scheduled] = await Promise.all([
+    supabase.from("benchmarks").select("*").order("name"),
+    supabase.from("benchmark_results").select("*").eq("athlete_id", athleteId),
+    supabase.from("workout_results").select("id, performed_on, created_at, time_seconds, rounds, reps, load_kg, is_rx, notes, workouts(title, workout_type, workout_movements(movement_id, reps))").eq("athlete_id", athleteId),
+  ]);
+  for (const r of [benchmarks, direct, scheduled]) if (r.error) throw r.error;
+  return { benchmarks: benchmarks.data ?? [], direct: direct.data ?? [], scheduled: scheduled.data ?? [] };
+}
+
+export async function loadAthleteBenchmarks(supabase: Client, athleteId: string, today: string) {
+  const [history, athlete] = await Promise.all([
+    loadHistory(supabase, athleteId),
+    supabase.from("athletes").select("coach_id").eq("id", athleteId).single(),
+  ]);
+  if (athlete.error) throw athlete.error;
+  const settings = await supabase.from("benchmark_settings").select("benchmark_id, retest_weeks").eq("coach_id", athlete.data.coach_id);
+  if (settings.error) throw settings.error;
+  return history.benchmarks.map((b) => summarize(b, normalizeBenchmarkHistory(b, history.direct, history.scheduled), settings.data.find((s) => s.benchmark_id === b.id)?.retest_weeks ?? null, today));
+}
+
+export type LiftMax = {
+  name: string;
+  movement_id: string;
+  bestLoadKg: number | null;
+  actualOneRmKg: number | null;
+  actualDate: string | null;
+  estimatedOneRmKg: number | null;
+  estimatedReps: number | null;
+  estimatedDate: string | null;
+  oneRmKg: number | null;
+  isEstimated: boolean;
+};
+
+export async function loadLiftMaxes(supabase: Client, athleteId: string): Promise<LiftMax[]> {
+  const history = await loadHistory(supabase, athleteId);
+  const lifts = new Map<string, { name: string; attempts: BenchmarkAttempt[] }>();
+  for (const b of history.benchmarks) {
+    if (b.kind !== "lift" || !b.movement_id) continue;
+    const entry = lifts.get(b.movement_id) ?? { name: b.name, attempts: [] };
+    entry.attempts.push(...normalizeBenchmarkHistory(b, history.direct, history.scheduled));
+    lifts.set(b.movement_id, entry);
+  }
+  return [...lifts].map(([movement_id, { name, attempts }]) => {
+    const actual = attempts.filter((a) => a.rep_max === 1 && a.load_kg != null).sort((a, b) => b.load_kg! - a.load_kg!)[0];
+    const estimated = attempts.filter((a) => a.rep_max !== 1 && a.estimatedOneRmKg != null).sort((a, b) => b.estimatedOneRmKg! - a.estimatedOneRmKg!)[0];
+    const isEstimated = estimated != null && estimated.estimatedOneRmKg! > (actual?.load_kg ?? -Infinity);
+    const loads = attempts.flatMap((a) => a.load_kg == null ? [] : [a.load_kg]);
+    return { name, movement_id, bestLoadKg: loads.length ? Math.max(...loads) : null, actualOneRmKg: actual?.load_kg ?? null, actualDate: actual?.performed_on ?? null,
+      estimatedOneRmKg: estimated?.estimatedOneRmKg ?? null, estimatedReps: estimated?.rep_max ?? null, estimatedDate: estimated?.performed_on ?? null,
+      oneRmKg: isEstimated ? estimated.estimatedOneRmKg : actual?.load_kg ?? null, isEstimated };
+  });
+}

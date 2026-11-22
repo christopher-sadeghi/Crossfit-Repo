@@ -16,6 +16,8 @@ import { feedbackSummary, needsAttention } from "@/lib/feedback";
 import { JOURNAL_COLUMNS, journalSleepSummary, journalYesAnswers } from "@/lib/journal";
 import { getToday } from "@/lib/time-zone";
 import { formatGoalValue, goalProgress, latestMetric } from "@/lib/progress";
+import { loadLiftMaxes } from "@/lib/benchmarks";
+import BenchmarksTab from "./benchmarks-tab";
 import { personalRecords } from "@/lib/results";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatScore, formatWeight, type Units } from "@/lib/units";
@@ -28,7 +30,7 @@ import { GoalBar } from "./progress/goal-bar";
 import { formatHeadline, type WhiteboardWorkout } from "../../programs/workouts/whiteboard";
 import { LEVEL_LABELS } from "../options";
 
-const TABS = ["overview", "check-ins", "workouts", "journal", "nutrition", "goals", "ai"] as const;
+const TABS = ["overview", "check-ins", "workouts", "journal", "nutrition", "goals", "ai", "benchmarks"] as const;
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; checkins?: string }> };
 type ProfileScheduleWorkout = WhiteboardWorkout & {
@@ -56,6 +58,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const scheduleFrom = scheduleFromDate.toISOString().slice(0, 10);
   const scheduleTo = scheduleToDate.toISOString().slice(0, 10);
   const [
+    liftMaxes,
     athleteRes,
     metricsRes,
     resultsRes,
@@ -70,6 +73,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
     journalRes,
     checkInsRes,
   ] = await Promise.all([
+    loadLiftMaxes(supabase, id),
     supabase.from("athletes").select("*").eq("id", id).maybeSingle(),
     supabase.from("body_metrics").select("measured_on, weight_kg, body_fat_pct").eq("athlete_id", id).order("measured_on", { ascending: false }),
     supabase
@@ -197,6 +201,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
           <TabsTrigger value="nutrition">Nutrition</TabsTrigger>
           <TabsTrigger value="goals">Goals</TabsTrigger>
           <TabsTrigger value="ai">AI History</TabsTrigger>
+          <TabsTrigger value="benchmarks">Benchmarks</TabsTrigger>
         </TabsList>
         </div>
 
@@ -386,6 +391,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
           </ListCard>
         </TabsContent>
 
+        <TabsContent value="benchmarks"><BenchmarksTab athleteId={id} units={units} /></TabsContent>
         <TabsContent value="check-ins">
           <CheckInsTab entries={checkIns} today={today} showAll={checkins === "all"} />
         </TabsContent>
@@ -470,7 +476,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
               </TableHeader>
               <TableBody>
                 {goals.map((g) => {
-                  const p = goalProgress(g, { metrics, results });
+                  const p = goalProgress(g, { metrics, results, liftMaxes });
                   return (
                     <TableRow key={g.id}>
                       <TableCell className="pl-4 font-medium">{g.title}</TableCell>

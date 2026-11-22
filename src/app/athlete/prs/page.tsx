@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { personalRecords } from "@/lib/results";
 import { formatDate, formatScore } from "@/lib/units";
 import { getViewer } from "@/lib/viewer";
+import BenchmarksTab from "@/app/(app)/athletes/[id]/benchmarks-tab";
 
 export default async function AthletePersonalRecordsPage() {
   const viewer = await getViewer();
@@ -26,7 +27,9 @@ export default async function AthletePersonalRecordsPage() {
 
   return (
     <div className="grid gap-3">
-      <h1 className="text-xl font-semibold tracking-tight">Personal records</h1>
+      <h1 className="text-xl font-semibold tracking-tight">Benchmarks & personal records</h1>
+      <BenchmarksTab athleteId={viewer.athleteId} units={viewer.units} />
+      <h2 className="mt-4 text-lg font-semibold">Workout personal records</h2>
       {records.length ? (
         records.map((record) => (
           <Card key={record.id}>

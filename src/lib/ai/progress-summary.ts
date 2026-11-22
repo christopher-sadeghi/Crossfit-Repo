@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays } from "@/lib/nutrition";
 import { getToday } from "@/lib/time-zone";
 import { formatGoalValue, goalProgress, TRACKING_LABELS } from "@/lib/progress";
+import { loadLiftMaxes } from "@/lib/benchmarks";
 import type { Database, Json, Tables } from "@/lib/supabase/database.types";
 import { formatDate } from "@/lib/units";
 
@@ -55,6 +56,7 @@ async function buildRequest(supabase: SupabaseClient<Database>, { athleteId }: {
   if (!athleteId) throw new Error("Athlete not found.");
   const asOf = await getToday();
   const [
+    liftMaxes,
     { data: coach, error: coachError },
     { data: athlete, error: athleteError },
     { data: goals, error: goalsError },
@@ -64,6 +66,7 @@ async function buildRequest(supabase: SupabaseClient<Database>, { athleteId }: {
     { data: food, error: foodError },
     training,
   ] = await Promise.all([
+    loadLiftMaxes(supabase, athleteId),
     supabase.from("coaches").select("units").maybeSingle(),
     supabase.from("athletes").select("first_name, experience_level").eq("id", athleteId).maybeSingle(),
     supabase
@@ -101,7 +104,7 @@ async function buildRequest(supabase: SupabaseClient<Database>, { athleteId }: {
   const units = coach.units;
   const allMetrics = metrics ?? [];
   // Newest first, like the progress page, so `latestMetric` picks the newest same-day reading.
-  const progressData = { metrics: [...allMetrics].reverse(), results: results ?? [] };
+  const progressData = { metrics: [...allMetrics].reverse(), results: results ?? [], liftMaxes };
   const goalInputs = (goals ?? []).map((goal) => {
     const progress = goalProgress(goal, progressData);
     const value = (v: number | null) => (v == null ? null : formatGoalValue(Number(v), goal.unit, units));

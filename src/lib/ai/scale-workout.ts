@@ -6,6 +6,8 @@ import { formatScore, fromKgPrecise, toKg, type Units } from "@/lib/units";
 import type { Database, Json, Tables } from "@/lib/supabase/database.types";
 import { loadRecentCheckIns } from "@/lib/check-in";
 import { getToday } from "@/lib/time-zone";
+import { loadLiftMaxes } from "@/lib/benchmarks";
+import { formatLiftMaxes, liftMaxContextSchema, LIFT_LOAD_RULE } from "./lift-context";
 
 import { ApprovalError } from "./errors";
 import { ageOn, loadWorkoutContext } from "./workout-context";
@@ -47,6 +49,7 @@ export const scaleWorkoutInputSchema = z.object({
   units: z.enum(["lb", "kg"]),
   note: z.string().nullable(),
   athlete: z.object({
+    lift_maxes: liftMaxContextSchema.optional(),
     id: z.string().uuid(),
     first_name: z.string(),
     experience_level: z.string(),
@@ -161,6 +164,7 @@ export const scaleWorkoutDetailsSchema = z.object({
 
 const SCALE_WORKOUT_SYSTEM = `You help a CrossFit coach scale a WOD for one athlete. The coach reviews every suggestion before anything changes.
 Rules:
+- ${LIFT_LOAD_RULE}
 - Use recent_check_ins: readiness, sleep, soreness areas, stress, energy and mood. Lower readiness or high soreness means scale down and avoid sore areas.
 - Keep the WOD's stimulus and format.
 - Return exactly one change for each original movement, in the same order. Copy its original_movement_id exactly.
@@ -207,6 +211,7 @@ export async function buildScaleRequest(
 
   const asOf = await getToday();
   const athleteContext = {
+    lift_maxes: formatLiftMaxes(await loadLiftMaxes(supabase, athlete.id), units),
     id: athlete.id,
     first_name: athlete.first_name,
     experience_level: athlete.experience_level,
