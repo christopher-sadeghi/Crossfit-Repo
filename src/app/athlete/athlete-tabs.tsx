@@ -17,6 +17,7 @@ const TABS = [
 
 export function AthleteTabs({ unreadMessages = 0 }: { unreadMessages?: number }) {
   const pathname = usePathname();
+  if (pathname === "/athlete/onboarding") return null;
 
   return (
     <nav

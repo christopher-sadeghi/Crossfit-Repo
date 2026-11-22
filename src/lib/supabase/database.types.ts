@@ -39,6 +39,15 @@ export type Database = {
           { foreignKeyName: "progress_reminders_coach_id_fkey"; columns: ["coach_id"]; isOneToOne: false; referencedRelation: "coaches"; referencedColumns: ["id"] }
         ];
       };
+      athlete_intakes: {
+        Row: { id: string; athlete_id: string; coach_id: string; status: string; current_step: number; answers: Json; requested_at: string; completed_at: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; athlete_id: string; coach_id: string; status?: string; current_step?: number; answers?: Json; requested_at?: string; completed_at?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; athlete_id?: string; coach_id?: string; status?: string; current_step?: number; answers?: Json; requested_at?: string; completed_at?: string | null; created_at?: string; updated_at?: string };
+        Relationships: [
+          { foreignKeyName: "athlete_intakes_athlete_id_coach_id_fkey"; columns: ["athlete_id", "coach_id"]; isOneToOne: true; referencedRelation: "athletes"; referencedColumns: ["id", "coach_id"] },
+          { foreignKeyName: "athlete_intakes_coach_id_fkey"; columns: ["coach_id"]; isOneToOne: false; referencedRelation: "coaches"; referencedColumns: ["id"] },
+        ];
+      };
       messages: {
         Row: { id: string; athlete_id: string; coach_id: string; sender_id: string; body: string; link_type: string | null; link_id: string | null; read_at: string | null; created_at: string };
         Insert: { id?: string; athlete_id: string; coach_id: string; sender_id?: string; body: string; link_type?: string | null; link_id?: string | null; read_at?: string | null; created_at?: string };
@@ -1551,6 +1560,9 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      apply_draft_program: { Args: { p_athlete_id: string; p_program: Json; p_today: string }; Returns: string };
+      save_athlete_intake_step: { Args: { p_athlete_id: string; p_step: number; p_data: Json; p_today: string }; Returns: undefined };
+      request_linked_athlete_intake: { Args: Record<PropertyKey, never>; Returns: unknown };
       athlete_weekly_reports: {
         Args: Record<PropertyKey, never>;
         Returns: { id: string; published_at: string; snapshot: Json; content: Json }[];
@@ -1648,6 +1660,7 @@ export type Database = {
         | "movement_guide"
         | "athlete_adjust_workout"
         | "suggest_food"
+        | "draft_program"
         | "weekly_report";
       weight_unit: "lb" | "kg";
       workout_type: "for_time" | "amrap" | "emom" | "strength" | "other";
@@ -1807,6 +1820,7 @@ export const Constants = {
         "progress_summary",
         "athlete_adjust_workout",
         "suggest_food",
+        "draft_program",
         "weekly_report",
       ],
       weight_unit: ["lb", "kg"],
