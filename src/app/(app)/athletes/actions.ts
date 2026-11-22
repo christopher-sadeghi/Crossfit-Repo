@@ -133,6 +133,14 @@ export async function createAthleteInvite(
   const email = athlete.email?.trim();
   if (!email) return failure(formData, "Add an email to the athlete profile before inviting them.");
 
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user?.email?.trim().toLowerCase() === email.toLowerCase()) {
+    return failure(
+      formData,
+      "You can't invite your own coach login email. Use a different email for this athlete (tip: yourname+athlete@gmail.com goes to the same inbox).",
+    );
+  }
+
   const { data: openInvite, error: openInviteError } = await supabase
     .from("athlete_invites")
     .select("id")
