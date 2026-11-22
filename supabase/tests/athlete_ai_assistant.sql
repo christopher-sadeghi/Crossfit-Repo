@@ -20,6 +20,10 @@ insert into public.athlete_ai_messages(athlete_id,coach_id,role,content)
 values ('44000000-0000-0000-0000-000000000011','44000000-0000-0000-0000-000000000001','user','Help me train');
 do $$ declare n integer; s record; v_id uuid; begin
   assert (select count(*) from public.athlete_ai_messages) = 1;
+  assert exists (
+    select 1 from public.athlete_ai_messages
+    where athlete_id = '44000000-0000-0000-0000-000000000011' and role = 'user' and content = 'Help me train'
+  );
   begin update public.athlete_ai_messages set content = 'hidden'; raise exception 'unauthorized write succeeded'; exception when insufficient_privilege then null; end;
   begin delete from public.athlete_ai_messages; raise exception 'unauthorized write succeeded'; exception when insufficient_privilege then null; end;
   update public.athletes set assistant_rules = 'hacked' where id = '44000000-0000-0000-0000-000000000011';
@@ -27,6 +31,11 @@ do $$ declare n integer; s record; v_id uuid; begin
   select * into strict s from public.athlete_assistant_settings();
   assert s.coach_rules = 'Coach A' and s.athlete_rules = 'Override A1'
     and not s.assistant_nutrition and s.assistant_training and s.assistant_recovery and s.athlete_ai_daily_limit = 17 and s.drift_days = 12;
+  begin
+    insert into public.athlete_ai_messages(athlete_id,coach_id,role,content)
+    values ('44000000-0000-0000-0000-000000000011','44000000-0000-0000-0000-000000000001','assistant','Fake reply');
+    raise exception 'assistant-role insert succeeded';
+  exception when insufficient_privilege then null; end;
   begin insert into public.athlete_ai_messages(athlete_id,coach_id,role,content) values ('44000000-0000-0000-0000-000000000012','44000000-0000-0000-0000-000000000001','user','Other'); raise exception 'unauthorized write succeeded'; exception when insufficient_privilege then null; end;
   begin
     insert into public.athlete_ai_messages(athlete_id,coach_id,role,content) values ('44000000-0000-0000-0000-000000000011','44000000-0000-0000-0000-000000000001','user','');

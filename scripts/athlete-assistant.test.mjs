@@ -88,7 +88,7 @@ test("draft/card schemas accept only bounded, structured unsaved outputs", () =>
 
 function fixture({ count = 0, reservedCount, settings = defaultAssistantSettings, historyError = false, reserveError = false,
   countError = false, notifyError = false, model = "test-model", schedule = [], sdk } = {}) {
-  const events = [], inserted = [], filters = [];
+  const events = [], inserted = [], assistantInserted = [], filters = [];
   let options, responseOptions, counts = 0;
   const supabase = {
     async rpc(name) { assert.equal(name, "athlete_assistant_settings"); return { data: settings ? [settings] : [], error: null }; },
@@ -117,6 +117,17 @@ function fixture({ count = 0, reservedCount, settings = defaultAssistantSettings
       return query;
     },
   };
+  const assistantWriter = {
+    from(table) {
+      assert.equal(table, "athlete_ai_messages");
+      return {
+        insert(row) {
+          assistantInserted.push(row);
+          return Promise.resolve({ data: { id: messageId }, error: null });
+        },
+      };
+    },
+  };
   const fn = load("src/lib/ai/athlete-assistant.ts", {
     ai: { createUIMessageStream: require("ai").createUIMessageStream, createUIMessageStreamResponse: require("ai").createUIMessageStreamResponse,
       isStepCount: sdk?.isStepCount ?? ((n) => n), tool: (t) => t, streamText: (opts) => {
@@ -134,8 +145,10 @@ function fixture({ count = 0, reservedCount, settings = defaultAssistantSettings
     "@/lib/athlete-schedule": { loadAthleteSchedule: async (_, fixedId) => { assert.equal(fixedId, athleteId); return schedule; } },
     "@/lib/notifications": { notify: async (_, input) => { events.push("notify"); assert.equal(input.kind, "assistant_red_flag"); assert.equal(input.athleteId, athleteId); if (notifyError) throw Error("offline"); } },
   });
-  return { events, inserted, filters, get options() { return options; }, get responseOptions() { return responseOptions; },
-    run: (message = "How should I train?") => fn.streamAthleteAssistant(supabase, viewer, message, "2026-11-22", "America/New_York") };
+  return { events, inserted, assistantInserted, filters, get options() { return options; }, get responseOptions() { return responseOptions; },
+    run: (message = "How should I train?") => fn.streamAthleteAssistant(
+      supabase, viewer, message, "2026-11-22", "America/New_York", assistantWriter,
+    ) };
 }
 
 test("stream engine reserves before generation, scopes counts/history, and persists text/cards", async () => {
@@ -144,14 +157,20 @@ test("stream engine reserves before generation, scopes counts/history, and persi
   assert.deepEqual(f.events, ["count", "history", "user", "count", "model"]);
   assert.equal(f.inserted[0].athlete_id, athleteId);
   assert.equal(f.inserted[0].coach_id, coachId);
+  assert.deepEqual(f.inserted.map((row) => row.role), ["user"]);
   assert.equal(f.options.messages.at(-1).role, "user");
   assert.equal(f.options.tools.get_my_training.inputSchema.safeParse({ athlete_id: "other" }).success, false);
   const card = await f.options.tools.draft_coach_message.execute({ body: draft.body, change: draft.change });
   assert.equal(card.kind, "coach_message");
   await f.options.onFinish({ steps: [{ text: "First part" }, { text: "Final answer" }] });
-  assert.equal(f.inserted[1].content, "First part\n\nFinal answer");
-  assert.deepEqual(f.inserted[1].metadata.cards, [card]);
-  assert.deepEqual(f.responseOptions.messageMetadata({ part: { type: "finish" } }), { cards: [card], assistantMessageId: f.inserted[1].id });
+  assert.deepEqual(f.assistantInserted.map((row) => row.role), ["assistant"]);
+  assert.equal(f.assistantInserted[0].athlete_id, athleteId);
+  assert.equal(f.assistantInserted[0].coach_id, coachId);
+  assert.equal(f.assistantInserted[0].content, "First part\n\nFinal answer");
+  assert.deepEqual(f.assistantInserted[0].metadata.cards, [card]);
+  assert.deepEqual(f.responseOptions.messageMetadata({ part: { type: "finish" } }), {
+    cards: [card], assistantMessageId: f.assistantInserted[0].id,
+  });
   assert.ok(f.filters.some((row) => row.join() === "athlete_ai_messages,eq,athlete_id," + athleteId));
   assert.ok(f.filters.some((row) => row.join() === "athlete_ai_messages,gte,created_at,2026-11-22T05:00:00.000Z"));
   assert.ok(f.filters.some((row) => row.join() === "athlete_ai_messages,lt,created_at,2026-11-23T05:00:00.000Z"));
@@ -184,14 +203,16 @@ test("red flags over quota persist safety replies without a model, including quo
       assert.equal(text.includes("emergency services"), message === "chest pain");
       assert.ok(!f.events.includes("model"));
       assert.equal(f.events.filter((event) => event === "notify").length, 1);
-      assert.equal(f.inserted.length, 2);
+      assert.equal(f.inserted.length, 1);
+      assert.equal(f.assistantInserted.length, 1);
       assert.equal(f.inserted[0].role, "user");
       assert.equal(f.inserted[0].content, message);
       assert.equal(f.inserted[0].red_flag, true);
-      assert.equal(f.inserted[1].content, text);
-      assert.equal(f.inserted[1].metadata.source_message_id, messageId);
-      assert.equal(f.inserted[1].red_flag, true);
-      assert.equal(last.metadata.assistantMessageId, f.inserted[1].id);
+      assert.equal(f.assistantInserted[0].role, "assistant");
+      assert.equal(f.assistantInserted[0].content, text);
+      assert.equal(f.assistantInserted[0].metadata.source_message_id, messageId);
+      assert.equal(f.assistantInserted[0].red_flag, true);
+      assert.equal(last.metadata.assistantMessageId, f.assistantInserted[0].id);
     }
   }
   const failed = fixture({ count: 25, reserveError: true });
@@ -209,8 +230,9 @@ test("notification failure never breaks an under-quota red-flag chat", async () 
   assert.equal(card.change, undefined);
   await f.options.onError({ error: Error("provider") });
   await f.options.onFinish({ steps: [{ text: "Partial" }] });
-  assert.equal(f.inserted.length, 2);
-  assert.equal(f.inserted[1].content, "Friendly error");
+  assert.equal(f.inserted.length, 1);
+  assert.equal(f.assistantInserted.length, 1);
+  assert.equal(f.assistantInserted[0].content, "Friendly error");
 });
 
 test("tools return only unsaved own-schedule handoffs and bounded activity/movement results", async () => {
@@ -359,13 +381,27 @@ test("edited coach draft uses FIT-29 first, then registry/reservation with own i
 
 test("route rejects non-athletes and forged identities before streaming", async () => {
   let runs = 0;
+  let adminClients = 0;
+  let adminError = false;
   let currentViewer = null;
+  let streamedArgs;
+  const athleteClient = {};
+  const assistantWriter = {};
   const { POST } = load("src/app/api/athlete-assistant/route.ts", {
     "@/lib/viewer": { getViewer: async () => currentViewer },
-    "@/lib/supabase/server": { createClient: async () => ({}) },
+    "@/lib/supabase/server": { createClient: async () => athleteClient },
+    "@/lib/supabase/admin": { createAdminClient: () => {
+      adminClients++;
+      if (adminError) throw new Error("missing service-role key");
+      return assistantWriter;
+    } },
     "@/lib/time-zone": { getToday: async () => "2026-11-22", getTimeZone: async () => "UTC" },
     "@/lib/ai/chat": { FRIENDLY_ERROR: "Friendly error" },
-    "@/lib/ai/athlete-assistant": { streamAthleteAssistant: async () => { runs++; return new Response("stream"); } },
+    "@/lib/ai/athlete-assistant": { streamAthleteAssistant: async (...args) => {
+      runs++;
+      streamedArgs = args;
+      return new Response("stream");
+    } },
   });
   const request = (body) => new Request("http://localhost/api/athlete-assistant", { method: "POST", body });
   assert.equal((await POST(request('{"message":"hi"}'))).status, 403);
@@ -375,6 +411,12 @@ test("route rejects non-athletes and forged identities before streaming", async 
   assert.equal((await POST(request('{"message":"hi","athlete_id":"other"}'))).status, 400);
   assert.equal(runs, 0);
   assert.equal((await POST(request('{"message":"hi"}'))).status, 200);
+  assert.equal(runs, 1);
+  assert.equal(adminClients, 1);
+  assert.equal(streamedArgs[0], athleteClient);
+  assert.equal(streamedArgs[5], assistantWriter);
+  adminError = true;
+  assert.equal((await POST(request('{"message":"hi"}'))).status, 503);
   assert.equal(runs, 1);
 });
 
@@ -412,8 +454,8 @@ test("installed AI SDK transports parse the real UI message SSE stream without R
   for await (const message of sdk.readUIMessageStream({ stream, terminateOnError: true })) last = message;
   assert.equal(last.parts.find((part) => part.type === "text").text, "Hello athlete");
   assert.deepEqual(last.metadata.cards, []);
-  assert.equal(last.metadata.assistantMessageId, f.inserted[1].id);
-  assert.equal(f.inserted[1].content, "Hello athlete");
+  assert.equal(last.metadata.assistantMessageId, f.assistantInserted[0].id);
+  assert.equal(f.assistantInserted[0].content, "Hello athlete");
 });
 
 test("coach transcript and settings actions guard roles, validate inputs and scope reads/writes", async () => {

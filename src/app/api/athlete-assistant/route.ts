@@ -2,6 +2,7 @@ import { z } from "zod";
 import { streamAthleteAssistant } from "@/lib/ai/athlete-assistant";
 import { assistantMessageSchema } from "@/lib/ai/assistant-schema";
 import { FRIENDLY_ERROR } from "@/lib/ai/chat";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getToday, getTimeZone } from "@/lib/time-zone";
 import { getViewer } from "@/lib/viewer";
@@ -23,7 +24,8 @@ export async function POST(request: Request) {
   if (!parsed.success) return Response.json({ error: "Enter a message between 1 and 2000 characters." }, { status: 400 });
   try {
     const [supabase, today, timeZone] = await Promise.all([createClient(), getToday(), getTimeZone()]);
-    return await streamAthleteAssistant(supabase, viewer, parsed.data.message, today, timeZone);
+    const assistantWriter = createAdminClient();
+    return await streamAthleteAssistant(supabase, viewer, parsed.data.message, today, timeZone, assistantWriter);
   } catch {
     return Response.json({ error: FRIENDLY_ERROR }, { status: 503 });
   }
