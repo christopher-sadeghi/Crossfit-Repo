@@ -116,7 +116,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
       .eq("athlete_id", id)
       .lte("entry_on", today)
       .order("entry_on", { ascending: false })
-      .limit(365),
+      .limit(checkins === "all" ? 10_000 : 365),
   ]);
 
   const athlete = athleteRes.data;
