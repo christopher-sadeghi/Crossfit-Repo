@@ -233,6 +233,35 @@ test("shared athlete context omits coach notes only for athlete callers", async 
   assert.equal(coach.coach_notes, "private coach note");
 });
 
+test("athlete scaling requests include schema-valid null notes without leaking coach-private notes", async () => {
+  const workoutContext = load("src/lib/ai/workout-context.ts");
+  const { buildScaleRequest, scaleWorkoutInputSchema } = load("src/lib/ai/scale-workout.ts", {
+    "./workout-context": { ...workoutContext, loadWorkoutContext: async () => ({ units: "lb", library: [] }) },
+    "@/lib/time-zone": { getToday: async () => "2026-11-22" },
+    "@/lib/check-in": { loadRecentCheckIns: async () => [] },
+    "@/lib/benchmarks": { loadLiftMaxes: async () => [] },
+    "./athlete-context": { trainingLoadContext: async () => ({}) },
+  });
+  let missing = false;
+  const client = { from(table) {
+    const data = table === "athletes" ? missing ? null : { id: athleteId, first_name: "Sam", experience_level: "beginner",
+      injuries: null, notes: "Private coach assessment", sex: null, birth_date: null }
+      : table === "workouts" ? { id: messageId, updated_at: "2026-11-22T00:00:00Z", title: "WOD",
+        workout_type: "amrap", time_cap_seconds: null, rounds: null, description: null, notes: null, workout_movements: [] } : [];
+    const q = { select: () => q, eq: () => q, order: () => q, limit: () => q,
+      maybeSingle: async () => ({ data, error: null }), then: (resolve) => resolve({ data, error: null }) };
+    return q;
+  } };
+  for (const athleteFacing of [true, false]) {
+    const request = await buildScaleRequest(client, { athleteId, workoutId: messageId,
+      ...(athleteFacing ? { session: { units: "lb", athleteFacing: true } } : {}) });
+    assert.equal(scaleWorkoutInputSchema.parse(request.input).athlete.notes, athleteFacing ? null : "Private coach assessment");
+    assert.equal(request.prompt.includes("Private coach assessment"), !athleteFacing);
+  }
+  missing = true;
+  await assert.rejects(buildScaleRequest(client, { athleteId, workoutId: messageId }), /Athlete not found/);
+});
+
 test("edited coach draft uses FIT-29 first, then registry/reservation with own identity and sent source", async () => {
   for (const mode of ["success", "coach", "invalid-link", "send-failed", "suggestion-failed", "already-sent", "missing-card"]) {
     const events = [];

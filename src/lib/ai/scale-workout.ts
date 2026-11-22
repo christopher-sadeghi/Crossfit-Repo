@@ -184,7 +184,7 @@ export async function buildScaleRequest(
     first_name: athlete.first_name,
     experience_level: athlete.experience_level,
     injuries: athlete.injuries,
-    ...(params.session?.athleteFacing ? {} : { notes: athlete.notes }),
+    notes: params.session?.athleteFacing ? null : athlete.notes,
     sex: athlete.sex,
     birth_date: athlete.birth_date,
     age: athlete.birth_date ? ageOn(athlete.birth_date, asOf) : null,
