@@ -47,8 +47,6 @@ export async function loadDemoDataWithClipCleanup(supabase, reset) {
  * @param {string} coachId
  */
 export async function removeProgressPhotos(supabase, coachId) {
-  const { error: rowError } = await supabase.from("progress_photos").delete().eq("coach_id", coachId);
-  if (rowError) return rowError;
   const bucket = supabase.storage.from("progress-photos");
   /** @type {string[]} */
   const prefixes = [];
@@ -62,16 +60,22 @@ export async function removeProgressPhotos(supabase, coachId) {
     }
     if (folders.length < PAGE_SIZE) break;
   }
+  /** @type {string[]} */
+  const paths = [];
   for (const prefix of prefixes) {
-    for (;;) {
+    for (let offset = 0; ; offset += PAGE_SIZE) {
       const { data: files, error: listError } = await bucket.list(prefix, {
-        limit: PAGE_SIZE, sortBy: { column: "name", order: "asc" },
+        limit: PAGE_SIZE, offset, sortBy: { column: "name", order: "asc" },
       });
       if (listError) return listError;
-      if (!files.length) break;
-      const { error: removeError } = await bucket.remove(files.map((file) => `${prefix}/${file.name}`));
-      if (removeError) return removeError;
+      paths.push(...files.map((file) => `${prefix}/${file.name}`));
+      if (files.length < PAGE_SIZE) break;
     }
   }
-  return null;
+  for (let offset = 0; offset < paths.length; offset += PAGE_SIZE) {
+    const { error } = await bucket.remove(paths.slice(offset, offset + PAGE_SIZE));
+    if (error) return error;
+  }
+  const { error } = await supabase.from("progress_photos").delete().eq("coach_id", coachId);
+  return error;
 }

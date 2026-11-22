@@ -12,7 +12,7 @@ const photoRows = { from: (table) => {
   } }) };
 } };
 
-test("photo cleanup drains paged files and collects all folders before removing any", async () => {
+test("photo cleanup collects every page of folders and files before removing any", async () => {
   const folders = Array.from({ length: 101 }, (_, n) => ({ name: String(n) }));
   const files = new Map(folders.map(({ name }) => [`coach/${name}`, Array.from({ length: 101 }, (_, n) => ({ name: `${n}.jpg` }))]));
   let lists = 0;
@@ -21,12 +21,13 @@ test("photo cleanup drains paged files and collects all folders before removing 
     assert.equal(bucket, "progress-photos");
     return {
       list: async (prefix, options) => {
+        assert.equal(removals, 0);
         if (prefix === "coach") {
           lists++;
           assert.equal(removals, 0);
           return { data: folders.slice(options.offset, options.offset + options.limit), error: null };
         }
-        return { data: files.get(prefix).slice(0, options.limit), error: null };
+        return { data: files.get(prefix).slice(options.offset, options.offset + options.limit), error: null };
       },
       remove: async (paths) => {
         removals++;
@@ -40,7 +41,7 @@ test("photo cleanup drains paged files and collects all folders before removing 
   } } };
   assert.equal(await removeProgressPhotos(client, "coach"), null);
   assert.equal(lists, 2);
-  assert.equal(removals, 202);
+  assert.equal(removals, 103);
   assert.equal([...files.values()].flat().length, 0);
 });
 
@@ -56,7 +57,7 @@ for (const stage of ["folders", "files", "remove"]) {
   test(`photo cleanup ${stage} failure prevents demo reset RPC`, async () => {
     const error = { message: `${stage} failed` };
     const client = {
-      ...photoRows,
+      from: () => assert.fail("failed file cleanup must leave rows untouched"),
       auth: { getClaims: async () => ({ data: { claims: { sub: "coach" } } }) },
       rpc: () => assert.fail("failed cleanup must not delete athletes"),
       storage: { from: () => ({
@@ -82,23 +83,36 @@ test("failed reset RPC never leaves photo rows pointing at removed files", async
     } }) } : { select() { return this; }, eq() { return this; }, not() { return this; }, order() { return this; }, range: async () => ({ data: [], error: null }) },
     storage: { from: () => ({
       list: async (prefix) => ({ data: prefix === "coach" ? [{ name: "athlete" }] : files.map(() => ({ name: "photo.jpg" })), error: null }),
-      remove: async () => { assert.deepEqual(rows, []); events.push("files"); files = []; return { error: null }; },
+      remove: async () => { assert.equal(rows.length, 1); events.push("files"); files = []; return { error: null }; },
     }) },
     rpc: async () => { events.push("rpc"); return { data: null, error: rpcError }; },
   };
   assert.equal((await loadDemoDataWithClipCleanup(client, true)).error, rpcError);
-  assert.deepEqual(events, ["rows", "files", "rpc"]);
+  assert.deepEqual(events, ["files", "rows", "rpc"]);
   assert.deepEqual(rows, []);
   assert.deepEqual(files, []);
 });
 
-test("row deletion failure leaves files untouched and prevents reset", async () => {
+test("row deletion failure is reported and prevents reset", async () => {
   const error = { message: "row delete failed" };
   const client = {
     auth: { getClaims: async () => ({ data: { claims: { sub: "coach" } } }) },
     from: () => ({ delete: () => ({ eq: async () => ({ error }) }) }),
-    storage: { from: () => assert.fail("files must remain intact") },
+    storage: { from: () => ({ list: async () => ({ data: [], error: null }) }) },
     rpc: () => assert.fail("reset must not run"),
   };
   assert.equal((await loadDemoDataWithClipCleanup(client, true)).error, error);
+});
+
+test("listing a later athlete folder fails without deleting any rows or files", async () => {
+  const error = { message: "listing failed" };
+  const client = {
+    from: () => assert.fail("listing failure must preserve rows"),
+    storage: { from: () => ({
+      list: async (prefix) => prefix === "coach" ? { data: [{ name: "first" }, { name: "second" }], error: null }
+        : prefix === "coach/first" ? { data: [{ name: "photo.jpg" }], error: null } : { data: null, error },
+      remove: () => assert.fail("listing failure must preserve files"),
+    }) },
+  };
+  assert.equal(await removeProgressPhotos(client, "coach"), error);
 });
