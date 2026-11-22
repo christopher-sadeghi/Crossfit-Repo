@@ -69,6 +69,7 @@ function clientFixture(tables = {}, options = {}) {
         update: (value) => { operation = "update"; values = value; return query; },
         delete: () => { operation = "delete"; return query; },
         maybeSingle: async () => { const result = resolve(); return { ...result, data: result.data[0] ?? null }; },
+        single: async () => { const result = resolve(); return { ...result, data: result.data[0] ?? null }; },
         then: (done, reject) => Promise.resolve().then(resolve).then(done, reject),
       };
       return query;
@@ -237,7 +238,7 @@ test("AI adjustment notifies for applied and persisted pain paths, not unpersist
   }
 });
 
-test("all athlete-specific calendar mutations notify after writes, with dates for moves/adds; group additions skip", async () => {
+test("calendar mutations notify after writes except opening the editor; group additions skip", async () => {
   for (const name of ["editWorkoutForAthlete", "removeWorkoutForAthlete", "restoreWorkoutForAthlete", "moveAthleteWorkout", "deleteAthleteWorkout"]) {
     for (const failed of [false, true]) {
       const { load, events } = actionHarness({ workouts: [{ id: itemId, athlete_id: athleteId, program_id: null }] }, failed ? { writeError: new Error("denied") } : {});
@@ -245,8 +246,8 @@ test("all athlete-specific calendar mutations notify after writes, with dates fo
       if (name === "editWorkoutForAthlete" && !failed) await assert.rejects(action(athleteId, itemId, date), /redirect:/);
       else await action(athleteId, itemId, date);
       const notifications = events.filter(([kind]) => kind === "notification");
-      assert.equal(notifications.length, failed ? 0 : 1, name);
-      if (!failed) { assert.notEqual(events[0][0], "notification"); if (name === "moveAthleteWorkout") assert.equal(notifications[0][3].date, date); }
+      assert.equal(notifications.length, failed || name === "editWorkoutForAthlete" ? 0 : 1, name);
+      if (notifications.length) { assert.notEqual(events[0][0], "notification"); if (name === "moveAthleteWorkout") assert.equal(notifications[0][3].date, date); }
     }
   }
   for (const options of [{}, { writeError: new Error("denied") }]) {
@@ -258,6 +259,26 @@ test("all athlete-specific calendar mutations notify after writes, with dates fo
     const { load, events } = actionHarness({ program_assignments: [{ athlete_id: athleteId, program_id: itemId, start_date: date, programs: { athlete_id: personal ? athleteId : null, weeks: 1 } }] });
     await load("src/app/(app)/athletes/[id]/calendar-actions.ts").addExistingWorkoutForAthlete({}, form({ athlete_id: athleteId, workout_id: itemId, date, destination: itemId }));
     assert.equal(events.filter(([kind]) => kind === "notification").length, personal ? 1 : 0);
+  }
+});
+
+test("saving athlete-specific WODs notifies only after workout and movements succeed; group and missing workouts skip", async () => {
+  for (const mode of ["edit", "create", "group", "missing", "failed"]) {
+    const { load, events } = actionHarness({ workouts: mode === "missing" ? [] : [{ id: itemId, athlete_id: mode === "group" ? null : athleteId }], athletes: [{ id: athleteId }] }, mode === "failed" ? { writeError: new Error("denied") } : {});
+    const data = form({
+      title: "Fran", workout_type: "for_time", description: "", notes: "", scheduled_on: date,
+      ...(mode === "create" ? { athlete_id: athleteId } : { id: itemId }),
+      movements: JSON.stringify([{ movement_id: itemId, sets: null, reps: 21, load_kg: null, distance_m: null, calories: null, duration_seconds: null, notes: null }]),
+    });
+    const save = load("src/app/(app)/programs/workouts/actions.ts").saveWorkout({}, data);
+    if (["edit", "create", "group"].includes(mode)) await assert.rejects(save, /redirect:/);
+    else assert.ok((await save).error);
+    const notifications = events.filter(([kind]) => kind === "notification");
+    assert.equal(notifications.length, ["edit", "create"].includes(mode) ? 1 : 0, mode);
+    if (notifications.length) {
+      assert.deepEqual(notifications[0], ["notification", "notifyScheduleChanged", athleteId, { action: mode === "edit" ? "updated" : "added", date }]);
+      assert.ok(events.findIndex(([kind, table]) => kind === "insert" && table === "workout_movements") < events.indexOf(notifications[0]));
+    }
   }
 });
 

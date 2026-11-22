@@ -24,7 +24,7 @@ async function override(athleteId: string, workoutId: string, mode: "edit" | "re
     p_athlete_id: athleteId, p_workout_id: workoutId, p_mode: mode,
   });
   if (error) return { error: error.message };
-  await notifyScheduleChanged(supabase, athleteId, { action: mode === "edit" ? "updated" : "removed" });
+  if (mode === "remove") await notifyScheduleChanged(supabase, athleteId, { action: "removed" });
   revalidatePath(`/athletes/${athleteId}`);
   if (mode === "edit" && data) redirect(`/programs/workouts/${data}/edit`);
   return { message: "WOD removed for this athlete." };
