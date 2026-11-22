@@ -8,13 +8,15 @@ import { approveSuggestionWithClient, rejectSuggestionWithClient } from "@/lib/a
 import { runSuggestion } from "@/lib/ai/service";
 import { progressSummarySchema } from "@/lib/ai/progress-summary";
 import { SUGGESTION_REGISTRY } from "@/lib/ai/suggestions";
+import { ApprovalError } from "@/lib/ai/errors";
+import { draftProgramSchema } from "@/lib/ai/draft-program-schema";
 import type { SuggestionApplyOptions } from "@/lib/ai/suggestions";
 import { failure, type FormState } from "@/lib/auth/form-state";
 import type { Enums } from "@/lib/supabase/database.types";
 import { createClient } from "@/lib/supabase/server";
 
 const idSchema = z.string().uuid();
-const typeSchema = z.enum(["write_workout", "scale_workout", "adjust_macros", "progress_summary"]);
+const typeSchema = z.enum(["write_workout", "scale_workout", "adjust_macros", "progress_summary", "draft_program"]);
 
 function revalidateSuggestion(id: string, athleteId?: string | null) {
   revalidatePath("/suggestions");
@@ -26,7 +28,7 @@ function revalidateSuggestion(id: string, athleteId?: string | null) {
   }
 }
 
-export async function requestSuggestion(type: Enums<"suggestion_type">, athleteId: string): Promise<FormState> {
+export async function requestSuggestion(type: Enums<"suggestion_type">, athleteId: string, inline = false): Promise<FormState & { suggestionId?: string }> {
   const parsedType = typeSchema.safeParse(type);
   const parsedAthleteId = idSchema.safeParse(athleteId);
   if (!parsedType.success || !parsedAthleteId.success) return { error: "Couldn't request an AI suggestion. Please try again." };
@@ -47,12 +49,14 @@ export async function requestSuggestion(type: Enums<"suggestion_type">, athleteI
       generationSchema,
       validate: entry.validate,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof ApprovalError) return { error: error.message };
     return { error: "The AI couldn't make a suggestion right now. Please try again in a minute." };
   }
   if ("error" in result) return { error: result.error };
 
   revalidatePath("/suggestions");
+  if (inline) return { message: "Suggestion ready for your review. Nothing has been applied.", suggestionId: result.id };
   redirect(`/suggestions/${result.id}`);
 }
 
@@ -112,7 +116,13 @@ export async function approveSuggestion(_: FormState, formData: FormData): Promi
   const isSummary = suggestion.suggestion_type === "progress_summary";
   let finalInput: unknown;
   let applyOptions: SuggestionApplyOptions | undefined;
-  if (isSummary) {
+  if (suggestion.suggestion_type === "draft_program") {
+    const proposal = draftProgramSchema.safeParse(suggestion.proposal);
+    if (!proposal.success) return failure(formData, "This draft is invalid. Request a new draft.");
+    const final = draftProgramSchema.safeParse({ ...proposal.data, name: formData.get("name"), start_date: formData.get("start_date") });
+    if (!final.success) return failure(formData, final.error.issues[0]?.message ?? "Check program name and start date.");
+    finalInput = final.data;
+  } else if (isSummary) {
     const proposal = progressSummarySchema.safeParse(suggestion.proposal);
     if (!proposal.success) return failure(formData, "Couldn't save this summary. Please ask for a new one.");
     const final = progressSummarySchema.safeParse({ ...proposal.data, summary: formData.get("summary") });
@@ -143,6 +153,11 @@ export async function approveSuggestion(_: FormState, formData: FormData): Promi
   if ("error" in result) return failure(formData, result.error);
 
   revalidateSuggestion(suggestion.id, suggestion.athlete_id);
+  if (suggestion.suggestion_type === "draft_program") {
+    revalidatePath("/programs");
+    revalidatePath("/athlete", "layout");
+    return { message: "Personal program created and assigned to this athlete." };
+  }
   if (isWorkout) {
     revalidatePath("/programs/workouts");
     const { data: savedSuggestion } = await supabase

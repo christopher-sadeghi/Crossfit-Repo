@@ -119,3 +119,57 @@ begin
 end $$;
 revoke all on function public.save_athlete_intake_step(uuid, integer, jsonb, date) from public, anon, authenticated;
 grant execute on function public.save_athlete_intake_step(uuid, integer, jsonb, date) to authenticated;
+
+create function public.apply_draft_program(p_athlete_id uuid, p_program jsonb, p_today date)
+returns uuid language plpgsql security invoker set search_path = '' as $$
+declare
+  v_coach uuid := auth.uid();
+  v_days integer;
+  v_program uuid;
+  v_workout uuid;
+  v_week jsonb;
+  v_day jsonb;
+  v_movement jsonb;
+  v_position integer;
+  v_start date := (p_program->>'start_date')::date;
+begin
+  if v_coach is null or not exists (select 1 from public.athletes where id = p_athlete_id and coach_id = v_coach and status = 'active') then
+    raise exception 'athlete_unavailable' using errcode = '42501';
+  end if;
+  select (answers->>'days_per_week')::integer into v_days from public.athlete_intakes
+    where athlete_id = p_athlete_id and coach_id = v_coach and status = 'completed' for share;
+  if v_days is null or v_days not between 1 and 7 then raise exception 'intake_changed'; end if;
+  if p_today is null or v_start is null or v_start < p_today then raise exception 'invalid_start_date'; end if;
+  if jsonb_typeof(p_program->'weeks') is distinct from 'array' or jsonb_array_length(p_program->'weeks') <> 4 then raise exception 'invalid_schedule'; end if;
+  if (select count(distinct (w->>'week_number')::integer) from jsonb_array_elements(p_program->'weeks') w) <> 4 then raise exception 'invalid_schedule'; end if;
+  insert into public.programs(coach_id, athlete_id, source_program_id, name, description, weeks)
+    values (v_coach, p_athlete_id, null, p_program->>'name', p_program->>'rationale', 4) returning id into v_program;
+  for v_week in select * from jsonb_array_elements(p_program->'weeks') loop
+    if (v_week->>'week_number')::integer not between 1 and 4
+      or jsonb_array_length(v_week->'workouts') <> v_days
+      or (select count(distinct (d->>'day_number')::integer) from jsonb_array_elements(v_week->'workouts') d) <> v_days then
+      raise exception 'invalid_schedule';
+    end if;
+    for v_day in select * from jsonb_array_elements(v_week->'workouts') loop
+      if (v_day->>'day_number')::integer not between 1 and 7 then raise exception 'invalid_schedule'; end if;
+      insert into public.workouts(coach_id, program_id, title, workout_type, week_number, day_number, time_cap_seconds, rounds, description, notes)
+        values (v_coach, v_program, v_day->>'title', (v_day->>'workout_type')::public.workout_type,
+          (v_week->>'week_number')::integer, (v_day->>'day_number')::integer,
+          (v_day->>'time_cap_minutes')::integer * 60, (v_day->>'rounds')::integer, v_day->>'description', v_day->>'notes') returning id into v_workout;
+      if jsonb_typeof(v_day->'movements') is distinct from 'array' or jsonb_array_length(v_day->'movements') not between 1 and 15 then raise exception 'invalid_movements'; end if;
+      v_position := 0;
+      for v_movement in select * from jsonb_array_elements(v_day->'movements') loop
+        if not exists (select 1 from public.movements where id = (v_movement->>'movement_id')::uuid and (coach_id is null or coach_id = v_coach)) then raise exception 'unknown_movement'; end if;
+        v_position := v_position + 1;
+        insert into public.workout_movements(coach_id, workout_id, movement_id, position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes)
+          values (v_coach, v_workout, (v_movement->>'movement_id')::uuid, v_position,
+            (v_movement->>'sets')::integer, (v_movement->>'reps')::integer, (v_movement->>'load_kg')::numeric,
+            (v_movement->>'distance_m')::numeric, (v_movement->>'calories')::integer, (v_movement->>'duration_seconds')::integer, v_movement->>'notes');
+      end loop;
+    end loop;
+  end loop;
+  insert into public.program_assignments(coach_id, program_id, athlete_id, start_date) values (v_coach, v_program, p_athlete_id, v_start);
+  return v_program;
+end $$;
+revoke all on function public.apply_draft_program(uuid, jsonb, date) from public, anon, authenticated;
+grant execute on function public.apply_draft_program(uuid, jsonb, date) to authenticated;

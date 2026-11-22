@@ -1348,6 +1348,7 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      apply_draft_program: { Args: { p_athlete_id: string; p_program: Json; p_today: string }; Returns: string };
       save_athlete_intake_step: { Args: { p_athlete_id: string; p_step: number; p_data: Json; p_today: string }; Returns: undefined };
       request_linked_athlete_intake: { Args: Record<PropertyKey, never>; Returns: unknown };
       copy_workout_for_athlete: { Args: { p_workout_id: string; p_athlete_id: string; p_scheduled_on: string }; Returns: string };

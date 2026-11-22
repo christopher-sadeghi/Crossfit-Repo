@@ -25,6 +25,7 @@ import { foodAverages, trainingVolume, weightTrend } from "./athlete-context";
 import { progressSummaryEntry } from "./progress-summary";
 import { athleteAdjustSchema } from "./athlete-adjust-schema";
 import { suggestFoodEntry } from "./suggest-food";
+import { draftProgramEntry } from "./draft-program";
 
 export { ApprovalError } from "./errors";
 
@@ -167,6 +168,7 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
     { data: weights, error: weightsError },
     { data: goals, error: goalsError },
     training,
+    { data: intake, error: intakeError },
   ] = await Promise.all([
     supabase
       .from("athletes")
@@ -201,6 +203,7 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
       .eq("athlete_id", athleteId)
       .eq("status", "active"),
     trainingVolume(supabase, athleteId, asOf),
+    supabase.from("athlete_intakes").select("answers, status").eq("athlete_id", athleteId).maybeSingle(),
   ]);
 
   if (athleteError || !athlete) throw athleteError ?? new Error("Athlete not found.");
@@ -208,6 +211,7 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
   if (foodError) throw foodError;
   if (weightsError) throw weightsError;
   if (goalsError) throw goalsError;
+  if (intakeError) throw intakeError;
 
   const input = {
     athlete: {
@@ -224,6 +228,7 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
     body_weight_kg_last_8_weeks: (weights ?? []).map((row) => ({ date: row.measured_on, kg: row.weight_kg })),
     training_last_4_weeks: training,
     active_goals: goals ?? [],
+    intake: intake ? { status: intake.status, answers: intake.answers } : null,
   } satisfies Json;
 
   return {
@@ -452,7 +457,7 @@ async function applyMacroSuggestion(
 }
 
 export const SUGGESTION_REGISTRY: Record<Enums<"suggestion_type">, SuggestionEntry> = {
-  draft_program: { label: SUGGESTION_LABELS.draft_program, proposalSchema: z.never() },
+  draft_program: draftProgramEntry,
   movement_guide: movementGuideEntry,
   write_workout: {
     label: SUGGESTION_LABELS.write_workout,

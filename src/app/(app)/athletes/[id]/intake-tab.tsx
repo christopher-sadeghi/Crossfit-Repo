@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCoach } from "@/lib/coach";
 import { cookingLabel, DIET_LABELS, readPreferences } from "@/lib/food-preferences";
 import { formatScore, formatWeight, type Units } from "@/lib/units";
+import { RequestIntakeAiForm } from "@/components/suggestions/suggestion-forms";
 
 async function requestIntake(athleteId: string) {
   "use server";
@@ -60,7 +61,7 @@ export async function IntakeTab({ athleteId, units }: { athleteId: string; units
       <dl className="grid gap-4 sm:grid-cols-2">{Object.entries(details).map(([label, value]) => <div key={label}><dt className="text-sm font-medium capitalize">{label}</dt><dd className="whitespace-pre-wrap break-words text-sm text-muted-foreground">{display(value)}</dd></div>)}</dl>
       <div><h3 className="font-medium">Intake goals</h3>{goals.data?.filter((g) => Array.isArray(answers.goal_ids) && answers.goal_ids.includes(g.id)).map((g) => <p className="text-sm" key={g.id}>{g.title}{g.target_value == null ? "" : ` · ${g.target_value}`}{g.target_date ? ` · by ${g.target_date}` : ""}</p>)}</div>
       <div><h3 className="font-medium">Known 1RMs & benchmarks</h3>{results.data?.filter((r) => Array.isArray(answers.benchmark_result_ids) && answers.benchmark_result_ids.includes(r.id)).map((r) => <p className="text-sm" key={r.id}>{r.benchmarks?.name}: {formatScore(r, units)}</p>)}</div>
-      <div className="flex flex-wrap gap-3 rounded-lg border border-dashed p-4"><Button disabled>Draft first 4 weeks — coming soon</Button><Button disabled variant="outline">Suggest starting macros — coming soon</Button></div>
+      <div className="grid gap-4 rounded-lg border p-4 sm:grid-cols-2"><RequestIntakeAiForm athleteId={athleteId} type="draft_program" label="Draft first 4 weeks" /><RequestIntakeAiForm athleteId={athleteId} type="adjust_macros" label="Suggest starting macros" /></div>
     </>}
   </CardContent></Card>;
 }
