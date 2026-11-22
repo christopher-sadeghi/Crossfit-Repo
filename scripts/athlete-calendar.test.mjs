@@ -187,6 +187,6 @@ test("calendar renders Logged for matching results on any date, including today'
   }
   assert.doesNotMatch(render("2026-12-01", [], true), /<span>Not logged<\/span>/);
   assert.match(render(today, []), /Trail walk.*Outside · 45 min/);
-  assert.match(render(today, []), /tab=load&amp;date=2026-12-02#log-activity/);
-  assert.doesNotMatch(render(today, []), /tab=load&amp;date=2026-12-03/);
+  assert.match(render(today, []), /tab=workouts&amp;week=2026-11-30&amp;date=2026-12-02#calendar-log-activity/);
+  assert.doesNotMatch(render(today, []), /date=2026-12-03#calendar-log-activity/);
 });

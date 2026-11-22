@@ -175,7 +175,7 @@ export function AthleteCalendar(props: Props) {
                 <span className="text-muted-foreground">Outside · {activity.duration_minutes} min</span>
               </div>
             ))}
-            {date <= today && <Link className="w-fit underline underline-offset-2" href={`?tab=load&date=${date}#log-activity`}>Log activity</Link>}
+            {date <= today && <Link className="w-fit underline underline-offset-2" href={`?tab=workouts&week=${weekStart}&date=${date}#calendar-log-activity`}>Log activity</Link>}
             {!dayItems.length && <p className="py-2 text-muted-foreground">No WODs</p>}
           </div>;
         })}

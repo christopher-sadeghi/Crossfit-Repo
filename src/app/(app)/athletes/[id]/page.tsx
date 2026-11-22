@@ -3,8 +3,9 @@ import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Pencil } from "lucide-react";
 import { z } from "zod";
 
-import { Badge } from "@/components/ui/badge";
+import { ActivityForm } from "@/components/activity-form";
 import { ActivityList } from "@/components/activity-list";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -65,6 +66,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const weekStart = monday(parsedWeek.success ? parsedWeek.data : now);
   const parsedDate = z.string().date().safeParse(date);
   const selectedDate = parsedDate.success ? parsedDate.data : now;
+  const activityDate = selectedDate <= today ? selectedDate : today;
   const [
     liftMaxes,
     athleteRes,
@@ -290,6 +292,10 @@ export default async function AthletePage({ params, searchParams }: Props) {
             library={libraryRes.data ?? []}
             programs={(athleteAssignmentsRes.data ?? []).flatMap((assignment) => assignment.programs ? [assignment.programs] : [])}
           />
+          <Card id="calendar-log-activity">
+            <CardHeader><CardTitle>Log activity</CardTitle></CardHeader>
+            <CardContent><ActivityForm key={activityDate} athleteId={id} today={today} defaultDate={activityDate} units={units} /></CardContent>
+          </Card>
           <PersonalProgramCopyForm athleteId={athlete.id} programs={groupPrograms} defaultStart={now} />
           <Card id="activity-history">
             <CardHeader><CardTitle>Outside activity history</CardTitle></CardHeader>
@@ -371,7 +377,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
         </TabsContent>
 
         <TabsContent value="load" className="grid gap-4">
-          <LoadTab athleteId={id} units={units} today={today} defaultDate={selectedDate <= today ? selectedDate : today} load={load} threshold={coach?.loadWarningRatio ?? DEFAULT_LOAD_WARNING_RATIO} />
+          <LoadTab athleteId={id} units={units} today={today} defaultDate={activityDate} load={load} threshold={coach?.loadWarningRatio ?? DEFAULT_LOAD_WARNING_RATIO} />
         </TabsContent>
         <TabsContent value="benchmarks"><BenchmarksTab athleteId={id} units={units} /></TabsContent>
         <TabsContent value="intake"><IntakeTab athleteId={id} units={units} /></TabsContent>
