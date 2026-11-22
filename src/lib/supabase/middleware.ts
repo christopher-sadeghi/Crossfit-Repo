@@ -57,7 +57,7 @@ export async function updateSession(request: NextRequest) {
   if (!isLoggedIn && !matches(path, PUBLIC_PATHS)) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    url.search = path === "/" ? "" : `?next=${encodeURIComponent(path)}`;
+    url.search = path === "/" ? "" : `?next=${encodeURIComponent(path + request.nextUrl.search)}`;
     return redirectWithCookies(url, response);
   }
 
