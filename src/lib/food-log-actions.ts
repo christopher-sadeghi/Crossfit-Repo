@@ -29,7 +29,7 @@ const librarySchema = z.object({
   source_id: z.string().trim().min(1).max(64).nullable().default(null),
 }).refine(v => v.kind !== "food" || v.is_favorite, "Database foods must be favorites.");
 export type LibraryFoodInput = z.input<typeof librarySchema>;
-const logSchema = z.object({ date, meal: z.enum(MEALS), name, serving: z.string().trim().max(120).nullable().default(null), ...macros });
+const logSchema = z.object({ date, meal: z.enum(MEALS), name, serving: z.string().trim().max(120).nullable().default(null), ingredients: z.string().trim().max(2000).nullable().default(null), ...macros });
 export type LogFoodInput = z.input<typeof logSchema>;
 const denied = { error: "You can't change food for this athlete." };
 
@@ -99,12 +99,12 @@ export async function saveMealFromLog(athleteId: string, day: string, mealName: 
   if (!parsed.success) return { error: "Choose a date, name and food entries for the meal." };
   const supabase = await createClient();
   const ids = [...new Set(parsed.data.ids)];
-  const { data: entries, error } = await supabase.from("food_logs").select("food_name, calories, protein_g, carbs_g, fat_g").eq("athlete_id", athleteId).eq("logged_on", day).in("id", ids);
+  const { data: entries, error } = await supabase.from("food_logs").select("food_name, ingredients, calories, protein_g, carbs_g, fat_g").eq("athlete_id", athleteId).eq("logged_on", day).in("id", ids);
   if (error || !entries || entries.length !== ids.length) return { error: "Some entries couldn't be found for this athlete and date." };
   const totals = entries.reduce((a, e) => ({ calories: a.calories + Number(e.calories), protein_g: a.protein_g + Number(e.protein_g), carbs_g: a.carbs_g + Number(e.carbs_g), fat_g: a.fat_g + Number(e.fat_g) }), { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
   if (totals.calories > 10000) return { error: "This meal exceeds 10,000 calories. Choose fewer food entries and try again." };
   totals.protein_g = Math.round(totals.protein_g * 10) / 10;
   totals.carbs_g = Math.round(totals.carbs_g * 10) / 10;
   totals.fat_g = Math.round(totals.fat_g * 10) / 10;
-  return saveFoodToLibrary(athleteId, { ...totals, name: parsed.data.name, kind: "meal", is_favorite: false, serving_label: "1 meal", ingredients: entries.map(e => e.food_name).join(", "), source: "log" });
+  return saveFoodToLibrary(athleteId, { ...totals, name: parsed.data.name, kind: "meal", is_favorite: false, serving_label: "1 meal", ingredients: entries.map(e => [e.food_name, e.ingredients].filter(Boolean).join(": ")).join(", ").slice(0, 2000), source: "log" });
 }

@@ -32,7 +32,7 @@ function fromSaved(food: Saved): Candidate {
   return { key: `saved:${food.id}`, savedId: food.id, source: food.source as Candidate["source"], sourceId: food.source_id, name: food.name, brand: food.brand, ingredients: food.ingredients, allergens: [], servings: [{ label: food.serving_label, grams: null, calories: food.calories, protein_g: food.protein_g, carbs_g: food.carbs_g, fat_g: food.fat_g }] };
 }
 function fromRecent(food: Library["recent"][number]): Candidate {
-  return { key: `recent:${food.id}`, source: "log", sourceId: null, name: food.food_name, brand: null, ingredients: null, allergens: [], servings: [{ label: food.serving || "1 serving", grams: null, calories: food.calories, protein_g: food.protein_g, carbs_g: food.carbs_g, fat_g: food.fat_g }] };
+  return { key: `recent:${food.id}`, source: "log", sourceId: null, name: food.food_name, brand: null, ingredients: food.ingredients, allergens: [], servings: [{ label: food.serving || "1 serving", grams: null, calories: food.calories, protein_g: food.protein_g, carbs_g: food.carbs_g, fat_g: food.fat_g }] };
 }
 function servingLabel(serving: FoodServing) {
   return serving.grams && !/\bg\b/i.test(serving.label) ? `${serving.label} (${serving.grams} g)` : serving.label;
@@ -82,7 +82,7 @@ export function FoodLogger({ athleteId, date, allergies, recent, saved, todayEnt
   }
   function add(item: Candidate, serving: FoodServing, amount: number, meal: Meal) {
     if (!Number.isFinite(amount) || amount < 0.25 || amount > 20) { setState({ error: "Choose a quantity between 0.25 and 20." }); return; }
-    run(() => logFood(athleteId, { date, meal, name: item.name.slice(0, 120), serving: (amount === 1 ? servingLabel(serving) : `${amount} × ${servingLabel(serving)}`).slice(0, 120), ...scaled(serving, amount) }));
+    run(() => logFood(athleteId, { date, meal, name: item.name.slice(0, 120), ingredients: [item.ingredients, item.allergens.length ? `Allergens: ${item.allergens.join(", ")}` : null].filter(Boolean).join("; ").slice(0, 2000) || null, serving: (amount === 1 ? servingLabel(serving) : `${amount} × ${servingLabel(serving)}`).slice(0, 120), ...scaled(serving, amount) }));
   }
   function toggleFavorite(item: Candidate, serving = item.servings[0]) {
     const row = favoriteRow(item);

@@ -525,6 +525,7 @@ export type Database = {
           meal: Database["public"]["Enums"]["meal_type"];
           protein_g: number;
           serving: string | null;
+          ingredients: string | null;
         };
         ComputedFields: never;
         Insert: {
@@ -541,6 +542,7 @@ export type Database = {
           meal: Database["public"]["Enums"]["meal_type"];
           protein_g?: number;
           serving?: string | null;
+          ingredients?: string | null;
         };
         Update: {
           ai_suggestion_id?: string | null;
@@ -556,6 +558,7 @@ export type Database = {
           meal?: Database["public"]["Enums"]["meal_type"];
           protein_g?: number;
           serving?: string | null;
+          ingredients?: string | null;
         };
         Relationships: [
           {

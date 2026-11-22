@@ -46,3 +46,4 @@ revoke all on public.saved_foods from anon, authenticated;
 grant select, insert, update, delete on public.saved_foods to authenticated, service_role;
 
 alter table public.food_logs add column serving text check (char_length(serving) <= 120);
+alter table public.food_logs add column ingredients text check (char_length(ingredients) <= 2000);
