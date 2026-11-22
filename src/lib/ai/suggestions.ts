@@ -113,6 +113,7 @@ export const writeWorkoutInputSchema = z.object({
 type SuggestionRequest = { input: Json; system: string; prompt: string; schema?: z.ZodType };
 type AppliedTarget = { target_table: string; target_id: string };
 export type SuggestionParams = {
+  session?: { units: "lb" | "kg"; driftDays: number; athleteFacing: true };
   athleteId: string | null;
   workoutId?: string | null;
   request?: string | null;
@@ -201,7 +202,7 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
       .eq("status", "active"),
     trainingVolume(supabase, athleteId, asOf),
     supabase.from("athlete_intakes").select("answers, status").eq("athlete_id", athleteId).maybeSingle(),
-    consistencyContext(supabase, athleteId, asOf),
+    consistencyContext(supabase, athleteId, asOf, params.session?.driftDays),
   ]);
 
   if (athleteError || !athlete) throw athleteError ?? new Error("Athlete not found.");
@@ -251,7 +252,7 @@ Rules:
 - When an athlete is given, this WOD is individual programming for that athlete on that date: fit it to their experience level, goals and recent results, and work around injuries or recent pain.
 - Write the rationale for the coach in 2–4 short, plain-English sentences.`;
 
-async function loadAthleteProgrammingContext(supabase: SupabaseClient<Database>, athleteId: string, units: "lb" | "kg") {
+async function loadAthleteProgrammingContext(supabase: SupabaseClient<Database>, athleteId: string, units: "lb" | "kg", session?: SuggestionParams["session"]) {
   const asOf = await getToday();
   const [liftMaxes, { data: athlete, error: athleteError }, { data: goals, error: goalsError }, { data: results, error: resultsError }] =
     await Promise.all([
@@ -274,9 +275,10 @@ async function loadAthleteProgrammingContext(supabase: SupabaseClient<Database>,
   if (resultsError) throw resultsError;
   return {
     ...athlete,
+    ...(session?.athleteFacing ? { notes: undefined } : {}),
     lift_maxes: formatLiftMaxes(liftMaxes, units),
     recent_check_ins: await loadRecentCheckIns(supabase, athleteId, asOf, 7),
-    consistency: await consistencyContext(supabase, athleteId, asOf),
+    consistency: await consistencyContext(supabase, athleteId, asOf, session?.driftDays),
     goals: goals ?? [],
     recent_results: (results ?? []).map(({ workouts: resultWorkout, load_kg, ...result }) => ({
       ...result,
@@ -293,7 +295,7 @@ async function buildWorkoutRequest(
   const request = params.request?.trim();
   if (!request) throw new Error("A workout request is required.");
 
-  const { units, library } = await loadWorkoutContext(supabase);
+  const { units, library } = await loadWorkoutContext(supabase, params.session);
   let workoutId: string | null = null;
   let workoutUpdatedAt: string | null = null;
   let currentWorkout: Json | null = null;
@@ -327,7 +329,7 @@ async function buildWorkoutRequest(
   }
 
   const athleteId = !workoutId && params.athleteId && params.scheduledOn ? params.athleteId : null;
-  const athlete = athleteId ? await loadAthleteProgrammingContext(supabase, athleteId, units) : null;
+  const athlete = athleteId ? await loadAthleteProgrammingContext(supabase, athleteId, units, params.session) : null;
   const input = {
     mode: workoutId ? "adjust" : "write",
     ...(athlete ? { lift_maxes: athlete.lift_maxes } : {}),

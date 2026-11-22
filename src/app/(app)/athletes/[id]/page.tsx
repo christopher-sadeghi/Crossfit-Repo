@@ -43,9 +43,10 @@ import { LoadTab } from "./load-tab";
 import { addDays, monday } from "./calendar-dates";
 import { LEVEL_LABELS } from "../options";
 import { AthleteTabNav, type AthleteTabGroup } from "./athlete-tab-nav";
+import { AssistantTab } from "./assistant-tab";
 
 const TAB_GROUPS = [
-  { label: "Overview", tabs: [{ value: "overview", label: "Overview" }, { value: "intake", label: "Intake" }, { value: "ai", label: "AI History" }] },
+  { label: "Overview", tabs: [{ value: "overview", label: "Overview" }, { value: "intake", label: "Intake" }, { value: "ai", label: "AI History" }, { value: "assistant", label: "AI chat" }] },
   { label: "Training", tabs: [{ value: "workouts", label: "Workouts" }, { value: "load", label: "Load" }, { value: "consistency", label: "Consistency" }, { value: "form", label: "Form checks" }] },
   { label: "Health", tabs: [{ value: "check-ins", label: "Check-ins" }, { value: "journal", label: "Journal" }] },
   { label: "Nutrition", tabs: [{ value: "nutrition", label: "Nutrition" }] },
@@ -490,6 +491,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
           </ListCard>
         </TabsContent>
 
+        <TabsContent value="assistant"><AssistantTab athleteId={id} rules={athlete.assistant_rules} /></TabsContent>
         <TabsContent value="ai">
           <ListCard empty="No AI suggestions for this athlete yet." show={suggestions.length > 0}>
             <Table>

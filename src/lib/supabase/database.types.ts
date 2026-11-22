@@ -9,6 +9,22 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      athlete_ai_card_actions: {
+        Row: { id: string; assistant_message_id: string; card_index: number; athlete_id: string; coach_id: string; action: string; ref_id: string; created_at: string };
+        Insert: { id?: string; assistant_message_id: string; card_index: number; athlete_id: string; coach_id: string; action: string; ref_id: string; created_at?: string };
+        Update: { id?: string; assistant_message_id?: string; card_index?: number; athlete_id?: string; coach_id?: string; action?: string; ref_id?: string; created_at?: string };
+        Relationships: [{ foreignKeyName: "athlete_ai_card_actions_assistant_message_id_fkey"; columns: ["assistant_message_id"]; isOneToOne: false; referencedRelation: "athlete_ai_messages"; referencedColumns: ["id"] }];
+      };
+      athlete_ai_messages: {
+        Row: { id: string; athlete_id: string; coach_id: string; role: string; content: string; metadata: Json; red_flag: boolean; created_at: string };
+        Insert: { id?: string; athlete_id: string; coach_id: string; role: string; content: string; metadata?: Json; red_flag?: boolean; created_at?: string };
+        Update: { id?: string; athlete_id?: string; coach_id?: string; role?: string; content?: string; metadata?: Json; red_flag?: boolean; created_at?: string };
+        Relationships: [
+          { foreignKeyName: "athlete_ai_messages_athlete_id_fkey"; columns: ["athlete_id"]; isOneToOne: false; referencedRelation: "athletes"; referencedColumns: ["id"] },
+          { foreignKeyName: "athlete_ai_messages_coach_id_fkey"; columns: ["coach_id"]; isOneToOne: false; referencedRelation: "coaches"; referencedColumns: ["id"] },
+          { foreignKeyName: "athlete_ai_messages_athlete_id_coach_id_fkey"; columns: ["athlete_id", "coach_id"]; isOneToOne: false; referencedRelation: "athletes"; referencedColumns: ["id", "coach_id"] }
+        ];
+      };
       ai_activity_draft_requests: {
         Row: { id: string; user_id: string; created_at: string };
         Insert: { id: string; user_id?: string; created_at?: string };
@@ -548,6 +564,7 @@ export type Database = {
       };
       athletes: {
         Row: {
+          assistant_rules: string | null;
           birth_date: string | null;
           coach_id: string;
           created_at: string;
@@ -566,6 +583,7 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          assistant_rules?: string | null;
           birth_date?: string | null;
           coach_id?: string;
           created_at?: string;
@@ -583,6 +601,7 @@ export type Database = {
           user_id?: string | null;
         };
         Update: {
+          assistant_rules?: string | null;
           birth_date?: string | null;
           coach_id?: string;
           created_at?: string;
@@ -824,6 +843,11 @@ export type Database = {
       };
       coaches: {
         Row: {
+          assistant_rules: string | null;
+          assistant_training: boolean;
+          assistant_nutrition: boolean;
+          assistant_recovery: boolean;
+          athlete_ai_daily_limit: number;
           drift_days: number;
           load_warning_ratio: number;
           created_at: string;
@@ -835,6 +859,11 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          assistant_rules?: string | null;
+          assistant_training?: boolean;
+          assistant_nutrition?: boolean;
+          assistant_recovery?: boolean;
+          athlete_ai_daily_limit?: number;
           drift_days?: number;
           load_warning_ratio?: number;
           created_at?: string;
@@ -845,6 +874,11 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          assistant_rules?: string | null;
+          assistant_training?: boolean;
+          assistant_nutrition?: boolean;
+          assistant_recovery?: boolean;
+          athlete_ai_daily_limit?: number;
           drift_days?: number;
           load_warning_ratio?: number;
           created_at?: string;
@@ -1659,6 +1693,11 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      complete_athlete_ai_card: { Args: { p_message_id: string; p_card_index: number; p_action: string; p_values: Json }; Returns: { ref_id: string; already_completed: boolean }[] };
+      athlete_assistant_settings: {
+        Args: Record<PropertyKey, never>;
+        Returns: { coach_rules: string | null; athlete_rules: string | null; assistant_training: boolean; assistant_nutrition: boolean; assistant_recovery: boolean; athlete_ai_daily_limit: number; drift_days: number }[];
+      };
       register_push_subscription: { Args: { p_endpoint: string; p_p256dh: string; p_auth: string; p_user_agent: string }; Returns: undefined };
       apply_draft_program: { Args: { p_athlete_id: string; p_program: Json; p_today: string }; Returns: string };
       save_athlete_intake_step: { Args: { p_athlete_id: string; p_step: number; p_data: Json; p_today: string }; Returns: undefined };

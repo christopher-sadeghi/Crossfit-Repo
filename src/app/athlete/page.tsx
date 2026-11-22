@@ -156,6 +156,10 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
     <div className="grid gap-6">
       <section className="grid gap-3">
         <h1 className="text-xl font-semibold tracking-tight">Today&apos;s WOD</h1>
+        <Link href="/athlete/assistant" className="rounded-lg border bg-card p-4 hover:bg-muted">
+          <span className="font-semibold">Ask AI</span>
+          <p className="mt-1 text-sm text-muted-foreground">Questions about training or recovery? Your coach can see this chat.</p>
+        </Link>
         {todayWods.length ? (
           todayWods.map((item) => {
             const workout = item.workout;
@@ -237,7 +241,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                   </Card>
                 )}
                 {!todayResult && (
-                  <Card>
+                  <Card id={`adjust-${workout.id}`} className="scroll-mt-4">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm">Not feeling 100%?</CardTitle>
                     </CardHeader>
