@@ -152,6 +152,7 @@ export default async function SuggestionPage({ params }: Props) {
           }
         : toWhiteboardMovement(change, "Original movement"),
       scaled: toWhiteboardMovement(change, scaleNames.get(change.movement_id) ?? "Unknown movement"),
+      load: change.load,
       reason: change.reason,
     };
   }) ?? [];
