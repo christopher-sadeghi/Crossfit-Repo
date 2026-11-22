@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/layout/page-header";
+import { NotificationSettings } from "@/components/notifications/email-settings";
 import { Card, CardContent } from "@/components/ui/card";
 import { getCoach } from "@/lib/coach";
 import { createClient } from "@/lib/supabase/server";
@@ -26,6 +27,7 @@ export default async function SettingsPage() {
           />
         </CardContent>
       </Card>
+      <div className="mt-6"><NotificationSettings /></div>
       <div className="mt-6">
         <DemoDataCard hasAthletes={(count ?? 0) > 0} />
       </div>

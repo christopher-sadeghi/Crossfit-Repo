@@ -194,6 +194,7 @@ export default async function SuggestionPage({ params }: Props) {
         <Link href="/suggestions">← All suggestions</Link>
       </Button>
       <div className="mb-6">
+        {suggestion.athlete_id && <Link href={`/messages/${suggestion.athlete_id}?link=suggestion:${suggestion.id}`} className="mb-2 inline-block text-sm underline underline-offset-4">Discuss with athlete</Link>}
         <h1 className="text-2xl font-semibold tracking-tight">{entry}</h1>
         <p className="mt-1 text-muted-foreground">
           {athlete ? (
