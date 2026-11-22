@@ -20,6 +20,7 @@ export type ConsistencyStats = {
   bestStreak: number;
   lastActivityDate: string | null;
   daysSinceActivity: number | null;
+  scheduledDaysTotal: number;
   days: { date: string; status: DayStatus }[];
 };
 
@@ -74,6 +75,7 @@ export function computeConsistency(input: ConsistencyInput): ConsistencyStats {
     windows: { 7: window(7), 30: window(30), 90: window(90) },
     prev30: window(30, 30),
     currentStreak, bestStreak, lastActivityDate,
+    scheduledDaysTotal: [...statuses.values()].filter((status) => status !== "pending").length,
     daysSinceActivity: lastActivityDate ? end - dayNumber(lastActivityDate) : null,
     days: Array.from({ length: 90 }, (_, i) => {
       const date = calendarDate(end - 89 + i);
@@ -86,7 +88,7 @@ export function computeConsistency(input: ConsistencyInput): ConsistencyStats {
 export function drifting(stats: ConsistencyStats, { driftDays = DEFAULT_DRIFT_DAYS }: { driftDays?: number } = {}) {
   const reasons: ("inactive" | "declining")[] = [];
   const inactive = stats.daysSinceActivity !== null ? stats.daysSinceActivity >= driftDays
-    : stats.days.slice(-driftDays).some((d) => ["completed", "partial", "missed"].includes(d.status));
+    : stats.scheduledDaysTotal > 0;
   if (inactive) reasons.push("inactive");
   const last30Rate = stats.windows[30].rate;
   const prev30Rate = stats.prev30.rate;

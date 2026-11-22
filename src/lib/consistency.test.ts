@@ -79,10 +79,14 @@ test("inactive threshold and no drift with recent activity", () => {
   assert.equal(stats.daysSinceActivity, 5);
 });
 
-test("never-active requires a recent non-pending scheduled day", () => {
+test("never-active stays flagged after any non-pending scheduled day in loaded history", () => {
   assert.equal(drifting(compute()).drifting, false);
   assert.equal(drifting(compute({ scheduled: [scheduled(today)] })).drifting, false);
-  assert.equal(drifting(compute({ scheduled: [scheduled("2026-11-16")] })).drifting, false);
+  assert.equal(drifting(compute({ scheduled: [scheduled("2026-11-16")] })).drifting, true);
+  assert.equal(drifting(compute({ scheduled: [scheduled("2026-11-01")] }), { driftDays: 5 }).drifting, true);
+  const oldHistory = compute({ scheduled: [scheduled("2026-01-01")] });
+  assert.equal(oldHistory.scheduledDaysTotal, 1);
+  assert.equal(drifting(oldHistory).drifting, true);
   assert.deepEqual(drifting(compute({ scheduled: [scheduled("2026-11-17")] })).reasons, ["inactive"]);
   assert.equal(compute().windows[30].rate, null);
 });
