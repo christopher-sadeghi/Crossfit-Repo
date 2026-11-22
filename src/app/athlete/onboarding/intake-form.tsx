@@ -16,8 +16,9 @@ const CUSTOM_GOAL = "__custom_goal__";
 
 function selectedGoalChoice(goal: Row, options: readonly string[]) {
   const target = String(goal.target ?? "");
+  if (goal.specific_goal_choice === CUSTOM_GOAL) return CUSTOM_GOAL;
   if (options.includes(target)) return target;
-  if (target || goal.specific_goal_choice === CUSTOM_GOAL) return CUSTOM_GOAL;
+  if (target) return CUSTOM_GOAL;
   return "";
 }
 
@@ -33,9 +34,16 @@ export function IntakeForm({ step, values, benchmarks, units }: { step: number; 
   const select = (name: string, label: string, options: readonly (readonly [string, string])[]) => <label className="grid gap-2 text-sm">{label}<select className="h-11 rounded-md border bg-background px-3" value={String(form[name] ?? "")} onChange={(e) => set(name, e.target.value)}>{options.map(([value, title]) => <option value={value} key={value}>{title}</option>)}</select></label>;
   const remove = (name: string, index: number) => <Button type="button" variant="ghost" onClick={() => set(name, rows(name).filter((_, i) => i !== index))}>Remove</Button>;
   const rowInput = (name: string, index: number, key: string, label: string, type = "text") => <label className="grid gap-1 text-sm">{label}<Input type={type} step={type === "number" ? "any" : undefined} value={rows(name)[index][key]} onChange={(e) => updateRow(name, index, key, e.target.value)} /></label>;
-  const setGoalChoice = (index: number, choice: string) => set("goals", rows("goals").map((goal, i) => i === index
-    ? { ...goal, specific_goal_choice: choice, target: choice === CUSTOM_GOAL ? String(goal.target ?? "") : choice }
-    : goal));
+  const setGoalChoice = (index: number, choice: string) => set("goals", rows("goals").map((goal, i) => {
+    if (i !== index) return goal;
+    const target = String(goal.target ?? "");
+    const options = GOAL_OPTIONS[String(goal.category) as keyof typeof GOAL_OPTIONS] ?? [];
+    return {
+      ...goal,
+      specific_goal_choice: choice,
+      target: choice === CUSTOM_GOAL && options.includes(target) ? "" : choice === CUSTOM_GOAL ? target : choice,
+    };
+  }));
   const setGoalCategory = (index: number, category: string) => set("goals", rows("goals").map((goal, i) => i === index
     ? { ...goal, category, specific_goal_choice: "", target: "" }
     : goal));
