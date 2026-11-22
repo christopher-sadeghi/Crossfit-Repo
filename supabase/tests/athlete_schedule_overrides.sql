@@ -113,4 +113,48 @@ do $$ begin
   assert not public.athlete_can_view_workout('00000000-0000-0000-0000-0000000000a3');
 end $$;
 select 'PASS: scaling moved on edit, replacement scaling discarded on remove/restore/delete, newer original scaling preserved, logged-result protection, safe delete, coach isolation, athlete visibility' as result;
+
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000a","role":"authenticated"}', true);
+insert into public.workouts (id, program_id, title, workout_type, week_number, day_number) values
+  ('00000000-0000-0000-0000-0000000000a5', '00000000-0000-0000-0000-0000000000a2', 'Edited group WOD', 'for_time', 2, 4),
+  ('00000000-0000-0000-0000-0000000000a6', '00000000-0000-0000-0000-0000000000a2', 'Unchanged group WOD', 'amrap', 2, 5);
+do $$
+declare
+  v_replacement uuid;
+  v_program uuid;
+  v_removed uuid;
+  v_edited uuid;
+begin
+  v_replacement := public.override_workout_for_athlete('00000000-0000-0000-0000-0000000000a5', '00000000-0000-0000-0000-0000000000a1', 'edit');
+  v_program := public.copy_program_for_athlete('00000000-0000-0000-0000-0000000000a2', '00000000-0000-0000-0000-0000000000a1');
+  select id into strict v_removed from public.workouts where program_id = v_program and source_workout_id = '00000000-0000-0000-0000-0000000000a3';
+  select id into strict v_edited from public.workouts where program_id = v_program and source_workout_id = '00000000-0000-0000-0000-0000000000a5';
+  assert exists (select 1 from public.program_assignments where program_id = v_program and start_date = '2026-11-23');
+  assert not exists (select 1 from public.program_assignments where program_id = '00000000-0000-0000-0000-0000000000a2');
+  assert exists (select 1 from public.athlete_workout_overrides where workout_id = v_removed and replacement_workout_id is null);
+  assert exists (select 1 from public.athlete_workout_overrides where workout_id = v_edited and replacement_workout_id = v_replacement);
+  assert not exists (select 1 from public.athlete_workout_overrides where workout_id in ('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a5'));
+  assert (select count(*) from public.workouts w
+    join public.program_assignments pa on pa.program_id = w.program_id
+    left join public.athlete_workout_overrides o on o.workout_id = w.id and o.athlete_id = pa.athlete_id
+    where pa.athlete_id = '00000000-0000-0000-0000-0000000000a1' and o.id is null) = 1;
+  assert exists (select 1 from public.workouts where id = v_replacement and scheduled_on = '2026-12-03' and program_id is null);
+  perform set_config('test.personal_program', v_program::text, true);
+  perform set_config('test.personal_removed', v_removed::text, true);
+  perform set_config('test.personal_edited', v_edited::text, true);
+  perform set_config('test.personal_replacement', v_replacement::text, true);
+end $$;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000c","role":"authenticated"}', true);
+do $$
+declare v_workout uuid;
+begin
+  assert not public.athlete_can_view_workout(current_setting('test.personal_removed')::uuid);
+  assert not public.athlete_can_view_workout(current_setting('test.personal_edited')::uuid);
+  assert public.athlete_can_view_workout(current_setting('test.personal_replacement')::uuid);
+  for v_workout in select id from public.workouts where program_id = current_setting('test.personal_program')::uuid and source_workout_id = '00000000-0000-0000-0000-0000000000a6' loop
+    assert public.athlete_can_view_workout(v_workout);
+  end loop;
+  assert (select count(*) from public.athlete_workout_overrides) = 2;
+end $$;
+select 'PASS: personal copies retain removed/edited overrides, replacement date, one unchanged program WOD, athlete visibility' as result;
 rollback;
