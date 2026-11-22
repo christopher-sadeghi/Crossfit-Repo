@@ -26,6 +26,7 @@ import { formatDate, toKg, type Units } from "@/lib/units";
 import { Whiteboard } from "@/app/(app)/programs/workouts/whiteboard";
 import { AthleteAdjustmentReview } from "@/components/suggestions/athlete-adjustment-review";
 import { ScaleWorkoutReview } from "@/components/suggestions/scale-workout-review";
+import { WeeklyReportReview } from "@/components/suggestions/weekly-report-review";
 import { scaleWorkoutInputSchema, scaleWorkoutSchema } from "@/lib/ai/scale-workout";
 import { FoodIdeaList } from "@/components/nutrition/food-ideas";
 import { FOOD_DISCLAIMER, foodIdeasInputSchema, foodIdeasSchema } from "@/lib/ai/suggest-food";
@@ -47,6 +48,12 @@ export default async function SuggestionPage({ params }: Props) {
   const { data: suggestion } = await supabase.from("ai_suggestions").select("*").eq("id", id).maybeSingle();
   if (!suggestion) notFound();
   if (suggestion.suggestion_type === "athlete_adjust_workout") return <AthleteAdjustmentReview suggestion={suggestion} />;
+  if (suggestion.suggestion_type === "weekly_report") {
+    const { data: athlete } = suggestion.athlete_id
+      ? await supabase.from("athletes").select("first_name, last_name").eq("id", suggestion.athlete_id).maybeSingle()
+      : { data: null };
+    return <WeeklyReportReview suggestion={suggestion} athleteName={athlete ? `${athlete.first_name} ${athlete.last_name}` : ""} />;
+  }
 
   const macrosType = suggestion.suggestion_type === "adjust_macros";
   const workoutType = suggestion.suggestion_type === "write_workout";

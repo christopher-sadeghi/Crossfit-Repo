@@ -4,14 +4,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { addDays } from "@/lib/nutrition";
 import { getToday } from "@/lib/time-zone";
-import { formatGoalValue, goalProgress, TRACKING_LABELS } from "@/lib/progress";
-import { loadLiftMaxes } from "@/lib/benchmarks";
+import { formatGoalValue } from "@/lib/progress";
 import type { Database, Json, Tables } from "@/lib/supabase/database.types";
 import { formatDate } from "@/lib/units";
 
 import { consistencyContext, foodAverages, trainingVolume, weightTrend } from "./athlete-context";
 import { ApprovalError } from "./errors";
 import { joinProgressNote } from "./progress-note";
+import { averageCheckIns, loadProgressData } from "./progress-data";
 
 export const NOTES_MAX = 2000;
 export const GOAL_STATUSES = ["reached", "on_track", "behind", "no_data"] as const;
@@ -47,7 +47,7 @@ Rules:
 - Mention recovery trends from recent_check_ins and check-in averages: readiness, sleep, soreness, stress, energy and mood. Cite only the available data.
 - Use only the data provided. Do not invent numbers.
 - Return one entry per goal in the goals list, using its id. Status: "reached" if achieved or the target is met; "on_track" if the current value and pace look likely to hit the target by its date; "behind" if not; "no_data" if there is no current value or start value to judge from.
-- Each goal note is one plain-English sentence that cites the numbers (start, current, target, date) exactly as given. If a value is null, say it hasn't been logged yet; never write "null".
+- Each goal note is one plain-English sentence that cites the numbers (start, current, target, date) exactly as given. If a value is null, say "not logged"; never write "null".
 - The summary is 2–4 short sentences for the coach about overall progress, including training consistency, body weight trend, and nutrition adherence when there is data. If there are no goals, say so and summarise the rest.
 - Values are already formatted in the coach's units; repeat them as given.
 - Keep the whole note (summary plus all goal notes) under 1,500 characters; with many goals, keep each goal note very short.
@@ -57,31 +57,14 @@ async function buildRequest(supabase: SupabaseClient<Database>, { athleteId }: {
   if (!athleteId) throw new Error("Athlete not found.");
   const asOf = await getToday();
   const [
-    liftMaxes,
-    { data: coach, error: coachError },
-    { data: athlete, error: athleteError },
-    { data: goals, error: goalsError },
-    { data: metrics, error: metricsError },
-    { data: results, error: resultsError },
+    { athlete, units, goals: goalInputs, metrics },
     { data: target, error: targetError },
     { data: food, error: foodError },
     training,
     consistency,
+    recentCheckIns,
   ] = await Promise.all([
-    loadLiftMaxes(supabase, athleteId),
-    supabase.from("coaches").select("units").maybeSingle(),
-    supabase.from("athletes").select("first_name, experience_level").eq("id", athleteId).maybeSingle(),
-    supabase
-      .from("goals")
-      .select("id, title, goal_type, movement_id, metric, unit, start_value, target_value, target_date, status, achieved_at, movements(name)")
-      .eq("athlete_id", athleteId)
-      .or(`status.eq.active,and(status.eq.achieved,achieved_at.gte.${addDays(asOf, -90)})`)
-      .order("target_date", { nullsFirst: false }),
-    supabase.from("body_metrics").select("measured_on, weight_kg, body_fat_pct").eq("athlete_id", athleteId).order("measured_on").order("created_at"),
-    supabase
-      .from("workout_results")
-      .select("performed_on, load_kg, reps, rounds, workouts(workout_type, workout_movements(movement_id))")
-      .eq("athlete_id", athleteId),
+    loadProgressData(supabase, athleteId, asOf),
     supabase
       .from("nutrition_targets")
       .select("calories, protein_g, carbs_g, fat_g")
@@ -99,52 +82,18 @@ async function buildRequest(supabase: SupabaseClient<Database>, { athleteId }: {
       .lte("logged_on", asOf),
     trainingVolume(supabase, athleteId, asOf),
     consistencyContext(supabase, athleteId, asOf),
+    loadRecentCheckIns(supabase, athleteId, asOf, 28),
   ]);
-  if (coachError || !coach) throw coachError ?? new Error("Coach not found.");
-  if (athleteError || !athlete) throw athleteError ?? new Error("Athlete not found.");
-  for (const error of [goalsError, metricsError, resultsError, targetError, foodError]) if (error) throw error;
+  for (const error of [targetError, foodError]) if (error) throw error;
 
-  const units = coach.units;
-  const allMetrics = metrics ?? [];
-  // Newest first, like the progress page, so `latestMetric` picks the newest same-day reading.
-  const progressData = { metrics: [...allMetrics].reverse(), results: results ?? [], liftMaxes };
-  const goalInputs = (goals ?? []).map((goal) => {
-    const progress = goalProgress(goal, progressData);
-    const value = (v: number | null) => (v == null ? null : formatGoalValue(Number(v), goal.unit, units));
-    return {
-      id: goal.id,
-      title: goal.title,
-      type: goal.goal_type,
-      movement: goal.movements?.name ?? null,
-      status: goal.status,
-      achieved_on: goal.achieved_at?.slice(0, 10) ?? null,
-      tracked_from: TRACKING_LABELS[progress.tracking],
-      start: value(goal.start_value),
-      current: value(progress.current),
-      target: value(goal.target_value),
-      target_date: goal.target_date,
-      percent_complete: progress.pct,
-      target_met: progress.reached,
-    };
-  });
-  const recentWeights = allMetrics
+  const recentWeights = [...metrics].reverse()
     .filter((row) => row.measured_on >= addDays(asOf, -55))
     .map((row) => ({ measured_on: row.measured_on, weight_kg: row.weight_kg == null ? null : Number(row.weight_kg) }));
   const trend = weightTrend(recentWeights);
 
-  const recentCheckIns = await loadRecentCheckIns(supabase, athleteId, asOf, 28);
-  const checkInAverages = Object.fromEntries(
-    (["readiness", "sleep_hours", "soreness", "stress", "energy", "mood"] as const).map((key) => {
-      const values = recentCheckIns.flatMap((entry) => entry[key] == null ? [] : [Number(entry[key])]);
-      const average = values.length
-        ? Math.round(values.reduce((a, b) => a + b, 0) / values.length * 10) / 10
-        : null;
-      return [key, average];
-    }),
-  );
   const promptData = {
     recent_check_ins: recentCheckIns.filter((entry) => entry.date >= addDays(asOf, -6)),
-    check_in_averages_last_28_days: checkInAverages,
+    check_in_averages_last_28_days: averageCheckIns(recentCheckIns),
     athlete: { first_name: athlete.first_name, experience_level: athlete.experience_level },
     as_of: asOf,
     units,
