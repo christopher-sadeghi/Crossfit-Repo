@@ -2,8 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Tables } from "@/lib/supabase/database.types";
 import { compareScores, type Score } from "@/lib/results";
 import { addDays } from "@/lib/nutrition";
-import { effectiveScaling } from "@/lib/ai/athlete-adjust-schema";
-import { scaleWorkoutDetailsSchema } from "@/lib/ai/scale-workout";
+import { effectiveScaling } from "@/lib/workout-scaling";
+import { scaleWorkoutDetailsSchema } from "@/lib/ai/scale-workout-schema";
 
 type Client = SupabaseClient<Database>;
 type Benchmark = Tables<"benchmarks">;

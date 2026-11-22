@@ -155,3 +155,20 @@ test("AI max context handles empty history and its optional schema accepts legac
   assert.equal(liftMaxContextSchema.optional().safeParse(undefined).success, true);
   assert.equal(liftMaxContextSchema.safeParse([{ one_rm: "unknown" }]).success, false);
 });
+
+test("scaling and benchmark modules initialize in any entry order, preserving schema and resolver exports", () => {
+  for (const entry of ["src/lib/ai/scale-workout.ts", "src/lib/benchmarks.ts", "src/lib/ai/athlete-adjust-schema.ts"]) {
+    cache.clear();
+    load(entry);
+    const scale = load("src/lib/ai/scale-workout.ts");
+    const schemas = load("src/lib/ai/scale-workout-schema.ts");
+    const adjust = load("src/lib/ai/athlete-adjust-schema.ts");
+    assert.equal(scale.scaleWorkoutChangeSchema, schemas.scaleWorkoutChangeSchema);
+    assert.equal(scale.scaleWorkoutDetailsSchema, schemas.scaleWorkoutDetailsSchema);
+    assert.equal(adjust.effectiveScaling, load("src/lib/workout-scaling.ts").effectiveScaling);
+    assert.equal(scale.scaleWorkoutDetailsSchema.safeParse(scalingDetails("m", 3)).success, true);
+    assert.equal(scale.scaleWorkoutDetailsSchema.safeParse({}).success, false);
+    assert.equal(typeof adjust.athleteAdjustSchema.parse, "function");
+    assert.equal(typeof load("src/lib/benchmarks.ts").loadLiftMaxes, "function");
+  }
+});
