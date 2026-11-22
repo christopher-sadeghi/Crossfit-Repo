@@ -22,6 +22,7 @@ do $$
 declare
   v_id uuid;
   v_scaling uuid;
+  v_mode text;
 begin
   select id into v_scaling from public.athlete_workout_scalings where athlete_suggestion_id = '00000000-0000-0000-0000-0000000000a4';
   v_id := public.override_workout_for_athlete('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a1', 'edit');
@@ -35,18 +36,34 @@ begin
   perform public.override_workout_for_athlete('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a1', 'remove');
   assert not exists (select 1 from public.workouts where id = v_id);
   assert exists (select 1 from public.athlete_workout_overrides where replacement_workout_id is null);
-  assert (select workout_id from public.athlete_workout_scalings where id = v_scaling) = '00000000-0000-0000-0000-0000000000a3';
+  assert not exists (select 1 from public.athlete_workout_scalings where id = v_scaling);
   perform public.restore_workout_for_athlete('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a1');
   assert not exists (select 1 from public.athlete_workout_overrides);
   perform public.restore_workout_for_athlete('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a1');
+  foreach v_mode in array array['remove', 'restore', 'delete'] loop
+    v_id := public.override_workout_for_athlete('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a1', 'edit');
+    update public.workout_movements set reps = 20 where workout_id = v_id;
+    insert into public.athlete_workout_scalings (workout_id, athlete_id, modifications, athlete_suggestion_id)
+    values (v_id, '00000000-0000-0000-0000-0000000000a1', 'Scaling for edited replacement', '00000000-0000-0000-0000-0000000000a4');
+    insert into public.athlete_workout_scalings (workout_id, athlete_id, modifications)
+    values ('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a1', 'New original scaling');
+    if v_mode = 'remove' then
+      perform public.override_workout_for_athlete('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a1', 'remove');
+    elsif v_mode = 'restore' then
+      perform public.restore_workout_for_athlete('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a1');
+    else
+      perform public.delete_athlete_workout(v_id, '00000000-0000-0000-0000-0000000000a1');
+    end if;
+    assert not exists (select 1 from public.workouts where id = v_id);
+    assert not exists (select 1 from public.athlete_workout_scalings where workout_id = v_id);
+    assert not exists (select 1 from public.athlete_workout_scalings where athlete_suggestion_id = '00000000-0000-0000-0000-0000000000a4');
+    assert (select modifications from public.athlete_workout_scalings where workout_id = '00000000-0000-0000-0000-0000000000a3') = 'New original scaling';
+    delete from public.athlete_workout_scalings where workout_id = '00000000-0000-0000-0000-0000000000a3';
+    perform public.restore_workout_for_athlete('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a1');
+  end loop;
   v_id := public.override_workout_for_athlete('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a1', 'edit');
-  perform public.restore_workout_for_athlete('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a1');
-  assert not exists (select 1 from public.workouts where id = v_id);
-  assert (select workout_id = '00000000-0000-0000-0000-0000000000a3' and athlete_suggestion_id = '00000000-0000-0000-0000-0000000000a4' from public.athlete_workout_scalings where id = v_scaling);
-  v_id := public.override_workout_for_athlete('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a1', 'edit');
-  perform public.delete_athlete_workout(v_id, '00000000-0000-0000-0000-0000000000a1');
-  assert (select workout_id from public.athlete_workout_scalings where id = v_scaling) = '00000000-0000-0000-0000-0000000000a3';
-  v_id := public.override_workout_for_athlete('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a1', 'edit');
+  insert into public.athlete_workout_scalings (workout_id, athlete_id, modifications)
+  values (v_id, '00000000-0000-0000-0000-0000000000a1', 'Logged replacement scaling') returning id into v_scaling;
   insert into public.workout_results (workout_id, athlete_id) values (v_id, '00000000-0000-0000-0000-0000000000a1');
   begin
     perform public.restore_workout_for_athlete('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-0000000000a1');
@@ -95,5 +112,5 @@ do $$ begin
   assert (select count(*) from public.athlete_workout_overrides) = 1;
   assert not public.athlete_can_view_workout('00000000-0000-0000-0000-0000000000a3');
 end $$;
-select 'PASS: edit, movements, source, scaling moved (not duplicated), scaling restored on remove/restore/delete, idempotency, logged-result protection, safe delete, coach isolation, athlete visibility' as result;
+select 'PASS: scaling moved on edit, replacement scaling discarded on remove/restore/delete, newer original scaling preserved, logged-result protection, safe delete, coach isolation, athlete visibility' as result;
 rollback;

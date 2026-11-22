@@ -77,8 +77,6 @@ begin
   if v_old is not null then
     perform 1 from public.workouts where id = v_old and coach_id = auth.uid() for update;
     if not exists (select 1 from public.workout_results where workout_id = v_old) then
-      update public.athlete_workout_scalings set workout_id = p_workout_id
-      where workout_id = v_old and athlete_id = p_athlete_id;
       delete from public.workouts where id = v_old;
     end if;
   end if;
@@ -98,8 +96,6 @@ begin
   if exists (select 1 from public.workout_results where workout_id = v_old) then
     raise exception 'This athlete already logged their version; delete their result first.';
   end if;
-  update public.athlete_workout_scalings set workout_id = p_workout_id
-  where workout_id = v_old and athlete_id = p_athlete_id;
   delete from public.athlete_workout_overrides where athlete_id = p_athlete_id and workout_id = p_workout_id;
   delete from public.workouts where id = v_old;
 end;
@@ -107,7 +103,6 @@ $$;
 
 create function public.delete_athlete_workout(p_workout_id uuid, p_athlete_id uuid)
 returns void language plpgsql security invoker set search_path = '' as $$
-declare v_original uuid;
 begin
   perform 1 from public.workouts
   where id = p_workout_id and coach_id = auth.uid()
@@ -116,12 +111,6 @@ begin
   if not found then raise exception 'Choose a one-off WOD for this athlete.'; end if;
   if exists (select 1 from public.workout_results where workout_id = p_workout_id) then
     raise exception 'This athlete already logged this WOD; delete their result first.';
-  end if;
-  select workout_id into v_original from public.athlete_workout_overrides
-  where replacement_workout_id = p_workout_id and athlete_id = p_athlete_id;
-  if v_original is not null then
-    update public.athlete_workout_scalings set workout_id = v_original
-    where workout_id = p_workout_id and athlete_id = p_athlete_id;
   end if;
   delete from public.workouts where id = p_workout_id;
 end;
