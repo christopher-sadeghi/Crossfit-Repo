@@ -298,7 +298,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
           </Card>
         )}
       </section>
-      <CheckInForm key={currentDate} entry={todayJournal} today={currentDate} athleteId={viewer.athleteId} initialSkipped={!!todaySkip} />
+      <CheckInForm key={currentDate} entry={todayJournal} today={currentDate} initialSkipped={!!todaySkip} />
       <AthleteConsistencyCard athleteId={viewer.athleteId} compact />
       <details id="log-activity" key={`log-activity-${activityDay}`} open={activityDate != null} className="rounded-lg border bg-card p-4">
         <summary className="w-fit cursor-pointer font-semibold">Log activity</summary>

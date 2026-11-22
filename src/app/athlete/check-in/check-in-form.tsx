@@ -14,24 +14,7 @@ import type { FormState } from "@/lib/auth/form-state";
 
 import { saveCheckIn, setCheckInSkipped } from "./actions";
 
-function readSkip(key: string) {
-  try {
-    return window.localStorage.getItem(key) === "true";
-  } catch {
-    return false;
-  }
-}
-
-function writeSkip(key: string, skipped: boolean) {
-  try {
-    if (skipped) window.localStorage.setItem(key, "true");
-    else window.localStorage.removeItem(key);
-  } catch {
-    return;
-  }
-}
-
-export function CheckInForm({ entry, today, athleteId, initialSkipped = false }: { entry: CheckIn | null; today: string; athleteId: string; initialSkipped?: boolean }) {
+export function CheckInForm({ entry, today, initialSkipped = false }: { entry: CheckIn | null; today: string; initialSkipped?: boolean }) {
   const [editing, setEditing] = useState(false);
   const [skipped, setSkipped] = useState(initialSkipped);
   const [skipPending, startSkip] = useTransition();
@@ -44,14 +27,12 @@ export function CheckInForm({ entry, today, athleteId, initialSkipped = false }:
   );
   const [areas, setAreas] = useState(entry?.soreness_areas ?? []);
   const [note, setNote] = useState(entry?.notes ?? "");
-  const skipKey = `checkin-skip:${athleteId}:${today}`;
   useEffect(() => {
-    setSkipped(initialSkipped || readSkip(skipKey));
-  }, [skipKey, initialSkipped]);
+    setSkipped(initialSkipped);
+  }, [today, initialSkipped]);
   const [state, action, pending] = useActionState<FormState, FormData>(async (previous, data) => {
     const result = await saveCheckIn(previous, data);
     if (!result.error) {
-      writeSkip(skipKey, false);
       setSkipped(false);
       setEditing(false);
     }
@@ -77,7 +58,6 @@ export function CheckInForm({ entry, today, athleteId, initialSkipped = false }:
           setSkipError(result.error);
           return;
         }
-        writeSkip(skipKey, value);
         setSkipped(value);
         setEditing(!value);
       } catch {
