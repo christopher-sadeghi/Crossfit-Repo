@@ -60,6 +60,10 @@ select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',3,
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',3,'{"goals":[{"title":"Strength: squat","goal_type":"performance","target_value":110,"target_date":null}]}','2026-11-21');
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',4,'{"injury_list":[{"area":"Knee","severity":"mild","notes":"Avoid jumping"}]}','2026-11-21');
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',4,'{"injury_list":[]}','2026-11-21');
+do $$ begin
+ assert (select injuries from public.athletes where id = '35000000-0000-0000-0000-000000000011') like '%Knee%';
+end $$;
+select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',4,'{"injury_list":[],"no_injuries":true}','2026-11-21');
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',5,'{"days_per_week":3,"session_minutes":60,"location":"gym","equipment":["Barbell"]}','2026-11-21');
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',6,'{"diet_type":"none","allergies":[],"dislikes":[],"cooking_minutes":15,"eating_habits":"Regular meals"}','2026-11-21');
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',7,'{"sleep_hours":8,"stress_level":"low","job_activity":"sedentary"}','2026-11-21');

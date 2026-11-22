@@ -20,7 +20,7 @@ const valid = [
   { birth_date: "1995-01-01", height_ft: 5, height_in: 10, weight: 180, sex: "" },
   { experience_level: "beginner", years_training: 0, crossfit_detail: "", sports_background: "", benchmarks: [] },
   { goals: [{ category: "Strength", target: "", target_value: "", target_date: "" }] },
-  { injury_list: [] },
+  { injury_list: [], no_injuries: true },
   { days_per_week: 3, session_minutes: 60, location: "gym", equipment: ["Barbell"] },
   { diet_type: "none", allergies: "", dislikes: "", cooking_minutes: "", eating_habits: "" },
   { sleep_hours: 8, stress_level: "low", job_activity: "sedentary" },
@@ -32,6 +32,19 @@ test("all seven steps accept normal answers and optional empty values", () => {
   assert.equal(food.cooking_minutes, null);
 });
 test("all steps reject missing data", () => schemas.forEach((schema) => assert.equal(schema.safeParse({}).success, false)));
+test("injury prefill preserves profile notes and clearing requires explicit confirmation", () => {
+  const { injuryPrefill } = load("src/lib/athlete-intake.ts");
+  for (const answers of [{}, { injury_list: [] }]) {
+    const prefill = injuryPrefill(answers, "Prior knee surgery");
+    assert.equal(prefill.injury_list[0].notes, "Prior knee surgery");
+    assert.equal(schemas[3].safeParse(prefill).success, true);
+  }
+  assert.deepEqual(injuryPrefill({ no_injuries: true }, "Prior knee surgery"), { injury_list: [], no_injuries: true });
+  assert.deepEqual(injuryPrefill({}, null).injury_list, []);
+  assert.equal(schemas[3].safeParse({ injury_list: [] }).success, false);
+  assert.equal(schemas[3].safeParse({ injury_list: [], no_injuries: true }).success, true);
+  assert.equal(schemas[3].safeParse({ injury_list: [{ area: "Knee", severity: "mild", notes: "Pain" }], no_injuries: true }).success, false);
+});
 test("invalid height, score, goals, injuries, schedule, nutrition and lifestyle fail", () => {
   const invalid = [
     { ...valid[0], height_ft: 3, height_in: 0 },

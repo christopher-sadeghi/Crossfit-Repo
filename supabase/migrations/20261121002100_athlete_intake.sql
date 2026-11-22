@@ -95,9 +95,13 @@ begin
     end loop;
     extra := jsonb_build_object('goal_ids', ids);
   elsif p_step = 4 then
-    extra := jsonb_build_object('injury_list', p_data->'injury_list');
-    update public.athletes set injuries = coalesce((select string_agg((v->>'area') || ' (' || (v->>'severity') || '): ' || (v->>'notes'), E'\n')
-      from jsonb_array_elements(p_data->'injury_list') v), 'None') where id = a.id;
+    extra := jsonb_build_object('injury_list', p_data->'injury_list', 'no_injuries', coalesce(p_data->'no_injuries', 'false'::jsonb));
+    if jsonb_array_length(p_data->'injury_list') > 0 then
+      update public.athletes set injuries = (select string_agg((v->>'area') || ' (' || (v->>'severity') || '): ' || (v->>'notes'), E'\n')
+        from jsonb_array_elements(p_data->'injury_list') v) where id = a.id;
+    elsif (p_data->>'no_injuries')::boolean is true then
+      update public.athletes set injuries = 'None' where id = a.id;
+    end if;
   elsif p_step = 5 then
     extra := jsonb_build_object('days_per_week', p_data->'days_per_week', 'session_minutes', p_data->'session_minutes', 'location', p_data->'location', 'equipment', p_data->'equipment');
   elsif p_step = 6 then

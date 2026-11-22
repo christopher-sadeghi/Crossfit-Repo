@@ -9,6 +9,12 @@ const text = z.string().trim().max(2000);
 const requiredNumber = (schema: z.ZodNumber) => z.preprocess((v) => v === "" || v == null ? undefined : v, z.coerce.number().pipe(schema));
 const optionalNumber = z.preprocess((v) => v === "" || v == null ? null : v, z.coerce.number().finite().nullable());
 export const injurySchema = z.object({ area: z.string().trim().min(1).max(80), severity: z.enum(["mild", "moderate", "severe"]), notes: text });
+export function injuryPrefill(answers: Record<string, unknown>, injuries: string | null | undefined) {
+  const injury_list = Array.isArray(answers.injury_list) && answers.injury_list.length ? answers.injury_list
+    : answers.no_injuries === true || !injuries?.trim() || injuries.trim().toLowerCase() === "none" ? []
+    : [{ area: "Existing limitation", severity: "mild", notes: injuries }];
+  return { injury_list, no_injuries: injury_list.length === 0 && answers.no_injuries === true };
+}
 export const benchmarkInputSchema = z.object({
   benchmark_id: z.string().uuid(), load: optionalNumber.pipe(z.number().min(0).max(2000).nullable()),
   time_seconds: optionalNumber.pipe(z.number().int().positive().max(86400).nullable()),
@@ -21,7 +27,7 @@ export const intakeSchemas = [
     .refine((v) => { const cm = ftInToCm(v.height_ft, v.height_in); return cm >= 98.73 && cm <= 251.27; }, "Height must be between 3 ft 4 in and 8 ft 2 in."),
   z.object({ experience_level: z.enum(["beginner", "intermediate", "advanced", "competitor"]), crossfit_detail: text, years_training: requiredNumber(z.number().min(0).max(100)), sports_background: text, benchmarks: z.array(benchmarkInputSchema).max(30) }),
   z.object({ goals: z.array(goalInputSchema).min(1, "Choose at least one goal.").max(3, "Choose up to three goals.") }).refine((v) => new Set(v.goals.map((g) => g.category)).size === v.goals.length, "Choose each goal category once."),
-  z.object({ injury_list: z.array(injurySchema).max(20) }),
+  z.object({ injury_list: z.array(injurySchema).max(20), no_injuries: z.boolean().default(false) }).refine((v) => v.no_injuries ? v.injury_list.length === 0 : v.injury_list.length > 0, "Add a limitation or confirm you have no injuries."),
   z.object({ days_per_week: z.coerce.number().int().min(1).max(7), session_minutes: z.coerce.number().int().min(10).max(300), location: z.enum(["gym", "home", "travel"]), equipment: z.array(z.enum(EQUIPMENT)).min(1).max(EQUIPMENT.length) }).refine((v) => !v.equipment.includes("None") || v.equipment.length === 1, "Choose equipment or None, not both."),
   foodPreferencesFormSchema.extend({ eating_habits: text }),
   z.object({ sleep_hours: requiredNumber(z.number().min(0).max(24)), stress_level: z.enum(["low", "moderate", "high"]), job_activity: z.enum(["sedentary", "light", "moderate", "physical"] ) }),
