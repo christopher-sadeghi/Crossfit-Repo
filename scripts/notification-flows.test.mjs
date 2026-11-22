@@ -18,6 +18,7 @@ function loader(mocks = {}) {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true }, fileName: filename,
     }).outputText;
     const localRequire = (id) => {
+      if (id === "next/server") return { after: () => {} };
       if (id in mocks) return mocks[id];
       if (id.startsWith("@/") || id.startsWith(".")) {
         const base = id.startsWith("@/") ? path.join(root, `src/${id.slice(2)}`) : path.resolve(path.dirname(filename), id);

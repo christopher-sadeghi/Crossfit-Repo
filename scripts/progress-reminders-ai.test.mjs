@@ -21,6 +21,7 @@ function load(relative, overrides = {}) {
 const today = "2026-11-22";
 const timeZone = { getToday: async () => today, getTimeZone: async () => "UTC" };
 const { checkProgressReminders } = load("src/lib/notifications.ts", {
+  "next/server": { after: () => {} },
   "@/lib/time-zone": timeZone, "@/lib/athlete-schedule": {}, "@/lib/consistency-data": {},
 });
 function reminderFixture(rows = [], error = null) {

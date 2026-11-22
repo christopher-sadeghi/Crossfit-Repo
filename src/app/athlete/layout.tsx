@@ -1,4 +1,5 @@
 import { Dumbbell, LogOut } from "lucide-react";
+import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { redirect } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -73,7 +74,7 @@ export default async function AthleteLayout({
           </form>
           </div>
         </header>
-        <div className="md:max-w-4xl">{children}</div>
+        <div className="md:max-w-4xl"><InstallPrompt />{children}</div>
       </main>
       <div className="md:hidden">
         <AthleteTabs unreadMessages={notifications.unreadMessages} />

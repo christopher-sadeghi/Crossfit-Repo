@@ -57,18 +57,24 @@ export type Database = {
           { foreignKeyName: "messages_coach_id_fkey"; columns: ["coach_id"]; isOneToOne: false; referencedRelation: "coaches"; referencedColumns: ["id"] }
         ];
       };
+      push_subscriptions: {
+        Row: { id: string; user_id: string; endpoint: string; p256dh: string; auth: string; user_agent: string | null; created_at: string | null; last_used_at: string | null };
+        Insert: { id?: string; user_id?: string; endpoint: string; p256dh: string; auth: string; user_agent?: string | null; created_at?: string | null; last_used_at?: string | null };
+        Update: { id?: string; user_id?: string; endpoint?: string; p256dh?: string; auth?: string; user_agent?: string | null; created_at?: string | null; last_used_at?: string | null };
+        Relationships: [];
+      };
       notifications: {
-        Row: { id: string; recipient_id: string; athlete_id: string | null; kind: string; title: string; body: string | null; link: string | null; dedupe_key: string | null; read_at: string | null; created_at: string };
-        Insert: { id?: string; recipient_id: string; athlete_id?: string | null; kind: string; title: string; body?: string | null; link?: string | null; dedupe_key?: string | null; read_at?: string | null; created_at?: string };
-        Update: { id?: string; recipient_id?: string; athlete_id?: string | null; kind?: string; title?: string; body?: string | null; link?: string | null; dedupe_key?: string | null; read_at?: string | null; created_at?: string };
+        Row: { id: string; recipient_id: string; athlete_id: string | null; kind: string; title: string; body: string | null; link: string | null; dedupe_key: string | null; pushed_at: string | null; read_at: string | null; created_at: string };
+        Insert: { id?: string; recipient_id: string; athlete_id?: string | null; kind: string; title: string; body?: string | null; link?: string | null; dedupe_key?: string | null; pushed_at?: string | null; read_at?: string | null; created_at?: string };
+        Update: { id?: string; recipient_id?: string; athlete_id?: string | null; kind?: string; title?: string; body?: string | null; link?: string | null; dedupe_key?: string | null; pushed_at?: string | null; read_at?: string | null; created_at?: string };
         Relationships: [
           { foreignKeyName: "notifications_athlete_id_fkey"; columns: ["athlete_id"]; isOneToOne: false; referencedRelation: "athletes"; referencedColumns: ["id"] }
         ];
       };
       notification_settings: {
-        Row: { user_id: string; email_enabled: boolean; email_frequency: string; updated_at: string };
-        Insert: { user_id?: string; email_enabled?: boolean; email_frequency?: string; updated_at?: string };
-        Update: { user_id?: string; email_enabled?: boolean; email_frequency?: string; updated_at?: string };
+        Row: { user_id: string; push_categories: string[]; email_enabled: boolean; email_frequency: string; updated_at: string };
+        Insert: { user_id?: string; push_categories?: string[]; email_enabled?: boolean; email_frequency?: string; updated_at?: string };
+        Update: { user_id?: string; push_categories?: string[]; email_enabled?: boolean; email_frequency?: string; updated_at?: string };
         Relationships: [];
       };
       athlete_workout_overrides: {
@@ -1560,6 +1566,7 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      register_push_subscription: { Args: { p_endpoint: string; p_p256dh: string; p_auth: string; p_user_agent: string }; Returns: undefined };
       apply_draft_program: { Args: { p_athlete_id: string; p_program: Json; p_today: string }; Returns: string };
       save_athlete_intake_step: { Args: { p_athlete_id: string; p_step: number; p_data: Json; p_today: string }; Returns: undefined };
       request_linked_athlete_intake: { Args: Record<PropertyKey, never>; Returns: unknown };

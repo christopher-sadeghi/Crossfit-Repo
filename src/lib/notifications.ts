@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { after } from "next/server";
 
 import { loadAthleteSchedule } from "@/lib/athlete-schedule";
 import { loadDriftingAthletes } from "@/lib/consistency-data";
@@ -34,6 +35,16 @@ export async function notify(supabase: Client, input: NotificationInput): Promis
       p_dedupe_key: input.dedupeKey ?? null,
     });
     if (error) console.error("Notification failed:", error);
+    else {
+      try {
+        after(async () => {
+          try {
+            const { pushNewNotifications } = await import("@/lib/push/send");
+            await pushNewNotifications({ athleteId: input.athleteId, kind: input.kind });
+          } catch { console.error("Push scheduling failed"); }
+        });
+      } catch { /* Outside a request, notification creation still succeeds. */ }
+    }
   } catch (error) {
     console.error("Notification failed:", error);
   }
