@@ -9,6 +9,24 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      check_in_reminders: {
+        Row: { athlete_id: string; remind_at: string | null; time_zone: string; updated_at: string };
+        Insert: { athlete_id: string; remind_at?: string | null; time_zone: string; updated_at?: string };
+        Update: { athlete_id?: string; remind_at?: string | null; time_zone?: string; updated_at?: string };
+        Relationships: [{ foreignKeyName: "check_in_reminders_athlete_id_fkey"; columns: ["athlete_id"]; isOneToOne: true; referencedRelation: "athletes"; referencedColumns: ["id"] }];
+      };
+      check_in_skips: {
+        Row: { athlete_id: string; skipped_on: string; created_at: string };
+        Insert: { athlete_id: string; skipped_on: string; created_at?: string };
+        Update: { athlete_id?: string; skipped_on?: string; created_at?: string };
+        Relationships: [{ foreignKeyName: "check_in_skips_athlete_id_fkey"; columns: ["athlete_id"]; isOneToOne: false; referencedRelation: "athletes"; referencedColumns: ["id"] }];
+      };
+      check_in_reminder_sends: {
+        Row: { athlete_id: string; local_date: string; sent_at: string };
+        Insert: { athlete_id: string; local_date: string; sent_at?: string };
+        Update: { athlete_id?: string; local_date?: string; sent_at?: string };
+        Relationships: [{ foreignKeyName: "check_in_reminder_sends_athlete_id_fkey"; columns: ["athlete_id"]; isOneToOne: false; referencedRelation: "athletes"; referencedColumns: ["id"] }];
+      };
       athlete_ai_card_actions: {
         Row: { id: string; assistant_message_id: string; card_index: number; athlete_id: string; coach_id: string; action: string; ref_id: string; created_at: string };
         Insert: { id?: string; assistant_message_id: string; card_index: number; athlete_id: string; coach_id: string; action: string; ref_id: string; created_at?: string };
