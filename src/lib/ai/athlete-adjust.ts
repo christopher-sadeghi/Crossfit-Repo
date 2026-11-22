@@ -10,6 +10,7 @@ import type { Database, Json } from "@/lib/supabase/database.types";
 import { formatScore, fromKgPrecise, toKg, type Units } from "@/lib/units";
 
 import { friendlySuggestionError } from "./service-core";
+import { trainingLoadContext } from "./athlete-context";
 import { movementIdSchema } from "./movement-schema";
 import { scaleWorkoutChangeSchema, scaleWorkoutDetailsSchema } from "./scale-workout";
 import { ageOn, loadWorkoutMovementLibrary } from "./workout-context";
@@ -58,6 +59,7 @@ export async function buildAthleteAdjustRequest(
     { data: workout, error: workoutError },
     { data: resultRows, error: resultsError },
     recentCheckIns,
+    trainingLoad,
   ] = await Promise.all([
     loadWorkoutMovementLibrary(supabase),
     supabase
@@ -82,6 +84,7 @@ export async function buildAthleteAdjustRequest(
       .order("performed_on", { ascending: false })
       .limit(10),
     loadRecentCheckIns(supabase, params.athleteId, params.scheduledOn, 7),
+    trainingLoadContext(supabase, params.athleteId, params.scheduledOn),
   ]);
   if (athleteError || !athlete) throw athleteError ?? new Error("Athlete not found.");
   if (workoutError || !workout) throw workoutError ?? new Error("Workout not found.");
@@ -170,6 +173,7 @@ export async function buildAthleteAdjustRequest(
       pain_notes: result.pain_notes,
     })),
     recent_check_ins: recentCheckIns,
+    training_load: trainingLoad,
   } satisfies Json;
 
   const ids = input.library.map(({ id }) => id);

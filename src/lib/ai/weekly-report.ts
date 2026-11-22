@@ -10,7 +10,7 @@ import { getToday } from "@/lib/time-zone";
 import { formatDate, formatScore, formatWeight, type Units } from "@/lib/units";
 import { completedReportWeek, NOT_LOGGED, weeklyReportSchema, type WeeklyReportInput } from "@/lib/weekly-report";
 
-import { foodAverages } from "./athlete-context";
+import { foodAverages, trainingLoadContext } from "./athlete-context";
 import { averageCheckIns, loadProgressData, RECOVERY_FIELDS } from "./progress-data";
 
 type Snapshot = WeeklyReportInput["sections"];
@@ -126,12 +126,13 @@ async function recoveryRows(supabase: Client, athleteId: string, week: Week) {
 async function buildRequest(supabase: Client, { athleteId }: { athleteId: string | null }) {
   if (!athleteId) throw new Error("Athlete not found.");
   const week = completedReportWeek(await getToday());
-  const [progress, { stats, attendance, schedule }, benchmarks, nutrition, recovery] = await Promise.all([
+  const [progress, { stats, attendance, schedule }, benchmarks, nutrition, recovery, trainingLoad] = await Promise.all([
     loadProgressData(supabase, athleteId, week.end_on),
     loadConsistency(supabase, athleteId, week.end_on, { closeToday: true }),
     loadAthleteBenchmarks(supabase, athleteId, week.end_on, week.end_on),
     nutritionRows(supabase, athleteId, week),
     recoveryRows(supabase, athleteId, week),
+    trainingLoadContext(supabase, athleteId, week.end_on),
   ]);
   const hasResult = scheduledWorkoutResultMatcher(progress.results);
   const weeklySchedule = schedule.filter((item) => item.date >= week.start_on);
@@ -147,6 +148,13 @@ async function buildRequest(supabase: Client, { athleteId }: { athleteId: string
         row("Workout results logged during the week", weeklyResults.length || NOT_LOGGED),
         row("Class attendance entries", weeklyAttendance.filter((entry) => entry.kind === "class").length || NOT_LOGGED),
         row("Open gym attendance entries", weeklyAttendance.filter((entry) => entry.kind === "open_gym").length || NOT_LOGGED),
+        row("Gym load this week", weeklyResults.length
+          ? `${trainingLoad.gym_load_last_7_days}${trainingLoad.estimated_gym_sessions_last_7_days ? " (includes estimates)" : ""}` : null),
+        row("Outside activity load this week", trainingLoad.outside_load_last_7_days || null),
+        row("Weekly average load over 28 days", trainingLoad.weekly_average_load_last_28_days || null),
+        row("Acute:chronic load ratio", trainingLoad.acute_chronic_ratio == null ? null : `${trainingLoad.acute_chronic_ratio}×`),
+        ...trainingLoad.recent_outside_activities.filter(({ date }) => date >= week.start_on)
+          .map((activity) => row(activity.label, `${formatDate(activity.date)} · ${activity.duration_minutes} min · RPE ${activity.rpe} · ${activity.session_load} load`)),
       ],
       results: resultRows(progress.results, week, progress.units),
       benchmarks: benchmarkRows(benchmarks, week, progress.units),
