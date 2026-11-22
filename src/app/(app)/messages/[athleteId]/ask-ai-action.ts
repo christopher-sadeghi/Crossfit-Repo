@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getToday } from "@/lib/time-zone";
 import { getViewer } from "@/lib/viewer";
 
-export type AskAthleteAIState = { error?: string; draft?: string; drafted?: boolean };
+export type AskAthleteAIState = { error?: string; draft?: string; suggestionIds?: string[] };
 
 export async function askAthleteMessageAI(athleteId: string, messageId: string): Promise<AskAthleteAIState> {
   const viewer = await getViewer();
@@ -34,7 +34,7 @@ export async function askAthleteMessageAI(athleteId: string, messageId: string):
     if (result.suggestionIds.length) {
       revalidatePath(`/messages/${athlete.id}`);
       revalidatePath("/settings/ai-history");
-      return { drafted: true };
+      return { suggestionIds: result.suggestionIds };
     }
     return { draft: result.reply.slice(0, 2000) };
   } catch (error) {

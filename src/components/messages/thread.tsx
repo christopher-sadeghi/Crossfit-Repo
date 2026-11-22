@@ -91,6 +91,7 @@ export async function MessageThread({ athleteId: requestedAthleteId, requestedLi
           const day = dateFormat.format(date);
           const previousDay = index ? dateFormat.format(new Date(rows[index - 1].created_at)) : null;
           const linked = row.link_type && row.link_id ? resolved.get(`${row.link_type}:${row.link_id}`) : null;
+          const suggestions = cardsByMessage.get(row.id) ?? [];
           return (
             <li key={row.id} className="grid gap-3">
               {day !== previousDay && <p className="text-center text-xs text-muted-foreground">{day === today ? "Today" : dayFormat.format(date)}</p>}
@@ -100,8 +101,8 @@ export async function MessageThread({ athleteId: requestedAthleteId, requestedLi
                 {row.link_type && (row.link_type === "suggestion" && !isCoach ? <p className="mt-2 text-xs opacity-75">AI suggestion (your coach is reviewing it)</p> : linked ? <Link href={linked.href} className="mt-2 block break-words text-sm underline underline-offset-4">{linked.label}</Link> : <p className="mt-2 text-xs opacity-75">Linked item unavailable</p>)}
                 <p className="mt-2 text-right text-xs opacity-75"><time dateTime={row.created_at}>{timeFormat.format(date)}</time>{mine && row.read_at ? " · Read" : ""}</p>
               </article>
-              {isCoach && !mine && <AskAI athleteId={athleteId} messageId={row.id} />}
-              {cardsByMessage.get(row.id)?.map((suggestion) => (
+              {isCoach && !mine && <AskAI athleteId={athleteId} messageId={row.id} pendingSuggestionIds={suggestions.filter((suggestion) => suggestion.status === "pending").map((suggestion) => suggestion.id)} />}
+              {suggestions.map((suggestion) => (
                 <InlineSuggestionCard key={suggestion.id} id={suggestion.id} suggestion={inlineSuggestion(suggestion)} />
               ))}
             </li>

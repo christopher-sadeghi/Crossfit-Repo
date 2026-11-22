@@ -179,13 +179,25 @@ test("Ask AI reply preserves coach edits after a failed send", () => {
     "@/components/ui/button": { Button: "button" },
     "@/components/ui/textarea": { Textarea: "textarea" },
   })("src/components/messages/ask-ai.tsx");
-  const draft = treeNodes(AskAI({ athleteId, messageId: itemId })).find((node) => node.type.name === "ReplyDraft");
+  const draft = treeNodes(AskAI({ athleteId, messageId: itemId, pendingSuggestionIds: [] })).find((node) => node.type.name === "ReplyDraft");
   isDraft = true;
   treeNodes(draft.type(draft.props)).find((node) => node.type === "textarea").props.onChange({ target: { value: "Coach's edit" } });
   failed = true;
   const nodes = treeNodes(draft.type(draft.props));
   assert.equal(nodes.find((node) => node.type === "textarea").props.value, "Coach's edit");
   assert.equal(nodes.find((node) => node.props.role === "alert").props.children, "Offline");
+});
+
+test("Ask AI reports a ready suggestion only while one of its cards is pending", () => {
+  const { AskAI } = loader({
+    react: { useActionState: () => [{ suggestionIds: [itemId] }, () => {}, false] },
+    "@/app/(app)/messages/[athleteId]/ask-ai-action": { askAthleteMessageAI() {}, sendAthleteAIDraft() {} },
+    "@/components/ui/button": { Button: "button" },
+    "@/components/ui/textarea": { Textarea: "textarea" },
+  })("src/components/messages/ask-ai.tsx");
+  const statuses = (pendingSuggestionIds) => treeNodes(AskAI({ athleteId, messageId: userId, pendingSuggestionIds })).filter((node) => node.props.role === "status").map((node) => node.props.children);
+  assert.deepEqual(statuses([itemId]), ["Suggestion ready to review."]);
+  assert.deepEqual(statuses(["another-pending-card"]), []);
 });
 
 function treeNodes(node) {
@@ -288,7 +300,7 @@ test("only the coach thread gets AI controls and suggestions linked to an athlet
   const { client } = clientFixture({
     messages: [{ id: sourceId, athlete_id: athleteId, coach_id: coachId, sender_id: userId, body: "Can I get a different WOD?", created_at: "2026-11-21T10:00:00Z" }],
     ai_suggestions: [
-      { id: "proposal", athlete_id: athleteId, coach_id: coachId, suggestion_type: "write_workout", input: { source_message_id: sourceId } },
+      { id: "proposal", athlete_id: athleteId, coach_id: coachId, suggestion_type: "write_workout", status: "pending", input: { source_message_id: sourceId } },
       { id: "adjustment", athlete_id: athleteId, coach_id: coachId, suggestion_type: "athlete_adjust_workout" },
       { id: "unrelated", athlete_id: athleteId, coach_id: coachId, suggestion_type: "adjust_macros" },
       { id: "other-athlete", athlete_id: "other", coach_id: coachId, suggestion_type: "athlete_adjust_workout" },
@@ -312,6 +324,7 @@ test("only the coach thread gets AI controls and suggestions linked to an athlet
     })("src/components/messages/thread.tsx");
     const nodes = treeNodes(await MessageThread(isCoach ? { athleteId } : {}));
     assert.deepEqual(nodes.filter((node) => node.type === "ask-ai").map((node) => node.props.messageId), isCoach ? [sourceId] : []);
+    assert.deepEqual(nodes.filter((node) => node.type === "ask-ai").map((node) => node.props.pendingSuggestionIds), isCoach ? [["proposal"]] : []);
     assert.deepEqual(nodes.filter((node) => node.type === "approval-card").map((node) => node.props.id), isCoach ? ["proposal"] : []);
     assert.deepEqual(nodes.filter((node) => node.type === "adjustment-card").map((node) => node.props.suggestion.id), isCoach ? ["adjustment"] : []);
   }

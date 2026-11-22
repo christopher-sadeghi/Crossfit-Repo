@@ -20,7 +20,7 @@ function ReplyDraft({ athleteId, messageId, draft }: { athleteId: string; messag
   );
 }
 
-export function AskAI({ athleteId, messageId }: { athleteId: string; messageId: string }) {
+export function AskAI({ athleteId, messageId, pendingSuggestionIds }: { athleteId: string; messageId: string; pendingSuggestionIds: string[] }) {
   const [state, action, pending] = useActionState(async () => askAthleteMessageAI(athleteId, messageId), {} as AskAthleteAIState);
   return (
     <div className="grid gap-2">
@@ -28,7 +28,7 @@ export function AskAI({ athleteId, messageId }: { athleteId: string; messageId: 
         <Button type="submit" variant="outline" size="sm" disabled={pending}>{pending ? "Asking AI…" : "Ask AI"}</Button>
       </form>
       {state.error && <p role="alert" className="text-sm text-destructive">{state.error}</p>}
-      {state.drafted && <p role="status" className="text-sm text-muted-foreground">Suggestion ready to review. Nothing has changed yet.</p>}
+      {state.suggestionIds?.some((id) => pendingSuggestionIds.includes(id)) && <p role="status" className="text-sm text-muted-foreground">Suggestion ready to review.</p>}
       {state.draft && !pending && <ReplyDraft athleteId={athleteId} messageId={messageId} draft={state.draft} />}
     </div>
   );
