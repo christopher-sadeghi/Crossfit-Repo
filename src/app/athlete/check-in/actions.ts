@@ -62,6 +62,9 @@ export async function saveCheckIn(_: FormState, data: FormData): Promise<FormSta
       { onConflict: "athlete_id,entry_on" },
     );
   if (error) return failure(data, "Couldn't save your check-in. Please try again.");
+  const { error: skipError } = await supabase.from("check_in_skips").delete()
+    .eq("athlete_id", viewer.athleteId).eq("skipped_on", entry_on);
+  if (skipError) return failure(data, "Check-in saved, but couldn't clear today's skip. Please try again.");
   if ((readinessScore(parsed.data) ?? 100) < LOW_READINESS) {
     await Promise.all([
       notifyLowReadiness(supabase, viewer.athleteId, entry_on),
@@ -73,4 +76,19 @@ export async function saveCheckIn(_: FormState, data: FormData): Promise<FormSta
   revalidatePath("/athlete/journal");
   revalidatePath(`/athletes/${viewer.athleteId}`);
   return { message: "Check-in saved." };
+}
+
+export async function setCheckInSkipped(expectedDate: string, skipped: boolean): Promise<FormState> {
+  const viewer = await getViewer();
+  if (viewer?.kind !== "athlete") return { error: "Only athletes can skip a check-in." };
+  const today = await getToday();
+  if (expectedDate !== today) return { error: "A new day has started — reload to do today's check-in." };
+  if (typeof skipped !== "boolean") return { error: "Invalid skip preference." };
+  const supabase = await createClient();
+  const { error } = skipped
+    ? await supabase.from("check_in_skips").upsert({ athlete_id: viewer.athleteId, skipped_on: today }, { onConflict: "athlete_id,skipped_on", ignoreDuplicates: true })
+    : await supabase.from("check_in_skips").delete().eq("athlete_id", viewer.athleteId).eq("skipped_on", today);
+  if (error) return { error: "Couldn't update today's skip. Please try again." };
+  revalidatePath("/athlete");
+  return {};
 }

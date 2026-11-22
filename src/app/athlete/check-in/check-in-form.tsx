@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CHECK_IN_LABELS, CHECK_IN_SCALES, isCheckIn, SORENESS_AREAS, readinessLabel, type CheckIn } from "@/lib/check-in";
 import type { FormState } from "@/lib/auth/form-state";
 
-import { saveCheckIn } from "./actions";
+import { saveCheckIn, setCheckInSkipped } from "./actions";
 
 function readSkip(key: string) {
   try {
@@ -31,9 +31,11 @@ function writeSkip(key: string, skipped: boolean) {
   }
 }
 
-export function CheckInForm({ entry, today, athleteId }: { entry: CheckIn | null; today: string; athleteId: string }) {
+export function CheckInForm({ entry, today, athleteId, initialSkipped = false }: { entry: CheckIn | null; today: string; athleteId: string; initialSkipped?: boolean }) {
   const [editing, setEditing] = useState(false);
-  const [skipped, setSkipped] = useState(false);
+  const [skipped, setSkipped] = useState(initialSkipped);
+  const [skipPending, startSkip] = useTransition();
+  const [skipError, setSkipError] = useState<string>();
   const [hours, setHours] = useState(entry?.sleep_hours == null ? "" : String(entry.sleep_hours));
   const [ratings, setRatings] = useState(() =>
     Object.fromEntries(
@@ -44,8 +46,8 @@ export function CheckInForm({ entry, today, athleteId }: { entry: CheckIn | null
   const [note, setNote] = useState(entry?.notes ?? "");
   const skipKey = `checkin-skip:${athleteId}:${today}`;
   useEffect(() => {
-    setSkipped(readSkip(skipKey));
-  }, [skipKey]);
+    setSkipped(initialSkipped || readSkip(skipKey));
+  }, [skipKey, initialSkipped]);
   const [state, action, pending] = useActionState<FormState, FormData>(async (previous, data) => {
     const result = await saveCheckIn(previous, data);
     if (!result.error) {
@@ -66,21 +68,26 @@ export function CheckInForm({ entry, today, athleteId }: { entry: CheckIn | null
   ].filter((item): item is string => item !== null) : [];
   const showSkipped = skipped && !hasSavedEntry && !editing;
   const showPrompt = !hasSavedEntry && !showSkipped && !editing;
-  const skipToday = () => {
-    writeSkip(skipKey, true);
-    setSkipped(true);
-    setEditing(false);
+  const changeSkip = (value: boolean) => {
+    setSkipError(undefined);
+    startSkip(async () => {
+      try {
+        const result = await setCheckInSkipped(today, value);
+        if (result.error) {
+          setSkipError(result.error);
+          return;
+        }
+        writeSkip(skipKey, value);
+        setSkipped(value);
+        setEditing(!value);
+      } catch {
+        setSkipError("Couldn't update today's skip. Please try again.");
+      }
+    });
   };
-  const fillItIn = () => {
-    writeSkip(skipKey, false);
-    setSkipped(false);
-    setEditing(true);
-  };
-  const editToday = () => {
-    writeSkip(skipKey, false);
-    setSkipped(false);
-    setEditing(true);
-  };
+  const skipToday = () => changeSkip(true);
+  const fillItIn = () => changeSkip(false);
+  const editToday = fillItIn;
 
   return (
     <Card>
@@ -89,7 +96,7 @@ export function CheckInForm({ entry, today, athleteId }: { entry: CheckIn | null
           <span className="sr-only">Daily check-in (optional)</span>
           <span>Check-in skipped today</span>
           <span aria-hidden="true">·</span>
-          <Button type="button" variant="ghost" className="h-auto px-0 text-primary underline underline-offset-4" onClick={fillItIn}>
+          <Button type="button" disabled={pending || skipPending} variant="ghost" className="h-auto px-0 text-primary underline underline-offset-4" onClick={fillItIn}>
             Fill it in
           </Button>
         </CardContent>
@@ -101,10 +108,10 @@ export function CheckInForm({ entry, today, athleteId }: { entry: CheckIn | null
           <CardContent className="grid gap-3">
             <p className="text-sm text-muted-foreground">How are you feeling today? Takes about 30 seconds.</p>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" onClick={fillItIn}>
+              <Button type="button" disabled={pending || skipPending} onClick={fillItIn}>
                 Fill it in
               </Button>
-              <Button type="button" variant="outline" onClick={skipToday}>
+              <Button type="button" disabled={pending || skipPending} variant="outline" onClick={skipToday}>
                 Skip today
               </Button>
             </div>
@@ -138,7 +145,7 @@ export function CheckInForm({ entry, today, athleteId }: { entry: CheckIn | null
                   </div>
                 )}
                 {entry.notes && <p className="whitespace-pre-wrap text-sm">{entry.notes}</p>}
-                <Button variant="outline" onClick={editToday}>
+                <Button disabled={pending || skipPending} variant="outline" onClick={editToday}>
                   Edit today&apos;s check-in
                 </Button>
               </>
@@ -221,9 +228,9 @@ export function CheckInForm({ entry, today, athleteId }: { entry: CheckIn | null
                 </div>
                 {state.error && <p role="alert" className="text-sm text-destructive">{state.error}</p>}
                 <div className="flex flex-wrap gap-2">
-                  <Button disabled={pending}>{pending ? "Saving…" : "Save check-in"}</Button>
+                  <Button disabled={pending || skipPending}>{pending ? "Saving…" : "Save check-in"}</Button>
                   {!hasSavedEntry && (
-                    <Button type="button" variant="outline" onClick={skipToday}>
+                    <Button type="button" disabled={pending || skipPending} variant="outline" onClick={skipToday}>
                       Skip today
                     </Button>
                   )}
@@ -237,6 +244,7 @@ export function CheckInForm({ entry, today, athleteId }: { entry: CheckIn | null
           </CardContent>
         </>
       )}
+      {skipError && <CardContent><p role="alert" className="text-sm text-destructive">{skipError}</p></CardContent>}
     </Card>
   );
 }

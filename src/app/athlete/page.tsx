@@ -142,12 +142,12 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
         .eq("athlete_id", viewer.athleteId)
         .in("workout_id", todayWorkoutIds)
     : { data: [] };
-  const { data: todayJournal } = await supabase
-    .from("athlete_journal_entries")
-    .select(CHECK_IN_COLUMNS)
-    .eq("athlete_id", viewer.athleteId)
-    .eq("entry_on", currentDate)
-    .maybeSingle();
+  const [{ data: todayJournal }, { data: todaySkip }] = await Promise.all([
+    supabase.from("athlete_journal_entries").select(CHECK_IN_COLUMNS)
+      .eq("athlete_id", viewer.athleteId).eq("entry_on", currentDate).maybeSingle(),
+    supabase.from("check_in_skips").select("athlete_id")
+      .eq("athlete_id", viewer.athleteId).eq("skipped_on", currentDate).maybeSingle(),
+  ]);
   const scalingByWorkout = new Map(
     (scalings ?? []).map((scaling) => [scaling.workout_id, scaling]),
   );
@@ -298,7 +298,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
           </Card>
         )}
       </section>
-      <CheckInForm key={currentDate} entry={todayJournal} today={currentDate} athleteId={viewer.athleteId} />
+      <CheckInForm key={currentDate} entry={todayJournal} today={currentDate} athleteId={viewer.athleteId} initialSkipped={!!todaySkip} />
       <AthleteConsistencyCard athleteId={viewer.athleteId} compact />
       <details id="log-activity" key={`log-activity-${activityDay}`} open={activityDate != null} className="rounded-lg border bg-card p-4">
         <summary className="w-fit cursor-pointer font-semibold">Log activity</summary>
