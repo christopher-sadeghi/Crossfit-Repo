@@ -1,10 +1,13 @@
 import { redirect } from "next/navigation";
 
 import { DeleteOwnFoodButton, FoodIdeaList, FoodPreferencesForm, SuggestFoodForm } from "@/components/nutrition/food-ideas";
+import { FoodLogger } from "@/components/nutrition/food-logger";
+import { ManualFoodForm } from "@/components/nutrition/food-logger-forms";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FOOD_DISCLAIMER } from "@/lib/ai/suggest-food";
 import { readPreferences } from "@/lib/food-preferences";
 import { latestFoodIdeas } from "@/lib/food-ideas";
+import { loadFoodLibrary } from "@/lib/food-library";
 import { MEAL_LABELS, MEALS, targetOn, totals } from "@/lib/nutrition";
 import { createClient } from "@/lib/supabase/server";
 import { getToday } from "@/lib/time-zone";
@@ -18,16 +21,17 @@ export default async function AthleteNutritionPage() {
 
   const today = await getToday();
   const supabase = await createClient();
-  const [{ data: targets }, { data: food }, { data: prefsRow }, ideas] = await Promise.all([
+  const [{ data: targets }, { data: food }, { data: prefsRow }, ideas, library] = await Promise.all([
     supabase.from("nutrition_targets").select("calories, protein_g, carbs_g, fat_g, start_date, end_date").eq("athlete_id", viewer.athleteId),
     supabase
       .from("food_logs")
-      .select("id, logged_on, meal, food_name, calories, protein_g, carbs_g, fat_g")
+      .select("id, logged_on, meal, food_name, serving, calories, protein_g, carbs_g, fat_g")
       .eq("athlete_id", viewer.athleteId)
       .eq("logged_on", today)
       .order("created_at"),
     supabase.from("athlete_food_preferences").select("diet_type, allergies, dislikes, cooking_minutes").eq("athlete_id", viewer.athleteId).maybeSingle(),
     latestFoodIdeas(supabase, viewer.athleteId, today),
+    loadFoodLibrary(supabase, viewer.athleteId, today),
   ]);
 
   const target = targetOn(targets ?? [], today);
@@ -77,6 +81,13 @@ export default async function AthleteNutritionPage() {
         </CardContent>
       </Card>
 
+      <Card className="min-w-0">
+        <CardHeader><CardTitle>Log food</CardTitle></CardHeader>
+        <CardContent className="min-w-0">
+          <FoodLogger athleteId={viewer.athleteId} date={today} allergies={prefs.allergies} {...library} todayEntries={entries} manual={<ManualFoodForm athleteId={viewer.athleteId} date={today} />} />
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Today&apos;s food log</CardTitle>
@@ -88,6 +99,7 @@ export default async function AthleteNutritionPage() {
                 <li key={entry.id} className="flex min-w-0 items-center justify-between gap-2 border-b pb-2 last:border-0 last:pb-0">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{entry.food_name}</p>
+                    {entry.serving && <p className="text-xs break-words text-muted-foreground">{entry.serving}</p>}
                     <p className="text-xs break-words text-muted-foreground">
                       {MEAL_LABELS[entry.meal]} · {entry.calories} kcal · P {Number(entry.protein_g)}g · C {Number(entry.carbs_g)}g · F {Number(entry.fat_g)}g
                     </p>

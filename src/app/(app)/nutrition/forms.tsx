@@ -103,6 +103,7 @@ export type FoodEntry = {
   id: string;
   meal: Meal;
   food_name: string;
+  serving?: string | null;
   calories: number;
   protein_g: number;
   carbs_g: number;
@@ -125,6 +126,10 @@ function FoodFields({ v, entry }: { v: Record<string, string>; entry?: FoodEntry
       <div className="grid gap-1.5 sm:col-span-2">
         <Label htmlFor={`food-${entry?.id ?? "new"}`}>Food</Label>
         <Input id={`food-${entry?.id ?? "new"}`} name="food_name" required maxLength={120} placeholder="e.g. Greek yogurt + berries" defaultValue={v.food_name ?? entry?.food_name} />
+      </div>
+      <div className="grid gap-1.5 sm:col-span-2">
+        <Label htmlFor={`serving-${entry?.id ?? "new"}`}>Serving (optional)</Label>
+        <Input id={`serving-${entry?.id ?? "new"}`} name="serving" maxLength={120} defaultValue={v.serving ?? entry?.serving ?? ""} placeholder="e.g. 1 cup (245 g)" />
       </div>
       {(
         [
@@ -192,7 +197,7 @@ export function FoodRow({ athleteId, date, entry }: { athleteId: string; date: s
   return (
     <TableRow>
       <TableCell className="pl-4 text-muted-foreground">{MEAL_LABELS[entry.meal]}</TableCell>
-      <TableCell className="font-medium">{entry.food_name}</TableCell>
+      <TableCell className="font-medium">{entry.food_name}{entry.serving && <p className="text-xs font-normal text-muted-foreground">{entry.serving}</p>}</TableCell>
       <TableCell>{entry.calories}</TableCell>
       <TableCell>{Number(entry.protein_g)}g</TableCell>
       <TableCell>{Number(entry.carbs_g)}g</TableCell>
