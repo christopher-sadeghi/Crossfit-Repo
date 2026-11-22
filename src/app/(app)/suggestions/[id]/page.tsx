@@ -32,6 +32,7 @@ import { FoodIdeaList } from "@/components/nutrition/food-ideas";
 import { FOOD_DISCLAIMER, foodIdeasInputSchema, foodIdeasSchema } from "@/lib/ai/suggest-food";
 import { addedIdeaNames } from "@/lib/food-ideas";
 import { readPreferences } from "@/lib/food-preferences";
+import { DraftProgramReview } from "@/components/suggestions/draft-program-review";
 
 type Props = { params: Promise<{ id: string }> };
 type MacroKey = "calories" | "protein_g" | "carbs_g" | "fat_g";
@@ -47,6 +48,7 @@ export default async function SuggestionPage({ params }: Props) {
   const supabase = await createClient();
   const { data: suggestion } = await supabase.from("ai_suggestions").select("*").eq("id", id).maybeSingle();
   if (!suggestion) notFound();
+  if (suggestion.suggestion_type === "draft_program") return <DraftProgramReview suggestion={suggestion} />;
   if (suggestion.suggestion_type === "athlete_adjust_workout") return <AthleteAdjustmentReview suggestion={suggestion} />;
   if (suggestion.suggestion_type === "weekly_report") {
     const { data: athlete } = suggestion.athlete_id

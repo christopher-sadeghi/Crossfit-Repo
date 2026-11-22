@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Enums } from "@/lib/supabase/database.types";
 
 import { runSuggestionWithClient } from "./service-core";
+import { ApprovalError } from "./errors";
 import { SUGGESTION_REGISTRY, type SuggestionParams } from "./suggestions";
 
 export async function requestRegisteredSuggestion(
@@ -23,6 +24,7 @@ export async function requestRegisteredSuggestion(
       validate: entry.validate,
     });
   } catch (error) {
+    if (error instanceof ApprovalError) return { error: error.message };
     console.error("Couldn't prepare AI suggestion:", error);
     return { error: "The AI couldn't make a suggestion right now. Please try again in a minute." };
   }
