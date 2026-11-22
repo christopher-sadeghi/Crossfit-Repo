@@ -6,7 +6,7 @@ import { MEALS, targetOn, totals, type Meal } from "@/lib/nutrition";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { getToday } from "@/lib/time-zone";
 
-import { matchedAllergies } from "./food-safety";
+import { ideaText, matchedAllergies } from "./food-safety";
 import { ALLERGEN_ERROR } from "./service-core";
 
 export const FOOD_DISCLAIMER =
@@ -124,9 +124,7 @@ function preferenceContext(prefs: FoodPreferences) {
   };
 }
 
-export function ideaText(idea: Pick<FoodIdea, "name" | "description" | "ingredients">) {
-  return [idea.name, idea.description, ...idea.ingredients].join(" , ");
-}
+export { ideaText };
 
 /** Checks the AI's answer against the allergies: unsafe ideas are dropped, never shown. */
 export function removeAllergens(proposal: z.infer<typeof generatedSchema>, input: Json): FoodIdeas {

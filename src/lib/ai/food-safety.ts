@@ -58,6 +58,16 @@ const GROUPS: { names: string[]; terms: string[] }[] = [
   { names: ["sulphite", "sulfite"], terms: ["sulphite", "sulfite", "wine", "dried apricot", "dried fruit"] },
 ];
 
+// Common foods made from one specific allergen, for when the athlete names it rather than its group.
+const DERIVATIVES: Record<string, string[]> = {
+  almond: ["marzipan", "frangipane", "amaretti", "amaretto", "praline", "nougat", "orgeat"],
+  hazelnut: ["nutella", "gianduja", "praline", "frangelico", "nougat"],
+  "pine nut": ["pesto"],
+  cashew: ["pesto"],
+  pistachio: ["baklava", "pesto"],
+  walnut: ["baklava"],
+};
+
 export function normalizeTerm(value: string) {
   return value
     .toLowerCase()
@@ -89,6 +99,9 @@ export function allergyTerms(allergy: string) {
     if (group.names.some((name) => normalized === name || normalized.split(" ").includes(name)))
       for (const term of group.terms) terms.add(singularPhrase(term));
   }
+  for (const [food, derived] of Object.entries(DERIVATIVES)) {
+    if (containsTerm(normalized, food)) for (const term of derived) terms.add(singularPhrase(term));
+  }
   return [...terms];
 }
 
@@ -102,6 +115,10 @@ export function containsTerm(text: string, term: string) {
   const needle = singularPhrase(normalizeTerm(term));
   if (!needle) return false;
   return new RegExp(`(^| )${escape(needle)}( |$)`).test(haystack);
+}
+
+export function ideaText(idea: { name: string; description: string; ingredients: string[] }) {
+  return [idea.name, idea.description, ...idea.ingredients].join(" , ");
 }
 
 /** The allergies (as the athlete wrote them) that this text appears to contain. */
