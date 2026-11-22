@@ -1,12 +1,11 @@
 "use client";
 
 import { Bot, Loader2, Send, Trash2, X } from "lucide-react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 
 import { clearChat, loadChat, sendChatMessage, type ChatMessage } from "@/app/(app)/assistant/actions";
-import { Badge } from "@/components/ui/badge";
+import { InlineSuggestionCard } from "@/components/suggestions/inline-suggestion-card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { ChatContext } from "@/lib/ai/chat";
@@ -122,7 +121,7 @@ export function CoachChat() {
         ) : messages.length === 0 ? (
           <div className="space-y-3 text-sm text-muted-foreground">
             <p>Ask about your athletes and programming. I only use your real data and your movement library.</p>
-            <p>If I suggest changes, they go to AI Suggestions for you to approve. Nothing changes until you do.</p>
+            <p>If I suggest changes, you can review and approve them right here. Nothing changes until you do.</p>
             <div className="flex flex-col items-start gap-2">
               {EXAMPLES.map((example) => (
                 <Button key={example} variant="outline" size="sm" className="h-auto text-left whitespace-normal" onClick={() => send(example)}>
@@ -146,20 +145,7 @@ export function CoachChat() {
                   <ul className="space-y-2">
                     {message.suggestions.map((s) => (
                       <li key={s.id}>
-                        <Link
-                          href={`/suggestions/${s.id}`}
-                          className="flex items-center justify-between gap-2 rounded-lg border p-2 hover:bg-muted"
-                        >
-                          <span>
-                            <span className="block font-medium">{s.title ?? s.label}</span>
-                            <span className="block text-xs text-muted-foreground">
-                              {[s.label, s.detail].filter(Boolean).join(" · ")}
-                            </span>
-                          </span>
-                          <Badge variant={s.status === "pending" ? "secondary" : "outline"}>
-                            {s.status === "pending" ? "Review" : s.status}
-                          </Badge>
-                        </Link>
+                        <InlineSuggestionCard id={s.id} suggestion={s} onOpenReview={() => { setOpen(false); setMessages(null); }} />
                       </li>
                     ))}
                   </ul>

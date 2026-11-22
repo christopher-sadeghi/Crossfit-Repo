@@ -59,6 +59,11 @@ function clientFixture(tables = {}, queryError = null) {
         return { data: sorted.slice(0, limit), count, error: queryError };
       };
       const builder = {
+        or: (predicate) => {
+          assert.equal(predicate, "suggestion_type.eq.athlete_adjust_workout,input->>source_message_id.not.is.null");
+          rows = rows.filter((row) => row.suggestion_type === "athlete_adjust_workout" || row.input?.source_message_id);
+          return builder;
+        },
         select: () => builder,
         order: (key, { ascending = true } = {}) => { ordering.push([key, ascending]); return builder; },
         limit: (value) => { limit = value; return builder; },
@@ -156,6 +161,13 @@ test("send rejects empty, oversized, forged links, strangers and database failur
   }
 });
 
+const threadCardMocks = {
+  "@/components/messages/ask-ai": { AskAI: "ask-ai" },
+  "@/components/suggestions/inline-suggestion-card": { InlineSuggestionCard: "approval-card" },
+  "@/components/suggestions/athlete-adjustment-card": { AthleteAdjustmentCard: "adjustment-card" },
+  "@/lib/ai/inline-suggestion": { inlineSuggestion: (row) => ({ id: row.id }) },
+};
+
 function treeNodes(node) {
   if (Array.isArray(node)) return node.flatMap(treeNodes);
   if (!node || typeof node !== "object") return [];
@@ -178,6 +190,7 @@ test("long threads show the latest 100 chronologically, count all unread and mar
       "@/lib/messages": { messageAthlete: async () => athlete, resolveMessageLinks: async () => new Map(), messageLinkOptions: async () => [] },
       "@/components/messages/composer": { MessageComposer: "composer" },
       "@/components/messages/thread-live": { ThreadLive: "thread-live" },
+    ...threadCardMocks,
       "next/cache": { revalidatePath() {} },
     });
     const { MessageThread } = load("src/components/messages/thread.tsx");
@@ -218,12 +231,47 @@ test("athlete suggestion attachments are neutral unlinked text; coach picker war
     "@/lib/messages": { ...messageHelpers, messageAthlete: async () => athlete },
     "@/components/messages/composer": { MessageComposer: "composer" },
     "@/components/messages/thread-live": { ThreadLive: "thread-live" },
+    ...threadCardMocks,
   })("src/components/messages/thread.tsx");
   const nodes = treeNodes(await MessageThread({}));
   assert.ok(nodes.some((node) => node.props?.children === "AI suggestion (your coach is reviewing it)"));
   assert.ok(!nodes.some((node) => node.props?.href === `/suggestions/${itemId}`));
   assert.ok(!nodes.some((node) => node.props?.children === "Linked item unavailable"));
 });
+test("only the coach thread gets AI controls and suggestions linked to an athlete message", async () => {
+  const sourceId = "athlete-message";
+  const { client } = clientFixture({
+    messages: [{ id: sourceId, athlete_id: athleteId, coach_id: coachId, sender_id: userId, body: "Can I get a different WOD?", created_at: "2026-11-21T10:00:00Z" }],
+    ai_suggestions: [
+      { id: "proposal", athlete_id: athleteId, coach_id: coachId, suggestion_type: "write_workout", input: { source_message_id: sourceId } },
+      { id: "adjustment", athlete_id: athleteId, coach_id: coachId, suggestion_type: "athlete_adjust_workout" },
+      { id: "unrelated", athlete_id: athleteId, coach_id: coachId, suggestion_type: "adjust_macros" },
+      { id: "other-athlete", athlete_id: "other", coach_id: coachId, suggestion_type: "athlete_adjust_workout" },
+    ],
+  });
+  const originalFrom = client.from.bind(client);
+  for (const isCoach of [true, false]) {
+    client.auth.getClaims = async () => ({ data: { claims: { sub: isCoach ? coachId : userId } } });
+    client.from = (table) => {
+      if (!isCoach) assert.notEqual(table, "ai_suggestions");
+      return originalFrom(table);
+    };
+    const { MessageThread } = loader({
+      "@/lib/supabase/server": { createClient: async () => client },
+      "@/lib/viewer": { getViewer: async () => isCoach ? coach : { kind: "athlete", athleteId } },
+      "@/lib/time-zone": { getToday: async () => "2026-11-21", getTimeZone: async () => "UTC" },
+      "@/lib/messages": { messageAthlete: async () => athlete, resolveMessageLinks: async () => new Map(), messageLinkOptions: async () => [] },
+      "@/components/messages/composer": { MessageComposer: "composer" },
+      "@/components/messages/thread-live": { ThreadLive: "thread-live" },
+      ...threadCardMocks,
+    })("src/components/messages/thread.tsx");
+    const nodes = treeNodes(await MessageThread(isCoach ? { athleteId } : {}));
+    assert.deepEqual(nodes.filter((node) => node.type === "ask-ai").map((node) => node.props.messageId), isCoach ? [sourceId] : []);
+    assert.deepEqual(nodes.filter((node) => node.type === "approval-card").map((node) => node.props.id), isCoach ? ["proposal"] : []);
+    assert.deepEqual(nodes.filter((node) => node.type === "adjustment-card").map((node) => node.props.suggestion.id), isCoach ? ["adjustment"] : []);
+  }
+});
+
 
 test("thread polls every 10s only while visible, marks incoming messages read and cleans up", async () => {
   const effects = [];

@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { approveScaleSuggestion } from "@/app/(app)/suggestions/scale-actions";
 import { formatMovementLine, type WhiteboardMovement } from "@/app/(app)/programs/workouts/whiteboard";
 import { RejectSuggestionForm } from "@/components/suggestions/suggestion-forms";
+import { useInlineDecision } from "./inline-decision";
 import type { Units } from "@/lib/units";
 import type { FormState } from "@/lib/auth/form-state";
 
@@ -28,6 +29,7 @@ export function ScaleWorkoutReview({
   units,
   editable,
   hasExistingScaling,
+  inline = false,
 }: {
   id: string;
   summary: string;
@@ -36,9 +38,10 @@ export function ScaleWorkoutReview({
   units: Units;
   editable: boolean;
   hasExistingScaling: boolean;
+  inline?: boolean;
 }) {
-  const [state, formAction, pending] = useActionState<FormState, FormData>(
-    async (previous, formData) => approveScaleSuggestion(previous, formData),
+  const [state, formAction, pending] = useActionState<FormState & { warning?: string }, FormData>(
+    useInlineDecision(approveScaleSuggestion),
     {},
   );
   const movementTable = (showLoadInputs: boolean) => (
@@ -59,11 +62,11 @@ export function ScaleWorkoutReview({
             <TableCell className="text-muted-foreground">{movement.reason}</TableCell>
             {showLoadInputs && (
               <TableCell>
-                <label htmlFor={`load-${index}`} className="sr-only">
+                <label htmlFor={`${id}-load-${index}`} className="sr-only">
                   Load ({units}) for {movement.scaled.name}
                 </label>
                 <Input
-                  id={`load-${index}`}
+                  id={`${id}-load-${index}`}
                   name={`load_${index}`}
                   type="number"
                   min={0}
@@ -97,7 +100,7 @@ export function ScaleWorkoutReview({
             <Card>
               <CardHeader><CardTitle>Athlete-facing summary</CardTitle></CardHeader>
               <CardContent className="grid gap-3">
-                <Textarea name="summary" rows={3} maxLength={300} required defaultValue={summary} />
+                <Textarea name="summary" aria-label="Athlete-facing summary" rows={3} maxLength={300} required defaultValue={summary} />
                 {hasExistingScaling && (
                   <p className="text-sm text-amber-700 dark:text-amber-300">
                     Approving replaces their current scaled version.
@@ -105,14 +108,15 @@ export function ScaleWorkoutReview({
                 )}
                 <p className="whitespace-pre-line text-sm text-muted-foreground">{rationale}</p>
                 {state.error && <p role="alert" className="text-sm text-destructive">{state.error}</p>}
+                {state.warning && <p role="alert" className="text-sm text-muted-foreground">{state.warning}</p>}
                 {state.message && <p role="status" className="text-sm text-emerald-600">{state.message}</p>}
-                <Button type="submit" disabled={pending}>{pending ? "Approving…" : "Approve scaling"}</Button>
+                <Button type="submit" disabled={pending}>{pending ? "Approving…" : inline ? "Approve" : "Approve scaling"}</Button>
               </CardContent>
             </Card>
           </form>
-          <div className="border-t pt-4">
+          {!inline && <div className="border-t pt-4">
             <RejectSuggestionForm id={id} />
-          </div>
+          </div>}
         </>
       ) : (
         <>

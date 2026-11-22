@@ -34,7 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Dumbbell className="size-5" />
           FitCoach AI
         </div>
-        <NavLinks badges={{ "/suggestions": athleteChanges ?? 0, "/messages": notifications.unreadMessages }} />
+        <NavLinks badges={{ "/messages": notifications.unreadMessages + (athleteChanges ?? 0) }} />
         <div className="mt-3"><NotificationBell initial={notifications} timeZone={timeZone} align="start" /></div>
         <div className="mt-auto grid gap-3 border-t pt-4">
           <div className="px-3 text-sm">

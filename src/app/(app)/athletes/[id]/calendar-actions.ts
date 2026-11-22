@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { placeWorkout } from "@/app/(app)/programs/actions";
+import { COACH_SESSION_ERROR } from "@/lib/ai/coach-session";
+import { getViewer } from "@/lib/viewer";
 import { runSuggestion } from "@/lib/ai/service";
 import { SUGGESTION_REGISTRY } from "@/lib/ai/suggestions";
 import { loadAthleteSchedule, SCHEDULE_LABEL } from "@/lib/athlete-schedule";
@@ -100,7 +102,8 @@ export async function addExistingWorkoutForAthlete(_: FormState, formData: FormD
   return { message: "WOD added just for this athlete." };
 }
 
-export async function requestAthleteDayWorkout(_: FormState, formData: FormData): Promise<FormState> {
+export async function requestAthleteDayWorkout(_: FormState, formData: FormData): Promise<FormState & { suggestionId?: string }> {
+  if ((await getViewer())?.kind !== "coach") return { error: COACH_SESSION_ERROR };
   const parsed = z.object({ athlete_id: z.string().uuid(), date: dateSchema, request: z.string().trim().max(500).optional() }).safeParse(Object.fromEntries(formData));
   if (!parsed.success) return failure(formData, parsed.error.issues[0]?.message ?? "Check the form.");
   const { athlete_id, date, request } = parsed.data;
@@ -127,5 +130,6 @@ export async function requestAthleteDayWorkout(_: FormState, formData: FormData)
   }
   if ("error" in result) return failure(formData, result.error);
   revalidatePath(`/athletes/${athlete_id}`);
-  redirect(`/suggestions/${result.id}`);
+  revalidatePath("/settings/ai-history");
+  return { suggestionId: result.id };
 }

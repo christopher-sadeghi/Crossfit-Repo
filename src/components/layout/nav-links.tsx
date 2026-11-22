@@ -8,7 +8,6 @@ import {
   MessageSquare,
   Salad,
   Settings,
-  Sparkles,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -23,7 +22,6 @@ const NAV_ITEMS = [
   { href: "/programs", label: "Programs", icon: CalendarDays },
   { href: "/benchmarks", label: "Benchmarks", icon: Trophy },
   { href: "/nutrition", label: "Nutrition", icon: Salad },
-  { href: "/suggestions", label: "AI Suggestions", icon: Sparkles },
   { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

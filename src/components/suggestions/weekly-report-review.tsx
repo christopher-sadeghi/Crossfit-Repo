@@ -21,7 +21,7 @@ export function WeeklyReportReview({ suggestion, athleteName }: {
 
   return (
     <>
-      <Link href="/suggestions" className="mb-3 inline-block text-sm text-muted-foreground underline">Back to AI Suggestions</Link>
+      <Link href="/settings/ai-history" className="mb-3 inline-block text-sm text-muted-foreground underline">Back to AI history</Link>
       <PageHeader title="Weekly athlete report" description={[athleteName, week].filter(Boolean).join(" · ")} />
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Badge variant={shared ? "default" : "outline"} className="capitalize">{shared ? "Shared" : suggestion.status}</Badge>

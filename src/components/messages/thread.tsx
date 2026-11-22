@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { AskAI } from "@/components/messages/ask-ai";
+import { InlineSuggestionCard } from "@/components/suggestions/inline-suggestion-card";
+import { AthleteAdjustmentCard } from "@/components/suggestions/athlete-adjustment-card";
+import { inlineSuggestion } from "@/lib/ai/inline-suggestion";
+import { threadSourceMessageId } from "@/lib/ai/thread-source";
+import type { Tables } from "@/lib/supabase/database.types";
 import { MessageComposer } from "@/components/messages/composer";
 import { ThreadLive } from "@/components/messages/thread-live";
 import { messageAthlete, messageLinkOptions, parseMessageLink, resolveMessageLinks, validateMessageLink, type MessageLink } from "@/lib/messages";
@@ -22,16 +28,33 @@ export async function MessageThread({ athleteId: requestedAthleteId, requestedLi
   const { data: auth } = await supabase.auth.getClaims();
   const userId = auth?.claims?.sub;
   if (typeof userId !== "string") redirect("/login");
-  const [{ data: coach }, { data: messages, error }, { count: unreadCount, error: unreadError }, today, timeZone] = await Promise.all([
+  const [{ data: coach }, { data: messages, error }, { count: unreadCount, error: unreadError }, { data: coachSuggestions, error: suggestionsError }, today, timeZone] = await Promise.all([
     supabase.from("coaches").select("full_name").eq("id", athlete.coach_id).maybeSingle(),
     supabase.from("messages").select("*").eq("athlete_id", athleteId).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(100),
     supabase.from("messages").select("id", { count: "exact", head: true }).eq("athlete_id", athleteId).neq("sender_id", userId).is("read_at", null),
+    viewer.kind === "coach" ? supabase.from("ai_suggestions").select("*")
+      .eq("coach_id", viewer.id).eq("athlete_id", athleteId)
+      .or("suggestion_type.eq.athlete_adjust_workout,input->>source_message_id.not.is.null")
+      .order("created_at", { ascending: true }).order("id") : { data: null, error: null },
     getToday(), getTimeZone(),
   ]);
-  if (error || unreadError) throw new Error("Couldn't load your messages. Please try again.");
+  if (error || unreadError || suggestionsError) throw new Error("Couldn't load your messages. Please try again.");
   const athleteName = `${athlete.first_name} ${athlete.last_name}`;
   const coachName = coach?.full_name || "Coach";
   const rows = [...(messages ?? [])].reverse();
+  const visibleMessageIds = new Set(rows.map(({ id }) => id));
+  const cardsByMessage = new Map<string, Tables<"ai_suggestions">[]>();
+  const standaloneCards: Tables<"ai_suggestions">[] = [];
+  for (const suggestion of coachSuggestions ?? []) {
+    const source = threadSourceMessageId(suggestion.input);
+    if (source && visibleMessageIds.has(source)) {
+      const cards = cardsByMessage.get(source) ?? [];
+      cards.push(suggestion);
+      cardsByMessage.set(source, cards);
+    } else {
+      standaloneCards.push(suggestion);
+    }
+  }
   const links = rows.flatMap((row) => row.link_type && row.link_id ? [{ type: row.link_type as MessageLink["type"], id: row.link_id }] : []);
   const [resolved, options] = await Promise.all([
     resolveMessageLinks(supabase, athleteId, links, isCoach),
@@ -77,9 +100,20 @@ export async function MessageThread({ athleteId: requestedAthleteId, requestedLi
                 {row.link_type && (row.link_type === "suggestion" && !isCoach ? <p className="mt-2 text-xs opacity-75">AI suggestion (your coach is reviewing it)</p> : linked ? <Link href={linked.href} className="mt-2 block break-words text-sm underline underline-offset-4">{linked.label}</Link> : <p className="mt-2 text-xs opacity-75">Linked item unavailable</p>)}
                 <p className="mt-2 text-right text-xs opacity-75"><time dateTime={row.created_at}>{timeFormat.format(date)}</time>{mine && row.read_at ? " · Read" : ""}</p>
               </article>
+              {isCoach && !mine && <AskAI athleteId={athleteId} messageId={row.id} />}
+              {cardsByMessage.get(row.id)?.map((suggestion) => (
+                <InlineSuggestionCard key={suggestion.id} id={suggestion.id} suggestion={inlineSuggestion(suggestion)} />
+              ))}
             </li>
           );
         })}
+        {standaloneCards.map((suggestion) => (
+          <li key={suggestion.id}>
+            {suggestion.suggestion_type === "athlete_adjust_workout"
+              ? <AthleteAdjustmentCard suggestion={suggestion} />
+              : <InlineSuggestionCard id={suggestion.id} suggestion={inlineSuggestion(suggestion)} />}
+          </li>
+        ))}
       </ol>
       <MessageComposer key={athleteId} athleteId={athleteId} options={options} initialLink={initialLink} />
     </div>

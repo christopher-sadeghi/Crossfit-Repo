@@ -2,13 +2,34 @@
 
 import { useState, useTransition } from "react";
 
+import { approveSuggestion } from "@/app/(app)/suggestions/actions";
 import { generateWeeklyReportInBatch, loadWeeklyReportBatch } from "@/app/(app)/suggestions/weekly-report-actions";
+import { InlineSuggestionCard } from "./inline-suggestion-card";
+import type { InlineSuggestion } from "@/lib/ai/inline-suggestion";
 import { Button } from "@/components/ui/button";
 
-export function WeeklyReportBatch({ week }: { week: string }) {
+export function WeeklyReportBatch({ week, reports }: { week: string; reports: Extract<InlineSuggestion, { type: "weekly_report" }>[] }) {
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  function approve() {
+    if (!confirm(`Approve and share ${reports.length} draft report${reports.length === 1 ? "" : "s"} for ${week}?`)) return;
+    setMessage("");
+    setError("");
+    startTransition(async () => {
+      let approved = 0;
+      for (const { id, report } of reports) {
+        const form = new FormData();
+        form.set("id", id);
+        form.set("summary", report.summary);
+        report.focus.forEach((point) => form.append("focus", point));
+        const result = await approveSuggestion({}, form).catch(() => ({ error: "Couldn't approve this report." }));
+        if (!result.error) approved++;
+      }
+      setMessage(`${approved} shared · ${reports.length - approved} not shared`);
+    });
+  }
 
   function generate() {
     setMessage("");
@@ -46,15 +67,24 @@ export function WeeklyReportBatch({ week }: { week: string }) {
   }
 
   return (
-    <div className="mb-4 grid justify-items-start gap-2">
-      <Button type="button" variant="outline" onClick={generate} disabled={pending}>
-        {pending ? "Generating reports…" : "Generate reports for all athletes"}
-      </Button>
-      <p className="text-sm text-muted-foreground">
-        {week}. Drafts reports for active athletes who don&apos;t already have a draft or shared report for this week.
-      </p>
-      {message && <p role="status" className="text-sm">{message}</p>}
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-    </div>
+    <details className="mb-4 rounded-lg border p-3">
+      <summary className="cursor-pointer text-sm font-medium">Weekly reports · {reports.length} pending</summary>
+      <div className="mt-3 grid gap-3">
+        <Button type="button" className="justify-self-start" variant="outline" onClick={generate} disabled={pending}>
+          Generate reports for all athletes
+        </Button>
+        <p className="text-sm text-muted-foreground">
+          {week}. Drafts reports for active athletes who don&apos;t already have a draft or shared report for this week.
+        </p>
+        {message && <p role="status" className="text-sm">{message}</p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        {reports.length > 0 && <>
+          <Button type="button" className="justify-self-start" onClick={approve} disabled={pending}>Approve all {reports.length} pending reports</Button>
+          <div className="grid gap-3">
+            {reports.map((report) => <InlineSuggestionCard key={report.id} id={report.id} suggestion={report} />)}
+          </div>
+        </>}
+      </div>
+    </details>
   );
 }

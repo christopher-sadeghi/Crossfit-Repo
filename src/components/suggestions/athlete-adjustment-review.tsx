@@ -89,7 +89,7 @@ export async function AthleteAdjustmentReview({ suggestion }: { suggestion: Tabl
   return (
     <>
       <Button variant="ghost" size="sm" asChild className="mb-4">
-        <Link href="/suggestions?status=athlete">← Athlete changes</Link>
+        <Link href={suggestion.athlete_id ? `/messages/${suggestion.athlete_id}` : "/messages"}>← Messages</Link>
       </Button>
       <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Athlete adjusted WOD</h1>
