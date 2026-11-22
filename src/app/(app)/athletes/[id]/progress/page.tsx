@@ -10,6 +10,7 @@ import { getCoach } from "@/lib/coach";
 import { addDays, targetOn, totals } from "@/lib/nutrition";
 import { getToday } from "@/lib/time-zone";
 import { formatGoalValue, GOAL_TYPE_LABELS, goalProgress, loadPrsByMovement, TRACKING_LABELS } from "@/lib/progress";
+import { loadLiftMaxes } from "@/lib/benchmarks";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatWeight, fromKg, type Units } from "@/lib/units";
 
@@ -30,7 +31,8 @@ export default async function AthleteProgressPage({ params }: Props) {
   const now = await getToday();
   const since = addDays(now, -(MACRO_DAYS - 1));
 
-  const [athleteRes, metricsRes, goalsRes, resultsRes, movementsRes, targetsRes, foodRes] = await Promise.all([
+  const [liftMaxes, athleteRes, metricsRes, goalsRes, resultsRes, movementsRes, targetsRes, foodRes] = await Promise.all([
+    loadLiftMaxes(supabase, id),
     supabase.from("athletes").select("id, first_name, last_name").eq("id", id).maybeSingle(),
     supabase.from("body_metrics").select("id, measured_on, weight_kg, body_fat_pct, notes").eq("athlete_id", id).order("measured_on", { ascending: false }).order("created_at", { ascending: false }),
     supabase
@@ -75,7 +77,7 @@ export default async function AthleteProgressPage({ params }: Props) {
   const hasMacros = macroDays.some((d) => d.sum || d.target);
 
   const name = `${athlete.first_name} ${athlete.last_name}`;
-  const progressData = { metrics, results };
+  const progressData = { metrics, results, liftMaxes };
 
   return (
     <>
