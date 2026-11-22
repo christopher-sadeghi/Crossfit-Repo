@@ -34,11 +34,12 @@ export async function loadAthleteSchedule<TWorkout extends ScheduleWorkout>(
   workoutSelect: string,
   options: { includeRemoved?: boolean } = {},
 ): Promise<AthleteScheduleItem<TWorkout>[]> {
-  const { data: assignmentRows } = await supabase
+  const { data: assignmentRows, error: assignmentsError } = await supabase
     .from("program_assignments")
     .select("start_date, programs(id, name, athlete_id)")
     .eq("athlete_id", athleteId);
 
+  if (assignmentsError) throw new Error("Couldn't load athlete program assignments.", { cause: assignmentsError });
   const assignments = assignmentRows ?? [];
   const assignmentByProgram = new Map<
     string,
@@ -54,10 +55,10 @@ export async function loadAthleteSchedule<TWorkout extends ScheduleWorkout>(
   }
 
   const programIds = [...assignmentByProgram.keys()];
-  const [{ data: programRows }, { data: oneOffRows }, { data: overrides, error: overrideError }] = await Promise.all([
+  const [programRows, oneOffRows, { data: overrides, error: overrideError }] = await Promise.all([
     programIds.length
       ? supabase.from("workouts").select(`program_id,${workoutSelect}`).in("program_id", programIds)
-      : Promise.resolve({ data: [] }),
+      : Promise.resolve({ data: [], error: null }),
     supabase
       .from("workouts")
       .select(`scheduled_on,${workoutSelect}`)
@@ -67,12 +68,14 @@ export async function loadAthleteSchedule<TWorkout extends ScheduleWorkout>(
       .lte("scheduled_on", range.to),
     supabase.from("athlete_workout_overrides").select("workout_id, replacement_workout_id").eq("athlete_id", athleteId),
   ]);
+  if (programRows.error || oneOffRows.error)
+    throw new Error("Couldn't load athlete workouts.", { cause: programRows.error ?? oneOffRows.error });
   if (overrideError) throw new Error("Couldn't load athlete schedule overrides.");
   const overrideByWorkout = new Map((overrides ?? []).map((row) => [row.workout_id, row]));
   const replacementSources = new Map<string, NonNullable<AthleteScheduleItem["overrides"]>>();
 
   const items: AthleteScheduleItem<TWorkout>[] = [];
-  for (const workout of (programRows ?? []) as unknown as ProgramWorkout<TWorkout>[]) {
+  for (const workout of (programRows.data ?? []) as unknown as ProgramWorkout<TWorkout>[]) {
     if (!workout.program_id || workout.week_number == null || workout.day_number == null) continue;
     const assignment = assignmentByProgram.get(workout.program_id);
     if (!assignment) continue;
@@ -98,7 +101,7 @@ export async function loadAthleteSchedule<TWorkout extends ScheduleWorkout>(
     });
   }
 
-  for (const workout of (oneOffRows ?? []) as unknown as OneOffWorkout<TWorkout>[]) {
+  for (const workout of (oneOffRows.data ?? []) as unknown as OneOffWorkout<TWorkout>[]) {
     if (!workout.scheduled_on) continue;
     items.push({
       workout,

@@ -65,6 +65,10 @@ export async function notifySuggestionApproved(supabase: Client, athleteId: stri
     const { data: suggestion, error } = await supabase.from("ai_suggestions").select("suggestion_type, athlete_id, coach_id, status, final").eq("id", suggestionId).eq("athlete_id", athleteId).maybeSingle();
     if (error) throw error;
     if (!suggestion || !["approved", "edited"].includes(suggestion.status)) return;
+    if (suggestion.suggestion_type === "weekly_report") {
+      await notifyProgressReport(supabase, athleteId, suggestionId);
+      return;
+    }
     if (suggestion.suggestion_type === "progress_summary") {
       const final = suggestion.final;
       if (!final || typeof final !== "object" || Array.isArray(final) || typeof final.summary !== "string" || !final.summary.trim() || final.summary.length > 2000) throw new Error("Progress summary text is unavailable.");
@@ -74,7 +78,7 @@ export async function notifySuggestionApproved(supabase: Client, athleteId: stri
         const { data: existing, error: existingError } = await supabase.from("messages").select("id").eq("id", suggestionId).eq("athlete_id", athleteId).eq("sender_id", suggestion.coach_id).maybeSingle();
         if (existingError || !existing) throw existingError ?? messageError;
       }
-      await notifyProgressReport(supabase, athleteId, suggestionId);
+      await notifyProgressReport(supabase, athleteId, suggestionId, "messages");
       return;
     }
     const isNutrition = suggestion.suggestion_type === "adjust_macros" || suggestion.suggestion_type === "suggest_food";
@@ -84,8 +88,16 @@ export async function notifySuggestionApproved(supabase: Client, athleteId: stri
   }
 }
 
-export function notifyProgressReport(supabase: Client, athleteId: string, reportId: string) {
-  return notify(supabase, { athleteId, kind: "progress_report", title: "Progress report from your coach", body: "Your coach shared a new progress report. Open your messages to read it.", link: "/athlete/messages", dedupeKey: `report:${reportId}` });
+export function notifyProgressReport(supabase: Client, athleteId: string, reportId: string, destination: "reports" | "messages" = "reports") {
+  const weekly = destination === "reports";
+  return notify(supabase, {
+    athleteId,
+    kind: "progress_report",
+    title: weekly ? "Weekly report from your coach" : "Progress report from your coach",
+    body: weekly ? "Your coach shared your weekly progress report." : "Your coach shared a new progress report. Open your messages to read it.",
+    link: weekly ? `/athlete/reports?report=${reportId}#report-${reportId}` : "/athlete/messages",
+    dedupeKey: `report:${reportId}`,
+  });
 }
 
 export async function checkDriftingAthletes(supabase: Client, coach: { id: string; driftDays?: number }): Promise<void> {

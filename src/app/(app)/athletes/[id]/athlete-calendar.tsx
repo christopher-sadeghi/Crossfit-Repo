@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { SCHEDULE_LABEL, type AthleteScheduleItem } from "@/lib/athlete-schedule";
 import type { FormState } from "@/lib/auth/form-state";
+import { scheduledWorkoutResultMatcher } from "@/lib/results";
 import { formatDate } from "@/lib/units";
 import { formatHeadline, type WhiteboardWorkout } from "../../programs/workouts/whiteboard";
 import { addExistingWorkoutForAthlete, deleteAthleteWorkout, editWorkoutForAthlete, moveAthleteWorkout, removeWorkoutForAthlete, requestAthleteDayWorkout, restoreWorkoutForAthlete } from "./calendar-actions";
@@ -142,12 +143,7 @@ function AddExistingForm({ athleteId, firstName, library, programs, selectedDate
 
 export function AthleteCalendar(props: Props) {
   const { athleteId, firstName, today, weekStart, items, results } = props;
-  const logged = new Set(results.map((result) => result.workout_id));
-  const loggedDates = new Set(results.map((result) => `${result.workout_id}:${result.performed_on}`));
-  const isLogged = (item: AthleteScheduleItem<CalendarWorkout>) =>
-    logged.has(item.workout.id) ||
-    Boolean(item.workout.source_workout_id && loggedDates.has(`${item.workout.source_workout_id}:${item.date}`)) ||
-    Boolean(item.overrides && loggedDates.has(`${item.overrides.workoutId}:${item.date}`));
+  const isLogged = scheduledWorkoutResultMatcher(results);
   const weekLink = (date: string) => `?tab=workouts&week=${date}`;
   return <section aria-label="Athlete training calendar" className="grid min-w-0 gap-4">
     <AddExistingForm key={props.selectedDate} {...props} />
