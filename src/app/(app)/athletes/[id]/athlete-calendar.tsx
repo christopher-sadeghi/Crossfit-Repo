@@ -38,7 +38,7 @@ function Status({ state }: { state: FormState }) {
   return <>{state.error && <p role="alert" className="text-sm text-destructive">{state.error}</p>}{state.message && <p role="status" className="text-sm">{state.message}</p>}</>;
 }
 
-function DayMenu({ athleteId, date, weekStart, alignEnd, onSuggestion }: { athleteId: string; date: string; weekStart: string; alignEnd: boolean; onSuggestion: (id: string) => void }) {
+function DayMenu({ athleteId, date, alignEnd, onSuggestion, onAddFromLibrary }: { athleteId: string; date: string; alignEnd: boolean; onSuggestion: (id: string) => void; onAddFromLibrary: (date: string) => void }) {
   const menu = useRef<HTMLDetailsElement>(null);
   const [state, action, pending] = useActionState(async (previous: FormState, formData: FormData) => {
     const result = await requestAthleteDayWorkout(previous, formData);
@@ -53,7 +53,16 @@ function DayMenu({ athleteId, date, weekStart, alignEnd, onSuggestion }: { athle
       <summary aria-label={`Add WOD on ${date}`} title="Add WOD on this day" className="cursor-pointer list-none rounded p-1 hover:bg-muted"><Plus className="size-3.5" /></summary>
       <div className={`absolute z-20 grid w-64 gap-3 rounded-lg border bg-background p-3 text-foreground shadow-lg ${alignEnd ? "right-0" : "left-0"}`}>
         <Link className="hover:underline" href={`/programs/workouts/new?athlete=${athleteId}&date=${date}`}>New WOD for this day</Link>
-        <Link className="hover:underline" href={`?tab=workouts&week=${weekStart}&date=${date}#add-existing-wod`}>Add from library</Link>
+        <button
+          type="button"
+          className="w-fit text-left hover:underline"
+          onClick={() => {
+            if (menu.current) menu.current.open = false;
+            onAddFromLibrary(date);
+          }}
+        >
+          Add from library
+        </button>
         <form action={action} className="grid gap-2 border-t pt-2">
           <input type="hidden" name="athlete_id" value={athleteId} />
           <input type="hidden" name="date" value={date} />
@@ -119,12 +128,12 @@ function WorkoutChip({ item, athleteId, today, logged }: { item: AthleteSchedule
   );
 }
 
-function AddExistingForm({ athleteId, firstName, library, programs, selectedDate }: Pick<Props, "athleteId" | "firstName" | "library" | "programs" | "selectedDate">) {
+function AddExistingForm({ athleteId, firstName, library, programs, addDate }: Pick<Props, "athleteId" | "firstName" | "library" | "programs"> & { addDate: string }) {
   const [state, action, pending] = useActionState(addExistingWorkoutForAthlete, {});
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (window.location.hash === "#add-existing-wod") formRef.current?.querySelector<HTMLSelectElement>("select")?.focus();
-  }, [selectedDate]);
+  }, [addDate]);
   return <Card id="add-existing-wod">
     <CardHeader><CardTitle>Add an existing WOD</CardTitle></CardHeader>
     <CardContent>
@@ -136,7 +145,7 @@ function AddExistingForm({ athleteId, firstName, library, programs, selectedDate
             {library.map((w) => <option key={w.id} value={w.id}>{w.title}</option>)}
           </select>
         </label>
-        <label className="grid gap-1 text-sm">Date<Input name="date" type="date" defaultValue={selectedDate} required /></label>
+        <label className="grid gap-1 text-sm">Date<Input name="date" type="date" defaultValue={addDate} required /></label>
         <label className="grid gap-1 text-sm">Destination
           <select name="destination" className="h-9 min-w-0 rounded-md border bg-background px-2">
             <option value="athlete">Just {firstName}</option>
@@ -155,10 +164,29 @@ function AddExistingForm({ athleteId, firstName, library, programs, selectedDate
 export function AthleteCalendar(props: Props) {
   const { athleteId, firstName, today, weekStart, items, activities, results } = props;
   const [suggestionIds, setSuggestionIds] = useState<string[]>([]);
+  const [addDate, setAddDate] = useState(props.selectedDate);
+  const [syncedSelectedDate, setSyncedSelectedDate] = useState(props.selectedDate);
+  const [focusAddForm, setFocusAddForm] = useState(false);
   const isLogged = scheduledWorkoutResultMatcher(results);
   const weekLink = (date: string) => `?tab=workouts&week=${date}`;
+  if (props.selectedDate !== syncedSelectedDate) {
+    setSyncedSelectedDate(props.selectedDate);
+    setAddDate(props.selectedDate);
+    setFocusAddForm(false);
+  }
+  useEffect(() => {
+    if (!focusAddForm) return;
+    const form = document.getElementById("add-existing-wod");
+    form?.scrollIntoView({ behavior: "smooth", block: "start" });
+    form?.querySelector<HTMLSelectElement>('select[name="workout_id"]')?.focus();
+    setFocusAddForm(false);
+  }, [addDate, focusAddForm]);
+  const openAddFormForDate = (date: string) => {
+    setAddDate(date);
+    setFocusAddForm(true);
+  };
   return <section aria-label="Athlete training calendar" className="grid min-w-0 gap-4">
-    <AddExistingForm key={props.selectedDate} {...props} />
+    <AddExistingForm key={addDate} athleteId={athleteId} firstName={firstName} library={props.library} programs={props.programs} addDate={addDate} />
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h2 className="font-semibold">Week of {formatDate(weekStart)}</h2>
       <Button variant="outline" onClick={() => window.dispatchEvent(new CustomEvent("open-coach-chat", { detail: { draft: `Plan ${firstName}'s week of ${weekStart} around their program, goals and injuries.` } }))}><Bot className="size-4" />Plan with AI coach</Button>
@@ -176,7 +204,7 @@ export function AthleteCalendar(props: Props) {
           return <div key={date} className={`flex min-h-44 flex-col gap-2 rounded-lg border bg-card p-2 text-xs ${date === today ? "border-primary ring-1 ring-primary" : ""}`}>
             <div className="flex items-center justify-between text-muted-foreground">
               <time dateTime={date} aria-current={date === today ? "date" : undefined}>{new Intl.DateTimeFormat("en", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`))}</time>
-              <DayMenu athleteId={athleteId} date={date} weekStart={weekStart} alignEnd={index > 3} onSuggestion={(id) => setSuggestionIds((ids) => [...ids, id])} />
+              <DayMenu athleteId={athleteId} date={date} alignEnd={index > 3} onSuggestion={(id) => setSuggestionIds((ids) => [...ids, id])} onAddFromLibrary={openAddFormForDate} />
             </div>
             {dayItems.map((item) => <WorkoutChip key={`${item.workout.id}-${item.date}`} item={item} athleteId={athleteId} today={today} logged={isLogged(item)} />)}
             {activities.filter((activity) => activity.performed_on === date).map((activity) => (

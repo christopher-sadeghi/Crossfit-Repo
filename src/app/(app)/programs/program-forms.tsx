@@ -57,10 +57,10 @@ export function PlaceWorkoutForm({
       <input type="hidden" name="program_id" value={programId} />
       <div className="grid gap-3 sm:grid-cols-[2fr_1fr_1fr_auto] sm:items-end">
         <div className="grid gap-2">
-          <Label htmlFor="workout_id">Standalone WOD</Label>
+          <Label htmlFor="workout_id">WOD</Label>
           <select id="workout_id" name="workout_id" defaultValue="" className={`${selectClass} w-full`}>
             <option value="" disabled>
-              {workouts.length ? "Choose a WOD…" : "No standalone WODs"}
+              {workouts.length ? "Choose a WOD…" : "No WODs yet"}
             </option>
             {workouts.map((w) => (
               <option key={w.id} value={w.id}>

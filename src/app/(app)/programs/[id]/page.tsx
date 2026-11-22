@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { programDate } from "@/lib/program-dates";
 import { getToday } from "@/lib/time-zone";
+import { loadWorkoutLibrary } from "@/lib/workout-library";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/units";
 
@@ -20,7 +21,7 @@ const shortDate = (d: string) =>
 export default async function ProgramPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-  const [{ data: program }, { data: standalone }, { data: athletes }] = await Promise.all([
+  const [{ data: program }, library, { data: athletes }] = await Promise.all([
     supabase
       .from("programs")
       .select(
@@ -30,7 +31,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
       .order("title", { referencedTable: "workouts" })
       .order("start_date", { referencedTable: "program_assignments" })
       .maybeSingle(),
-    supabase.from("workouts").select("id, title").is("athlete_id", null).is("program_id", null).order("title"),
+    loadWorkoutLibrary(supabase, id),
     supabase.from("athletes").select("id, first_name, last_name").eq("status", "active").order("first_name").order("last_name"),
   ]);
   if (!program) notFound();
@@ -97,7 +98,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
               <CardTitle>Add an existing WOD</CardTitle>
             </CardHeader>
             <CardContent>
-              <PlaceWorkoutForm programId={program.id} weeks={program.weeks} workouts={standalone ?? []} />
+              <PlaceWorkoutForm programId={program.id} weeks={program.weeks} workouts={library} />
             </CardContent>
           </Card>
           {Array.from({ length: program.weeks }, (_, wi) => {
