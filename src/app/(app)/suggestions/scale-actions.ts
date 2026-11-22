@@ -1,9 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 
+import { sendThreadApproval } from "@/lib/ai/thread-approval";
+import { COACH_SESSION_ERROR } from "@/lib/ai/coach-session";
 import { approveSuggestionWithClient } from "@/lib/ai/decisions";
 import { notifyScheduleChanged, notifySuggestionApproved } from "@/lib/notifications";
 import { runSuggestion } from "@/lib/ai/service";
@@ -17,9 +18,12 @@ import { SUGGESTION_REGISTRY } from "@/lib/ai/suggestions";
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { createClient } from "@/lib/supabase/server";
 
+import { getViewer } from "@/lib/viewer";
+
 const idSchema = z.string().uuid();
 
-export async function requestScaleSuggestion(_: FormState, formData: FormData): Promise<FormState> {
+export async function requestScaleSuggestion(_: FormState, formData: FormData): Promise<FormState & { suggestionId?: string }> {
+  if ((await getViewer())?.kind !== "coach") return { error: COACH_SESSION_ERROR };
   const athleteId = idSchema.safeParse(formData.get("athlete_id"));
   const workoutId = idSchema.safeParse(formData.get("workout_id"));
   const rawNote = formData.get("note");
@@ -60,11 +64,12 @@ export async function requestScaleSuggestion(_: FormState, formData: FormData): 
   }
   if ("error" in result) return failure(formData, result.error);
 
-  revalidatePath("/suggestions");
-  redirect(`/suggestions/${result.id}`);
+  revalidatePath("/settings/ai-history");
+  return { suggestionId: result.id };
 }
 
-export async function approveScaleSuggestion(_: FormState, formData: FormData): Promise<FormState> {
+export async function approveScaleSuggestion(_: FormState, formData: FormData): Promise<FormState & { warning?: string }> {
+  if ((await getViewer())?.kind !== "coach") return { error: COACH_SESSION_ERROR };
   const id = idSchema.safeParse(formData.get("id"));
   const summary = z.string().trim().min(1).max(300).safeParse(formData.get("summary"));
   if (!id.success) return failure(formData, "This suggestion could not be found.");
@@ -88,14 +93,20 @@ export async function approveScaleSuggestion(_: FormState, formData: FormData): 
   if ("error" in final) return failure(formData, final.error);
   const result = await approveSuggestionWithClient(supabase, suggestion, final.data);
   if ("error" in result) return failure(formData, result.error);
-  if (suggestion.athlete_id) await notifySuggestionApproved(supabase, suggestion.athlete_id, suggestion.id);
+  const threadMessage = await sendThreadApproval(suggestion, result.target, {
+    workoutId: input.data.workout_id, title: input.data.workout?.title, summary: summary.data,
+  });
+  if (suggestion.athlete_id && threadMessage !== "sent") await notifySuggestionApproved(supabase, suggestion.athlete_id, suggestion.id);
 
-  revalidatePath("/suggestions");
+  revalidatePath("/settings/ai-history");
+  revalidatePath(`/messages/${suggestion.athlete_id}`);
   revalidatePath(`/suggestions/${id.data}`);
   revalidatePath(`/programs/workouts/${input.data.workout_id}`);
   revalidatePath(`/athletes/${suggestion.athlete_id}`);
   revalidatePath("/athlete");
-  return { message: result.status === "edited" ? "Edited scaling approved." : "Scaling approved." };
+  return { message: result.status === "edited" ? "Edited scaling approved." : "Scaling approved.",
+    warning: threadMessage === "failed" ? "The scaling was saved, but the message could not be sent. Please let the athlete know in Messages." : undefined,
+  };
 }
 
 export async function removeWorkoutScaling(_: FormState, formData: FormData): Promise<FormState> {

@@ -5,7 +5,7 @@ import { ArrowLeft, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RequestWorkoutSuggestionForm } from "@/components/suggestions/suggestion-forms";
+import { RequestWorkoutSuggestionForm } from "@/components/suggestions/request-forms";
 import { RemoveWorkoutScalingForm, ScaleWorkoutRequestForm } from "@/components/suggestions/scale-workout-controls";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { scaleWorkoutDetailsSchema } from "@/lib/ai/scale-workout";

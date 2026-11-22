@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Pencil } from "lucide-react";
 import { z } from "zod";
 
+import { RequestMacroSuggestionForm } from "@/components/suggestions/request-forms";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -397,6 +398,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
           <Button variant="outline" className="justify-self-start" asChild>
             <Link href={`/nutrition/${athlete.id}`}>Open food log & targets</Link>
           </Button>
+          {athlete.status === "active" && <RequestMacroSuggestionForm athleteId={athlete.id} />}
           <ListCard empty="No food logged in the last 7 days." show={dayRows.length > 0} title={target ? `Target: ${target.calories} kcal · P ${target.protein_g}g · C ${target.carbs_g}g · F ${target.fat_g}g` : "No macro target set"}>
             <Table>
               <TableHeader>

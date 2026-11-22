@@ -9,7 +9,7 @@ export async function approveSuggestionWithClient(
   suggestion: Tables<"ai_suggestions">,
   finalInput: unknown,
   options?: SuggestionApplyOptions,
-): Promise<{ status: "approved" | "edited" } | { error: string }> {
+): Promise<{ status: "approved" | "edited"; target: { target_table: string; target_id: string } } | { error: string }> {
   const entry = SUGGESTION_REGISTRY[suggestion.suggestion_type];
   if (!entry.apply) return { error: "This suggestion type isn't ready to approve yet." };
 
@@ -55,7 +55,7 @@ export async function approveSuggestionWithClient(
     console.error("Could not save AI suggestion target reference:", error);
   }
 
-  return { status };
+  return { status, target };
 }
 
 export async function rejectSuggestionWithClient(

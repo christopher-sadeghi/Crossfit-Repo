@@ -5,10 +5,13 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { approveSuggestionWithClient, rejectSuggestionWithClient } from "@/lib/ai/decisions";
+import { COACH_SESSION_ERROR } from "@/lib/ai/coach-session";
+import { threadSourceMessageId } from "@/lib/ai/thread-source";
+import { sendThreadApproval } from "@/lib/ai/thread-approval";
 import { requestRegisteredSuggestion } from "@/lib/ai/request";
 import { runSuggestion } from "@/lib/ai/service";
 import { progressSummarySchema } from "@/lib/ai/progress-summary";
-import { SUGGESTION_REGISTRY } from "@/lib/ai/suggestions";
+import { adjustMacrosSchema, SUGGESTION_REGISTRY, writeWorkoutInputSchema, writeWorkoutSchema } from "@/lib/ai/suggestions";
 import { draftProgramSchema } from "@/lib/ai/draft-program-schema";
 import type { SuggestionApplyOptions } from "@/lib/ai/suggestions";
 import { failure, type FormState } from "@/lib/auth/form-state";
@@ -22,34 +25,32 @@ const idSchema = z.string().uuid();
 const typeSchema = z.enum(["write_workout", "scale_workout", "adjust_macros", "progress_summary", "draft_program", "weekly_report"]);
 
 function revalidateSuggestion(id: string, athleteId?: string | null) {
-  revalidatePath("/suggestions");
+  revalidatePath("/settings/ai-history");
   revalidatePath(`/suggestions/${id}`);
   if (athleteId) {
+    revalidatePath(`/messages/${athleteId}`);
     revalidatePath(`/nutrition/${athleteId}`);
     revalidatePath(`/athletes/${athleteId}`);
     revalidatePath(`/athletes/${athleteId}/progress`);
   }
 }
 
-export async function requestSuggestion(type: Enums<"suggestion_type">, athleteId: string, inline = false): Promise<FormState & { suggestionId?: string }> {
+export async function requestSuggestion(type: Enums<"suggestion_type">, athleteId: string): Promise<FormState & { suggestionId?: string }> {
+  if ((await getViewer())?.kind !== "coach") return { error: COACH_SESSION_ERROR };
   const parsedType = typeSchema.safeParse(type);
   const parsedAthleteId = idSchema.safeParse(athleteId);
   if (!parsedType.success || !parsedAthleteId.success) return { error: "Couldn't request an AI suggestion. Please try again." };
-
-  if (parsedType.data === "weekly_report" && (await getViewer())?.kind !== "coach") {
-    return { error: "Only a coach can draft a weekly report." };
-  }
 
   const supabase = await createClient();
   const result = await requestRegisteredSuggestion(supabase, parsedType.data, { athleteId: parsedAthleteId.data });
   if ("error" in result) return { error: result.error };
 
   revalidateSuggestion(result.id, parsedAthleteId.data);
-  if (inline) return { message: "Suggestion ready for your review. Nothing has been applied.", suggestionId: result.id };
-  redirect(`/suggestions/${result.id}`);
+  return { suggestionId: result.id };
 }
 
-export async function requestWorkoutSuggestion(_: FormState, formData: FormData): Promise<FormState> {
+export async function requestWorkoutSuggestion(_: FormState, formData: FormData): Promise<FormState & { suggestionId?: string }> {
+  if ((await getViewer())?.kind !== "coach") return { error: COACH_SESSION_ERROR };
   const request = z.string().trim().min(3).max(500).safeParse(formData.get("request"));
   const rawWorkoutId = formData.get("workout_id");
   const workoutId = z.union([z.literal(""), z.string().uuid()]).safeParse(typeof rawWorkoutId === "string" ? rawWorkoutId : "");
@@ -82,10 +83,12 @@ export async function requestWorkoutSuggestion(_: FormState, formData: FormData)
   if ("error" in result) return failure(formData, result.error);
 
   revalidatePath("/programs/workouts");
-  redirect(`/suggestions/${result.id}`);
+  revalidateSuggestion(result.id);
+  return { suggestionId: result.id };
 }
 
-export async function approveSuggestion(_: FormState, formData: FormData): Promise<FormState> {
+export async function approveSuggestion(_: FormState, formData: FormData): Promise<FormState & { warning?: string }> {
+  if ((await getViewer())?.kind !== "coach") return { error: COACH_SESSION_ERROR };
   const id = idSchema.safeParse(formData.get("id"));
   if (!id.success) return failure(formData, "This suggestion could not be found.");
 
@@ -146,7 +149,15 @@ export async function approveSuggestion(_: FormState, formData: FormData): Promi
 
   const result = await approveSuggestionWithClient(supabase, suggestion, finalInput, applyOptions);
   if ("error" in result) return failure(formData, result.error);
-  if (suggestion.athlete_id) await notifySuggestionApproved(supabase, suggestion.athlete_id, suggestion.id);
+  const fromThread = Boolean(threadSourceMessageId(suggestion.input));
+  const macros = fromThread && suggestion.suggestion_type === "adjust_macros" ? adjustMacrosSchema.safeParse(finalInput).data : undefined;
+  const workout = fromThread && isWorkout ? writeWorkoutSchema.safeParse(finalInput).data : undefined;
+  const workoutInput = fromThread && isWorkout ? writeWorkoutInputSchema.safeParse(suggestion.input).data : undefined;
+  const threadMessage = await sendThreadApproval(suggestion, result.target, {
+    macros, title: workout?.title, date: workoutInput?.scheduled_on,
+  });
+  if (suggestion.athlete_id && threadMessage !== "sent") await notifySuggestionApproved(supabase, suggestion.athlete_id, suggestion.id);
+  const warning = threadMessage === "failed" ? "The change was saved, but the message could not be sent. Please let the athlete know in Messages." : undefined;
 
   revalidateSuggestion(suggestion.id, suggestion.athlete_id);
   if (suggestion.suggestion_type === "draft_program") {
@@ -156,26 +167,22 @@ export async function approveSuggestion(_: FormState, formData: FormData): Promi
   }
   if (isWorkout) {
     revalidatePath("/programs/workouts");
-    const { data: savedSuggestion } = await supabase
-      .from("ai_suggestions")
-      .select("target_id")
-      .eq("id", suggestion.id)
-      .maybeSingle();
-    if (savedSuggestion?.target_id) {
-      revalidatePath(`/programs/workouts/${savedSuggestion.target_id}`);
-      if (formData.get("intent") === "edit") redirect(`/programs/workouts/${savedSuggestion.target_id}/edit`);
+    if (result.target?.target_id) {
+      revalidatePath(`/programs/workouts/${result.target.target_id}`);
+      if (formData.get("intent") === "edit") redirect(`/programs/workouts/${result.target.target_id}/edit`);
     }
-    return { message: "WOD saved." };
+    return { message: "WOD saved.", warning };
   }
   if (isSummary) return { message: "Saved to the athlete's notes." };
   if (isWeeklyReport) {
     revalidatePath("/athlete/reports");
     return { message: "Weekly report shared with the athlete." };
   }
-  return { message: result.status === "edited" ? "Your edited targets are approved." : "Targets approved." };
+  return { message: result.status === "edited" ? "Your edited targets are approved." : "Targets approved.", warning };
 }
 
 export async function rejectSuggestion(id: string): Promise<FormState> {
+  if ((await getViewer())?.kind !== "coach") return { error: COACH_SESSION_ERROR };
   const parsedId = idSchema.safeParse(id);
   if (!parsedId.success) return { error: "This suggestion could not be found." };
 

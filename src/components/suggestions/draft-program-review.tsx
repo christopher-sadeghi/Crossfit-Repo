@@ -13,7 +13,7 @@ export function DraftProgramReview({ suggestion }: { suggestion: Tables<"ai_sugg
   const names = new Map(input.success ? input.data.library.map((m) => [m.id, m.name]) : []);
   const units = input.success ? input.data.units : "kg";
   return <div className="mx-auto grid max-w-4xl gap-5">
-    <Link href="/suggestions" className="text-sm underline">Back to suggestions</Link>
+    <Link href="/settings/ai-history" className="text-sm underline">Back to AI history</Link>
     {suggestion.athlete_id && <Link href={`/athletes/${suggestion.athlete_id}?tab=intake`} className="text-sm underline">Athlete intake</Link>}
     <div className="flex items-center gap-3"><h1 className="text-2xl font-semibold">Draft first 4 weeks</h1><Badge variant="secondary">{suggestion.status}</Badge></div>
     {suggestion.status === "failed" && <p role="alert">{friendlySuggestionError(suggestion.error)}</p>}

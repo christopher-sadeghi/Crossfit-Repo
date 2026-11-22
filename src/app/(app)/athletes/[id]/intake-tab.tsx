@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCoach } from "@/lib/coach";
 import { cookingLabel, DIET_LABELS, readPreferences } from "@/lib/food-preferences";
 import { formatScore, formatWeight, type Units } from "@/lib/units";
-import { RequestIntakeAiForm } from "@/components/suggestions/suggestion-forms";
+import { RequestIntakeAiForm } from "@/components/suggestions/request-forms";
 
 async function requestIntake(athleteId: string) {
   "use server";

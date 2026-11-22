@@ -25,10 +25,13 @@ async function loadActiveAdjustment(supabase: SupabaseClient<Database>, id: stri
 
 function revalidateAdjustment(id: string, workoutId: string | null, athleteId: string | null) {
   revalidatePath("/", "layout");
-  revalidatePath("/suggestions");
+  revalidatePath("/settings/ai-history");
   revalidatePath(`/suggestions/${id}`);
   if (workoutId) revalidatePath(`/programs/workouts/${workoutId}`);
-  if (athleteId) revalidatePath(`/athletes/${athleteId}`);
+  if (athleteId) {
+    revalidatePath(`/athletes/${athleteId}`);
+    revalidatePath(`/messages/${athleteId}`);
+  }
   revalidatePath("/athlete");
 }
 

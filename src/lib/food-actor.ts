@@ -18,6 +18,6 @@ export function revalidateFood(athleteId: string, suggestionId?: string) {
   revalidatePath("/nutrition");
   revalidatePath(`/athletes/${athleteId}`);
   revalidatePath("/athlete/nutrition");
-  revalidatePath("/suggestions");
+  revalidatePath("/settings/ai-history");
   if (suggestionId) revalidatePath(`/suggestions/${suggestionId}`);
 }
