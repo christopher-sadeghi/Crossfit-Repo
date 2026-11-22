@@ -29,6 +29,16 @@ test("day statuses, any-date workout matching, same-date results, and pending st
   assert.equal(stats.days.length, 90);
 });
 
+test("same-day results cover at most one scheduled workout each", () => {
+  const input = {
+    scheduled: [scheduled(today, "a"), scheduled(today, "b")],
+    results: [{ performed_on: today, workout_id: "a" }],
+  };
+  assert.equal(compute(input).days.at(-1)?.status, "partial");
+  assert.equal(compute({ ...input, results: [...input.results, { performed_on: today, workout_id: "other" }] }).days.at(-1)?.status, "completed");
+  assert.equal(compute({ ...input, results: [{ performed_on: today, workout_id: "other" }] }).days.at(-1)?.status, "partial");
+});
+
 test("attendance completes all workouts; extras do not enter rate; future activity ignored", () => {
   const stats = compute({
     scheduled: [scheduled(today, "a"), scheduled(today, "b")],

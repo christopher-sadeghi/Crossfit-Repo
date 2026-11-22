@@ -47,7 +47,9 @@ export function computeConsistency(input: ConsistencyInput): ConsistencyStats {
   let currentStreak = 0;
   let bestStreak = 0;
   for (const [date, workouts] of [...scheduled].sort(([a], [b]) => a.localeCompare(b))) {
-    const done = [...workouts].filter((id) => resultWorkouts.has(id) || resultDates.has(date)).length;
+    const idMatches = [...workouts].filter((id) => resultWorkouts.has(id)).length;
+    const unmatchedSameDayResults = input.results.filter((r) => r.performed_on === date && !workouts.has(r.workout_id)).length;
+    const done = Math.min(workouts.size, idMatches + unmatchedSameDayResults);
     const status = attendanceDates.has(date) || done === workouts.size ? "completed"
       : done > 0 ? "partial" : date < today ? "missed" : "pending";
     statuses.set(date, status);
