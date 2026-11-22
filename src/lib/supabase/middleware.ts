@@ -40,10 +40,8 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
 
   if (isLoggedIn && path.startsWith("/athlete") && !path.startsWith("/athletes") && path !== "/athlete/onboarding") {
-    const { data: athlete, error: athleteError } = await supabase.from("athletes").select("id").eq("user_id", String(data?.claims?.sub)).maybeSingle();
-    if (athleteError) throw athleteError;
-    if (athlete) {
-      const { data: intake, error } = await supabase.from("athlete_intakes").select("status").eq("athlete_id", athlete.id).maybeSingle();
+    try {
+      const { data: intake, error } = await supabase.from("athlete_intakes").select("status, athletes!inner(user_id)").eq("athletes.user_id", String(data?.claims?.sub)).maybeSingle();
       if (error) throw error;
       if (intake && ["requested", "in_progress"].includes(intake.status)) {
         const url = request.nextUrl.clone();
@@ -51,6 +49,8 @@ export async function updateSession(request: NextRequest) {
         url.search = "";
         return redirectWithCookies(url, response);
       }
+    } catch (error) {
+      console.error("Unable to check athlete intake:", error);
     }
   }
 

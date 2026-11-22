@@ -37,6 +37,16 @@ try {
   const withoutIntake = await SUGGESTION_REGISTRY.adjust_macros.buildRequest(db, { athleteId: athlete.id });
   assert.equal(withoutIntake.input.intake, null);
   check(await db.from("athlete_intakes").insert({ athlete_id: athlete.id, coach_id: user.id, status: "completed", current_step: 7, completed_at: new Date().toISOString(), answers: { days_per_week: 2, session_minutes: 45, location: "gym", equipment: ["Dumbbells", "Bike", "Box"], sleep_hours: 7, stress_level: "moderate", job_activity: "sedentary", eating_habits: "Three regular meals" } }));
+  const athleteEmail = `intake-gate-${randomUUID()}@test.local`;
+  const athleteUser = check(await admin.auth.admin.createUser({ email: athleteEmail, password, email_confirm: true })).user;
+  users.push(athleteUser.id);
+  check(await admin.from("athletes").update({ user_id: athleteUser.id }).eq("id", athlete.id));
+  const athleteDb = createClient(config.API_URL, config.ANON_KEY, { auth: { persistSession: false } });
+  check(await athleteDb.auth.signInWithPassword({ email: athleteEmail, password }));
+  const intake = check(await athleteDb.from("athlete_intakes").select("status, athletes!inner(user_id)").eq("athletes.user_id", athleteUser.id).maybeSingle());
+  assert.equal(intake.status, "completed");
+  assert.equal(check(await db.from("athlete_intakes").select("status, athletes!inner(user_id)").eq("athletes.user_id", user.id).maybeSingle()), null);
+  console.log("PASS: single-query intake gate resolves linked athlete under RLS and excludes coach-owned unlinked intakes");
   const withIntake = await SUGGESTION_REGISTRY.adjust_macros.buildRequest(db, { athleteId: athlete.id });
   assert.equal(withIntake.input.intake.answers.eating_habits, "Three regular meals");
   assert.equal(withIntake.input.intake.answers.days_per_week, 2);

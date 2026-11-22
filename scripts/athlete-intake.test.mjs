@@ -86,14 +86,32 @@ test("server action rejects invalid, empty, unauthorized, future and unknown ben
 test("gate redirects requested/in-progress intakes only, permits onboarding and preserves completed/no-row access", async () => {
   for (const [pathName, status, expected] of [["/athlete", "requested", "redirect"], ["/athlete/history", "in_progress", "redirect"], ["/athlete/onboarding", "requested", "next"], ["/athlete", "completed", "next"], ["/athlete", null, "next"]]) {
     const cookies = { getAll: () => [], set() {} };
+    const queries = [];
     const { updateSession } = load("src/lib/supabase/middleware.ts", {
-      "@supabase/ssr": { createServerClient: () => ({ auth: { getClaims: async () => ({ data: { claims: { sub: "own-user" } } }) }, from: (table) => ({ select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: table === "athletes" ? { id: "own-athlete" } : status ? { status } : null, error: null }) }) }) },
+      "@supabase/ssr": { createServerClient: () => ({ auth: { getClaims: async () => ({ data: { claims: { sub: "own-user" } } }) }, from: (table) => { queries.push(table); return { select(columns) { assert.equal(columns, "status, athletes!inner(user_id)"); return this; }, eq(column, value) { assert.equal(column, "athletes.user_id"); assert.equal(value, "own-user"); return this; }, maybeSingle: async () => ({ data: status ? { status } : null, error: null }) }; } }) },
       "next/server": { NextResponse: { next: () => ({ kind: "next", cookies }), redirect: (url) => ({ kind: "redirect", url, cookies }) } },
     });
     const url = new URL(`http://localhost${pathName}?other=1`);
     url.clone = () => new URL(url);
     const response = await updateSession({ nextUrl: url, cookies });
     assert.equal(response.kind, expected, `${pathName}: ${status}`);
+    assert.deepEqual(queries, pathName === "/athlete/onboarding" ? [] : ["athlete_intakes"]);
     if (expected === "redirect") { assert.equal(response.url.pathname, "/athlete/onboarding"); assert.equal(response.url.search, ""); }
   }
+});
+
+test("gate logs lookup errors and rejected queries but allows athlete pages through", async (t) => {
+  const log = t.mock.method(console, "error", () => {});
+  for (const rejects of [false, true]) {
+    const error = new Error("Intake lookup unavailable");
+    const cookies = { getAll: () => [], set() {} };
+    const { updateSession } = load("src/lib/supabase/middleware.ts", {
+      "@supabase/ssr": { createServerClient: () => ({ auth: { getClaims: async () => ({ data: { claims: { sub: "own-user" } } }) }, from: () => ({ select() { return this; }, eq() { return this; }, maybeSingle: async () => { if (rejects) throw error; return { data: null, error }; } }) }) },
+      "next/server": { NextResponse: { next: () => ({ kind: "next", cookies }), redirect: () => { throw new Error("Unexpected redirect"); } } },
+    });
+    const url = new URL("http://localhost/athlete/history");
+    assert.equal((await updateSession({ nextUrl: url, cookies })).kind, "next");
+    assert.deepEqual(log.mock.calls.at(-1).arguments, ["Unable to check athlete intake:", error]);
+  }
+  assert.equal(log.mock.callCount(), 2);
 });
