@@ -18,8 +18,8 @@ export default async function MovementPage({ params }: { params: Promise<{ id: s
   if (viewer?.kind !== "coach" || !z.string().uuid().safeParse(id).success) notFound();
   const supabase = await createClient();
   const [source, pendingResult, library] = await Promise.all([
-    loadMovementDemoSource(supabase, id, viewer.id),
-    supabase.from("ai_suggestions").select("id, proposal").eq("coach_id", viewer.id)
+    loadMovementDemoSource(supabase, id, viewer.gymId),
+    supabase.from("ai_suggestions").select("id, proposal").eq("coach_id", viewer.gymId)
       .eq("suggestion_type", "movement_guide").eq("status", "pending").eq("input->>movement_id", id)
       .order("created_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("movements").select("id, name").order("name"),
@@ -48,7 +48,7 @@ export default async function MovementPage({ params }: { params: Promise<{ id: s
         <CardHeader><CardTitle>Edit your gym’s demo</CardTitle></CardHeader>
         <CardContent>
           <GuideForm key={guide?.updated_at ?? "new"} movementId={id} values={demo.guide} editor={{
-            coachId: viewer.id, videoUrl: demo.videoUrl, hasClip: !!guide?.clip_path,
+            coachId: viewer.gymId, videoUrl: demo.videoUrl, hasClip: !!guide?.clip_path,
             library: library.data.filter((option) => option.id !== id),
             easierId: guide?.easier_movement_id ?? null, harderId: guide?.harder_movement_id ?? null,
             libraryEasier: library.data.find((option) => option.id === movement.easier_movement_id)?.name,

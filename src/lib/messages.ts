@@ -21,7 +21,7 @@ export async function messageAthlete(supabase: Client, viewer: CoachViewer | Ath
   const { data, error } = await supabase.from("athletes").select("id, coach_id, user_id, first_name, last_name, status")
     .eq("id", athleteId).eq("status", "active").maybeSingle();
   if (error) throw new Error("Couldn't load this athlete.");
-  if (!data || (viewer.kind === "coach" && data.coach_id !== viewer.id)) return null;
+  if (!data || (viewer.kind === "coach" && data.coach_id !== viewer.gymId)) return null;
   return data;
 }
 

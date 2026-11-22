@@ -26,15 +26,15 @@ export default async function DashboardPage() {
 
   const [supabase, today] = await Promise.all([createClient(), getToday()]);
   const [roster, approvals, formChecks, messages] = await Promise.all([
-    loadCoachConsistency(supabase, coach.id, today, coach.driftDays),
+    loadCoachConsistency(supabase, coach.gymId, today, coach.driftDays),
     supabase.from("ai_suggestions").select("id", { count: "exact", head: true })
-      .eq("coach_id", coach.id).eq("status", "pending"),
-    supabase.from("form_reviews").select("id, athlete_id").eq("coach_id", coach.id)
+      .eq("coach_id", coach.gymId).eq("status", "pending"),
+    supabase.from("form_reviews").select("id, athlete_id").eq("coach_id", coach.gymId)
       .eq("status", "awaiting_review").order("created_at"),
-    supabase.from("messages").select("athlete_id").eq("coach_id", coach.id)
+    supabase.from("messages").select("athlete_id").eq("coach_id", coach.gymId)
       .neq("sender_id", coach.id).is("read_at", null),
     checkMissedWorkouts(supabase, coach),
-    checkProgressReminders(supabase, { coachId: coach.id }),
+    checkProgressReminders(supabase, { coachId: coach.gymId }),
   ]);
   const error = approvals.error ?? formChecks.error ?? messages.error;
   if (error) throw new Error("Couldn't load the dashboard.", { cause: error });

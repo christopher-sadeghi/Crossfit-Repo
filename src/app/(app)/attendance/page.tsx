@@ -22,10 +22,10 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
   const validDate = parsed.success && parsed.data <= today;
   const date = validDate ? parsed.data : today;
   const [{ data: athletes, error }, resultRows, attendanceRows, flagged] = await Promise.all([
-    supabase.from("athletes").select("id,first_name,last_name").eq("coach_id", coach.id).eq("status", "active").order("first_name").order("last_name"),
-    supabase.from("workout_results").select("athlete_id").eq("coach_id", coach.id).eq("performed_on", date),
-    supabase.from("attendance").select("athlete_id,kind").eq("coach_id", coach.id).eq("attended_on", date),
-    loadDriftingAthletes(supabase, coach.id, today, coach.driftDays),
+    supabase.from("athletes").select("id,first_name,last_name").eq("coach_id", coach.gymId).eq("status", "active").order("first_name").order("last_name"),
+    supabase.from("workout_results").select("athlete_id").eq("coach_id", coach.gymId).eq("performed_on", date),
+    supabase.from("attendance").select("athlete_id,kind").eq("coach_id", coach.gymId).eq("attended_on", date),
+    loadDriftingAthletes(supabase, coach.gymId, today, coach.driftDays),
   ]);
   if (error || resultRows.error || attendanceRows.error) throw new Error("Couldn't load the daily roster. Please try again.");
   const loggedResults = new Set((resultRows.data ?? []).map((r) => r.athlete_id));

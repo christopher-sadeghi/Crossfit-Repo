@@ -123,12 +123,12 @@ export function notifyProgressReport(supabase: Client, athleteId: string, report
 
 export async function checkDriftingAthletes(
   supabase: Client,
-  coach: { id: string; driftDays?: number },
+  coach: { id: string; gymId?: string; driftDays?: number },
   snapshot?: { today: string; athletes: Awaited<ReturnType<typeof loadDriftingAthletes>> },
 ): Promise<void> {
   try {
     const today = snapshot?.today ?? await getToday();
-    const athletes = snapshot?.athletes ?? await loadDriftingAthletes(supabase, coach.id, today, coach.driftDays);
+    const athletes = snapshot?.athletes ?? await loadDriftingAthletes(supabase, coach.gymId ?? coach.id, today, coach.driftDays);
     await Promise.all(athletes.flatMap(({ athlete, stats, reasons, daysSinceActivity, last30Rate, prev30Rate }) =>
       reasons.map((reason) => {
         const detail = reason === "inactive"
@@ -180,12 +180,12 @@ export async function checkProgressReminders(supabase: Client, scope: { coachId:
   }
 }
 
-export async function checkMissedWorkouts(supabase: Client, coach: { id: string }): Promise<void> {
+export async function checkMissedWorkouts(supabase: Client, coach: { id: string; gymId: string }): Promise<void> {
   try {
     const today = await getToday();
     const range = { from: programDate(today, 1, -89), to: programDate(today, 1, 0) };
     const { data: athletes, error } = await supabase.from("athletes")
-      .select("id, first_name, last_name").eq("coach_id", coach.id).eq("status", "active").not("user_id", "is", null);
+      .select("id, first_name, last_name").eq("coach_id", coach.gymId).eq("status", "active").not("user_id", "is", null);
     if (error) throw error;
     if (!athletes?.length) return;
     const schedules = await Promise.all(athletes.map(async (athlete) => ({

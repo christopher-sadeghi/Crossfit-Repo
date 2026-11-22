@@ -33,7 +33,7 @@ export async function MessageThread({ athleteId: requestedAthleteId, requestedLi
     supabase.from("messages").select("*").eq("athlete_id", athleteId).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(100),
     supabase.from("messages").select("id", { count: "exact", head: true }).eq("athlete_id", athleteId).neq("sender_id", userId).is("read_at", null),
     viewer.kind === "coach" ? supabase.from("ai_suggestions").select("*")
-      .eq("coach_id", viewer.id).eq("athlete_id", athleteId)
+      .eq("coach_id", viewer.gymId).eq("athlete_id", athleteId)
       .or("suggestion_type.eq.athlete_adjust_workout,input->>source_message_id.not.is.null")
       .order("created_at", { ascending: true }).order("id") : { data: null, error: null },
     getToday(), getTimeZone(),

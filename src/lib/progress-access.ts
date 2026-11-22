@@ -10,7 +10,7 @@ export async function progressAccess(athleteId: string) {
   if (viewer.kind === "athlete" && viewer.athleteId !== athleteId) throw new Error("You can't access this athlete.");
   const supabase = await createClient();
   const { data: athlete, error } = await supabase.from("athletes").select("id, coach_id, status").eq("id", athleteId).maybeSingle();
-  if (error || !athlete || (viewer.kind === "coach" ? athlete.coach_id !== viewer.id : athlete.coach_id !== viewer.coachId || athlete.status !== "active")) {
+  if (error || !athlete || (viewer.kind === "coach" ? athlete.coach_id !== viewer.gymId : athlete.coach_id !== viewer.coachId || athlete.status !== "active")) {
     throw new Error("You can't access this athlete.");
   }
   return { supabase, viewer, athlete };

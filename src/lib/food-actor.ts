@@ -8,7 +8,7 @@ import { getViewer } from "@/lib/viewer";
 export async function actor(athleteId: string) {
   const viewer = await getViewer();
   if (!z.string().uuid().safeParse(athleteId).success) return null;
-  if (viewer?.kind === "coach") return { athleteId, coachId: viewer.id, isAthlete: false };
+  if (viewer?.kind === "coach") return { athleteId, coachId: viewer.gymId, isAthlete: false };
   if (viewer?.kind === "athlete" && viewer.athleteId === athleteId) return { athleteId, coachId: viewer.coachId, isAthlete: true };
   return null;
 }

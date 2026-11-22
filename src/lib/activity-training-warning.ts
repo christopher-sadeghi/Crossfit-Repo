@@ -41,7 +41,7 @@ export async function checkTrainingLoad(supabase: Client, athleteId: string, asO
   try {
     const today = asOf ?? await getToday();
     const { data: athlete, error: athleteError } = await supabase.from("athletes")
-      .select("id, first_name, last_name, coaches(load_warning_ratio)").eq("id", athleteId).single();
+      .select("id, first_name, last_name, coaches!athletes_coach_id_fkey(load_warning_ratio)").eq("id", athleteId).single();
     if (athleteError) throw athleteError;
     const ratio = await warningRatio(supabase, athleteId, today, athlete.coaches?.load_warning_ratio);
     if (ratio !== null) await notifyTrainingLoad(supabase, athlete, today, ratio);

@@ -15,7 +15,7 @@ export default async function CoachFormCheckPage({ params }: { params: Promise<{
   if (viewer?.kind !== "coach") redirect("/login");
   if (!z.uuid().safeParse(id).success) notFound();
   const data = await loadFormReview(await createClient(), id);
-  if (!data || data.review.coach_id !== viewer.id) notFound();
+  if (!data || data.review.coach_id !== viewer.gymId) notFound();
   const { review } = data;
   return <div className="grid min-w-0 gap-4">
     <Link href="/form-checks" className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />Form checks</Link>

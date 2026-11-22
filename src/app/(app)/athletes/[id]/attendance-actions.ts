@@ -28,7 +28,7 @@ async function attendanceInput(data: FormData) {
   if (viewer?.kind !== "coach") return { error: "Only coaches can manage attendance." } as const;
   if (parsed.data.attended_on > await getToday()) return { error: "Attendance cannot be in the future." } as const;
   const supabase = await createClient();
-  const { data: athlete, error } = await supabase.from("athletes").select("id").eq("id", parsed.data.athlete_id).eq("coach_id", viewer.id).maybeSingle();
+  const { data: athlete, error } = await supabase.from("athletes").select("id").eq("id", parsed.data.athlete_id).eq("coach_id", viewer.gymId).maybeSingle();
   if (error || !athlete) return { error: "This athlete is not available to you." } as const;
   return { input: parsed.data, supabase } as const;
 }

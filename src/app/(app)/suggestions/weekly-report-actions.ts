@@ -19,7 +19,7 @@ export async function loadWeeklyReportBatch() {
   const pageSize = 500;
   for (let offset = 0; ; offset += pageSize) {
     const { data, error } = await supabase.from("athletes").select("id")
-      .eq("coach_id", viewer.id).eq("status", "active").order("id").range(offset, offset + pageSize - 1);
+      .eq("coach_id", viewer.gymId).eq("status", "active").order("id").range(offset, offset + pageSize - 1);
     if (error) return { error: "Couldn't load your active athletes. Please try again." };
     athleteIds.push(...data.map(({ id }) => id));
     if (data.length < pageSize) break;
@@ -44,7 +44,7 @@ export async function generateWeeklyReportInBatch(athleteId: string, startOn: st
 
   const supabase = await createClient();
   const [athlete, alreadyDrafted] = await Promise.all([
-    supabase.from("athletes").select("id").eq("id", id.data).eq("coach_id", viewer.id).eq("status", "active").maybeSingle(),
+    supabase.from("athletes").select("id").eq("id", id.data).eq("coach_id", viewer.gymId).eq("status", "active").maybeSingle(),
     supabase.from("ai_suggestions").select("id").eq("athlete_id", id.data).eq("suggestion_type", "weekly_report")
       .in("status", ["pending", "approved", "edited"]).contains("input", { start_on: startOn }).limit(1).maybeSingle(),
   ]);

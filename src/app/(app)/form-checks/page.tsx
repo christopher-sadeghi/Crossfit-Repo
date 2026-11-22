@@ -9,7 +9,7 @@ import { getViewer } from "@/lib/viewer";
 export default async function FormChecksPage() {
   const viewer = await getViewer();
   if (viewer?.kind !== "coach") redirect("/login");
-  const reviews = await loadFormReviews(await createClient(), { coachId: viewer.id });
+  const reviews = await loadFormReviews(await createClient(), { coachId: viewer.gymId });
   const awaiting = reviews.filter((review) => review.status === "awaiting_review");
   const reviewed = reviews.filter((review) => review.status === "reviewed");
   return <div className="grid min-w-0 gap-5">

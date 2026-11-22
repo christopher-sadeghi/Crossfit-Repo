@@ -12,14 +12,14 @@ async function requestIntake(athleteId: string) {
   const coach = await getCoach();
   if (!coach) throw new Error("Sign in as a coach.");
   const db = await createClient();
-  const { data: athlete, error: athleteError } = await db.from("athletes").select("id").eq("id", athleteId).eq("coach_id", coach.id).single();
+  const { data: athlete, error: athleteError } = await db.from("athletes").select("id").eq("id", athleteId).eq("coach_id", coach.gymId).single();
   if (athleteError || !athlete) throw new Error("Athlete not found.");
   const existing = await db.from("athlete_intakes").select("id").eq("athlete_id", athleteId).maybeSingle();
   if (existing.error) throw new Error("Couldn't load questionnaire.");
   const payload = { status: "requested", requested_at: new Date().toISOString(), completed_at: null };
   const result = existing.data
     ? await db.from("athlete_intakes").update(payload).eq("id", existing.data.id)
-    : await db.from("athlete_intakes").insert({ ...payload, athlete_id: athleteId, coach_id: coach.id });
+    : await db.from("athlete_intakes").insert({ ...payload, athlete_id: athleteId, coach_id: coach.gymId });
   if (result.error) throw new Error("Couldn't send questionnaire.");
   revalidatePath(`/athletes/${athleteId}`);
   revalidatePath("/athlete", "layout");

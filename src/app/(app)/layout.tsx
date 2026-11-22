@@ -20,7 +20,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (viewer.kind === "none") redirect("/no-access");
   const coach = viewer;
   const supabase = await createClient();
-  const [notifications, timeZone, awaitingFormChecks] = await Promise.all([getNotifications(), getTimeZone(), countAwaitingFormReviews(supabase, coach.id)]);
+  const [notifications, timeZone, awaitingFormChecks] = await Promise.all([getNotifications(), getTimeZone(), countAwaitingFormReviews(supabase, coach.gymId)]);
   const { count: athleteChanges } = await supabase
     .from("ai_suggestions")
     .select("id", { count: "exact", head: true })
