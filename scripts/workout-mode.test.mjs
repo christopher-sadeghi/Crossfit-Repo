@@ -46,6 +46,34 @@ function workoutHarness(extra = {}) {
   return { states, navigations, render, effects: () => effects, props };
 }
 
+function withWorkoutStorage(run) {
+  const previous = globalThis.localStorage;
+  const records = new Map();
+  globalThis.localStorage = { getItem: (key) => records.get(key) ?? null, setItem: (key, value) => records.set(key, value), removeItem: (key) => records.delete(key) };
+  try { run(records); } finally { if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous; }
+}
+
+test("finish retains paused progress until a result newer than the session is saved", () => withWorkoutStorage((records) => {
+  const h = workoutHarness();
+  h.states[0] = { ...h.states[0], reps: 42, clock: { startedAt: Date.now() - 30000, pausedAt: null, accumulated: 0 } };
+  h.states[1] = true;
+  elements(h.render()).find((node) => node.type === "button" && node.props.children === "Finish & review result").props.onClick();
+  const [key, raw] = [...records][0];
+  const saved = JSON.parse(raw);
+  assert.equal(saved.reps, 42);
+  assert.ok(saved.clock.pausedAt);
+  const restored = workoutHarness({ latestResultCreatedAt: null });
+  restored.effects()[0]();
+  assert.equal(restored.states[0].reps, 42);
+  const olderResult = workoutHarness({ latestResultCreatedAt: new Date(saved.createdAt - 1000).toISOString() });
+  olderResult.effects()[0]();
+  assert.equal(olderResult.states[0].reps, 42);
+  const logged = workoutHarness({ latestResultCreatedAt: new Date(saved.createdAt + 1000).toISOString() });
+  logged.effects()[0]();
+  assert.equal(logged.states[0].reps, 0);
+  assert.equal(records.has(key), false);
+}));
+
 test("capped For Time handoff includes cap time plus reps accepted by buildScore", () => {
   const h = workoutHarness();
   h.states[0] = { ...h.states[0], reps: 42, clock: { startedAt: Date.now() - 611000, pausedAt: null, accumulated: 0 } };
@@ -186,7 +214,7 @@ test("workout route gates by viewer, single-date schedule, and resolves scaling"
   let scheduled = true;
   let viewer = { kind: "athlete", athleteId: "a", units: "kg" };
   let failure = null;
-  const query = { select() { return this; }, eq() { return this; }, async maybeSingle() { return { data: null, error: failure }; } };
+  const query = { select() { return this; }, eq() { return this; }, order() { return this; }, limit() { return this; }, async maybeSingle() { return { data: null, error: failure }; } };
   const workout = { id: "w", title: "WOD", workout_type: "amrap", rounds: 5, time_cap_seconds: 600, workout_movements: [] };
   const { default: Page } = load("src/app/athlete/workout/[workoutId]/page.tsx", {
     "next/navigation": { notFound() { throw new Error("not found"); }, redirect(path) { throw new Error(`redirect ${path}`); } },

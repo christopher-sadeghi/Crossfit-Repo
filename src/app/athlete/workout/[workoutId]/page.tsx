@@ -28,11 +28,13 @@ export default async function WorkoutPage({ params, searchParams }: {
     "id, source_workout_id, title, workout_type, time_cap_seconds, rounds, description, notes, week_number, day_number, workout_movements(movement_id, position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(id, name))");
   const workout = schedule.find((item) => item.workout.id === workoutId)?.workout;
   if (!workout) notFound();
-  const [{ data: scaling, error }, maxes] = await Promise.all([
+  const [{ data: scaling, error }, maxes, results] = await Promise.all([
     supabase.from("athlete_workout_scalings").select("modifications, details, athlete_adjusted_at, coach_modifications, coach_details").eq("athlete_id", viewer.athleteId).eq("workout_id", workoutId).maybeSingle(),
     loadLiftMaxes(supabase, viewer.athleteId),
+    supabase.from("workout_results").select("created_at").eq("athlete_id", viewer.athleteId).eq("workout_id", workoutId).eq("performed_on", date).order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   if (error) throw new Error("Couldn't load your workout version.");
+  if (results.error) throw new Error("Couldn't check your saved workout results.");
   const version = workoutVersion({ ...workout, movements: [...workout.workout_movements].sort((a, b) => a.position - b.position).map((m) => ({ ...m, name: m.movements?.name ?? "Movement" })) }, scaling, date);
-  return <WorkoutMode athleteId={viewer.athleteId} date={date} units={viewer.units} workout={version} maxes={maxes.map(({ movement_id, oneRmKg }) => ({ movement_id, oneRmKg }))} />;
+  return <WorkoutMode athleteId={viewer.athleteId} date={date} units={viewer.units} workout={version} latestResultCreatedAt={results.data?.created_at ?? null} maxes={maxes.map(({ movement_id, oneRmKg }) => ({ movement_id, oneRmKg }))} />;
 }

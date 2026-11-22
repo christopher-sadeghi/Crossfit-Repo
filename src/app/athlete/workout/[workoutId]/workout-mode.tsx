@@ -49,6 +49,7 @@ const configSchema = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("rest"), seconds: positive, ...ready }),
 ]);
 const savedSchema = z.object({
+  createdAt: z.number().nonnegative(),
   config: configSchema,
   clock: z.object({
     startedAt: z.number().nonnegative().nullable(),
@@ -85,17 +86,20 @@ export function WorkoutMode({
   units,
   workout,
   maxes,
+  latestResultCreatedAt,
 }: {
   athleteId: string;
   date: string;
   units: Units;
   workout: Workout;
   maxes: { movement_id: string; oneRmKg: number | null }[];
+  latestResultCreatedAt: string | null;
 }) {
   const router = useRouter();
   const storageKey = `workout:${athleteId}:${workout.id}:${date}`;
   const barKey = `workout-bar:${athleteId}:${units}`;
   const initial = (): Session => ({
+    createdAt: Date.now(),
     config: defaultTimer(workout),
     clock: emptyClock,
     rounds: 0,
@@ -114,7 +118,6 @@ export function WorkoutMode({
   const [now, setNow] = useState(0);
   const audio = useRef<AudioContext | null>(null);
   const previousElapsed = useRef(0);
-  const leaving = useRef(false);
   const elapsed = elapsedTime(session.clock, now);
   const view = timerView(session.config, elapsed);
   const running =
@@ -132,7 +135,9 @@ export function WorkoutMode({
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         const parsed = savedSchema.safeParse(JSON.parse(saved));
-        if (parsed.success) {
+        if (parsed.success && latestResultCreatedAt && Date.parse(latestResultCreatedAt) >= parsed.data.createdAt) {
+          localStorage.removeItem(storageKey);
+        } else if (parsed.success) {
           setSession(parsed.data);
           previousElapsed.current = elapsedTime(parsed.data.clock, timestamp);
         } else
@@ -149,10 +154,10 @@ export function WorkoutMode({
     }
     setNow(timestamp);
     setLoaded(true);
-  }, [storageKey, barKey, units]);
+  }, [storageKey, barKey, units, latestResultCreatedAt]);
 
   useEffect(() => {
-    if (!loaded || leaving.current) return;
+    if (!loaded) return;
     try {
       localStorage.setItem(storageKey, JSON.stringify(session));
     } catch {
@@ -344,13 +349,13 @@ export function WorkoutMode({
       "notes",
       [session.notes, summary].filter(Boolean).join("\n").slice(0, 500),
     );
-    leaving.current = true;
+    const paused = { ...session, clock: { ...session.clock, pausedAt: session.clock.pausedAt ?? Date.now() } };
     try {
-      localStorage.removeItem(storageKey);
+      localStorage.setItem(storageKey, JSON.stringify(paused));
     } catch {
-      /* Storage may be unavailable. */
+      setStorageWarning("Could not save progress on this device. Keep this page open.");
     }
-    update({ clock: { ...session.clock, pausedAt: Date.now() } });
+    setSession(paused);
     router.push(`/athlete/log/${workout.id}?${params}`);
   }
 
