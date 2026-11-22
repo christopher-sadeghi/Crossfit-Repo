@@ -47,7 +47,7 @@ const cachedLookup = unstable_cache(async (source: "usda" | "off", term: string,
   const result = await lookup(url, source, barcode);
   if (!result.ok) throw new LookupFailure(result.reason);
   return result.items;
-}, ["food-db-v2"], { revalidate: 86400 });
+}, ["food-db-v3"], { revalidate: 86400 });
 
 async function search(source: "usda" | "off", term: string, barcode = false): Promise<LookupResult> {
   try {

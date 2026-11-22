@@ -5,6 +5,7 @@ export type FoodServing = {
   protein_g: number;
   carbs_g: number;
   fat_g: number;
+  incomplete?: string[];
 };
 
 export type FoodItem = {

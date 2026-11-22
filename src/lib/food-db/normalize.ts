@@ -12,7 +12,7 @@ const num = (value: unknown): number | null => {
 const round = (n: number) => Math.round(n * 10) / 10;
 
 function scaled(base: FoodServing, label: string, grams: number): FoodServing {
-  return { label, grams, calories: Math.round(base.calories * grams / 100), protein_g: round(base.protein_g * grams / 100), carbs_g: round(base.carbs_g * grams / 100), fat_g: round(base.fat_g * grams / 100) };
+  return { label, grams, calories: Math.round(base.calories * grams / 100), protein_g: round(base.protein_g * grams / 100), carbs_g: round(base.carbs_g * grams / 100), fat_g: round(base.fat_g * grams / 100), incomplete: base.incomplete };
 }
 
 export function normalizeUsda(value: unknown): FoodItem | null {
@@ -24,7 +24,8 @@ export function normalizeUsda(value: unknown): FoodItem | null {
   const kj = nutrient(1062);
   const calories = nutrient(1008) ?? nutrient(2047) ?? nutrient(2048) ?? (kj === null ? null : kj / 4.184);
   if (!name || id === null || calories === null) return null;
-  const base: FoodServing = { label: "100 g", grams: 100, calories: Math.round(calories), protein_g: nutrient(1003) ?? 0, carbs_g: nutrient(1005) ?? 0, fat_g: nutrient(1004) ?? 0 };
+  const incomplete = [["Protein", 1003], ["Carbohydrates", 1005], ["Fat", 1004]].flatMap(([label, id]) => nutrient(Number(id)) === null ? [String(label)] : []);
+  const base: FoodServing = { label: "100 g", grams: 100, calories: Math.round(calories), protein_g: nutrient(1003) ?? 0, carbs_g: nutrient(1005) ?? 0, fat_g: nutrient(1004) ?? 0, incomplete };
   const servings = [base];
   for (const raw of list(f.foodMeasures)) {
     const m = record(raw);
@@ -47,7 +48,8 @@ export function normalizeOff(value: unknown): FoodItem | null {
   const energy = (suffix: string) => num(n[`energy-kcal_${suffix}`]) ?? (() => { const kj = num(n[`energy-kj_${suffix}`]) ?? num(n[`energy_${suffix}`]); return kj === null ? null : kj / 4.184; })();
   const serving = (suffix: string, label: string, grams: number | null): FoodServing | null => {
     const calories = energy(suffix);
-    return calories === null ? null : { label, grams, calories: Math.round(calories), protein_g: num(n[`proteins_${suffix}`]) ?? 0, carbs_g: num(n[`carbohydrates_${suffix}`]) ?? 0, fat_g: num(n[`fat_${suffix}`]) ?? 0 };
+    const incomplete = [["Protein", "proteins"], ["Carbohydrates", "carbohydrates"], ["Fat", "fat"]].flatMap(([label, key]) => num(n[`${key}_${suffix}`]) === null ? [label] : []);
+    return calories === null ? null : { label, grams, calories: Math.round(calories), protein_g: num(n[`proteins_${suffix}`]) ?? 0, carbs_g: num(n[`carbohydrates_${suffix}`]) ?? 0, fat_g: num(n[`fat_${suffix}`]) ?? 0, incomplete };
   };
   if (!name || !/^\d{8,14}$/.test(code)) return null;
   const base = serving("100g", "100 g", 100);

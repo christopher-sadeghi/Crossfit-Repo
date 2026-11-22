@@ -44,6 +44,9 @@ function MacroLine({ serving, quantity = 1 }: { serving: FoodServing; quantity?:
   const macros = scaled(serving, quantity);
   return <p className="text-xs break-words text-muted-foreground">{macros.calories} kcal · P {macros.protein_g.toFixed(1)}g · C {macros.carbs_g.toFixed(1)}g · F {macros.fat_g.toFixed(1)}g</p>;
 }
+function IncompleteNote({ serving }: { serving: FoodServing }) {
+  return serving.incomplete?.length ? <p className="text-xs break-words text-amber-800">{serving.incomplete.join(", ")} not listed by the database — counted as 0; adjust in Manual if you know it.</p> : null;
+}
 
 export function FoodLogger({ athleteId, date, allergies, recent, saved, todayEntries, manual }: Props) {
   const [tab, setTab] = useState("search");
@@ -116,7 +119,7 @@ export function FoodLogger({ athleteId, date, allergies, recent, saved, todayEnt
     return listItems.length ? <ul className="grid min-w-0 gap-2">{listItems.map(item => <li key={item.key} className="grid min-w-0 gap-2 rounded-lg border p-3">
       <div className="flex min-w-0 items-start gap-1"><button type="button" className="min-w-0 flex-1 text-left font-medium break-words hover:underline" onClick={() => pick(item)}>{item.name}</button>{star(item)}{deletable && item.savedId && <Button type="button" variant="ghost" size="icon" disabled={pending} aria-label={`Delete ${item.name}`} onClick={() => { if (confirm(`Delete "${item.name}" from your foods?`)) run(() => deleteSavedFood(item.savedId!)); }}><Trash2 /></Button>}</div>
       {item.brand && <p className="text-xs break-words text-muted-foreground">{item.brand}</p>}
-      <p className="text-xs break-words">{servingLabel(item.servings[0])}</p><MacroLine serving={item.servings[0]} />{allergyWarning(item)}
+      <p className="text-xs break-words">{servingLabel(item.servings[0])}</p><MacroLine serving={item.servings[0]} /><IncompleteNote serving={item.servings[0]} />{allergyWarning(item)}
       {quick ? <Button type="button" variant="outline" size="sm" className="justify-self-start" disabled={pending} onClick={() => add(item, item.servings[0], 1, defaultMeal())}>Add again</Button> : <Button type="button" variant="outline" size="sm" className="justify-self-start" onClick={() => pick(item)}>Choose serving</Button>}
     </li>)}</ul> : <p className="text-sm text-muted-foreground">No foods here yet.</p>;
   }
@@ -146,6 +149,7 @@ export function FoodLogger({ athleteId, date, allergies, recent, saved, todayEnt
     {selected && serving && <section ref={panel} tabIndex={-1} aria-label={`Add ${selected.name}`} className="grid min-w-0 gap-3 rounded-lg border bg-muted/30 p-3">
       <div className="flex min-w-0 items-start gap-1"><div className="min-w-0 flex-1"><h3 className="font-medium break-words">{selected.name}</h3>{selected.brand && <p className="text-xs break-words text-muted-foreground">{selected.brand}</p>}</div>{star(selected, serving)}<Button type="button" variant="ghost" size="icon" aria-label="Close add panel" onClick={() => setSelected(null)}><X /></Button></div>
       {allergyWarning(selected)}
+      <IncompleteNote serving={serving} />
       <form className="grid min-w-0 gap-3" onSubmit={event => { event.preventDefault(); add(selected, serving, Number(quantity), meal); }}>
         <div className="grid min-w-0 gap-1.5"><Label htmlFor="food-serving">Serving</Label><select id="food-serving" className={`${selectClass} w-full min-w-0 max-w-full`} value={servingIndex} onChange={event => setServingIndex(Number(event.target.value))}>{selected.servings.map((s, i) => <option key={i} value={i}>{servingLabel(s)}</option>)}</select></div>
         <div className="grid grid-cols-2 gap-3"><div className="grid min-w-0 gap-1.5"><Label htmlFor="food-quantity">Quantity</Label><Input id="food-quantity" type="number" value={quantity} onChange={event => setQuantity(event.target.value)} step={0.25} min={0.25} max={20} required /></div><MealSelect value={meal} onChange={setMeal} /></div>
