@@ -6,9 +6,10 @@ import { z } from "zod";
 import { checkTrainingLoad } from "@/lib/activity-training-warning";
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { isCheckIn, LOW_READINESS, readinessScore, SORENESS_AREAS } from "@/lib/check-in";
+import { isReminderTimeZone } from "@/lib/check-in-reminders";
 import { notifyLowReadiness } from "@/lib/notifications";
 import { createClient } from "@/lib/supabase/server";
-import { getToday } from "@/lib/time-zone";
+import { getTimeZone, getToday } from "@/lib/time-zone";
 import { getViewer } from "@/lib/viewer";
 
 const scale = z.coerce.number().int().min(1).max(5);
@@ -37,6 +38,14 @@ const schema = z.object({
   ),
 });
 
+async function syncReminderTimeZone(supabase: Awaited<ReturnType<typeof createClient>>, athleteId: string) {
+  const timeZone = await getTimeZone();
+  if (!isReminderTimeZone(timeZone)) return null;
+  const { error } = await supabase.from("check_in_reminders").update({ time_zone: timeZone })
+    .eq("athlete_id", athleteId).neq("time_zone", timeZone);
+  return error;
+}
+
 export async function saveCheckIn(_: FormState, data: FormData): Promise<FormState> {
   const viewer = await getViewer();
   if (viewer?.kind !== "athlete") return failure(data, "Only athletes can save a check-in.");
@@ -55,6 +64,9 @@ export async function saveCheckIn(_: FormState, data: FormData): Promise<FormSta
     return failure(data, "A new day has started — reload to do today's check-in.");
   }
   const supabase = await createClient();
+  if (await syncReminderTimeZone(supabase, viewer.athleteId)) {
+    return failure(data, "Couldn't update your reminder time zone. Please try again.");
+  }
   const { error } = await supabase
     .from("athlete_journal_entries")
     .upsert(
@@ -85,6 +97,9 @@ export async function setCheckInSkipped(expectedDate: string, skipped: boolean):
   if (expectedDate !== today) return { error: "A new day has started — reload to do today's check-in." };
   if (typeof skipped !== "boolean") return { error: "Invalid skip preference." };
   const supabase = await createClient();
+  if (await syncReminderTimeZone(supabase, viewer.athleteId)) {
+    return { error: "Couldn't update your reminder time zone. Please try again." };
+  }
   const { error } = skipped
     ? await supabase.from("check_in_skips").upsert({ athlete_id: viewer.athleteId, skipped_on: today }, { onConflict: "athlete_id,skipped_on", ignoreDuplicates: true })
     : await supabase.from("check_in_skips").delete().eq("athlete_id", viewer.athleteId).eq("skipped_on", today);
