@@ -193,6 +193,7 @@ function actionHarness(tables = {}, options = {}, overrides = {}) {
     "@/lib/supabase/server": { createClient: async () => client },
     "@/lib/viewer": { getViewer: async () => options.viewer ?? { kind: "athlete", athleteId, coachId: userId, units: "kg" } },
     "@/lib/time-zone": { getToday: async () => date },
+    "@/lib/activity-training-warning": { checkTrainingLoad: async () => {} },
     "@/lib/notifications": Object.fromEntries(["notifyResultLogged", "notifyLowReadiness", "notifyWorkoutAdjusted", "notifyScheduleChanged", "notifySuggestionApproved"].map((name) => [name, notify(name)])),
     "@/lib/ai/service": {}, "@/lib/ai/suggestions": { SUGGESTION_REGISTRY: {} },
     "@/app/(app)/programs/actions": { placeWorkout: async () => { events.push(["place"]); return options.placementError ? { error: "Failed" } : {}; } },

@@ -11,6 +11,7 @@ const profileSchema = z.object({
   gym_name: z.string().trim().max(100),
   units: z.enum(["lb", "kg"]),
   drift_days: z.coerce.number().int().min(1, "Choose between 1 and 60 days.").max(60, "Choose between 1 and 60 days."),
+  load_warning_ratio: z.coerce.number().positive("Enter a positive training load ratio."),
 });
 
 export async function updateProfile(_: FormState, formData: FormData): Promise<FormState> {

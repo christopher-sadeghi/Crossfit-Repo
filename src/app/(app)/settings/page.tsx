@@ -3,6 +3,7 @@ import { NotificationSettings } from "@/components/notifications/email-settings"
 import { Card, CardContent } from "@/components/ui/card";
 import { getCoach } from "@/lib/coach";
 import { createClient } from "@/lib/supabase/server";
+import { DEFAULT_LOAD_WARNING_RATIO } from "@/lib/training-load";
 
 import { DemoDataCard } from "./demo-data-card";
 
@@ -25,6 +26,7 @@ export default async function SettingsPage() {
             gymName={coach?.gymName ?? ""}
             units={coach?.units ?? "lb"}
             driftDays={coach?.driftDays ?? 5}
+            loadWarningRatio={coach?.loadWarningRatio ?? DEFAULT_LOAD_WARNING_RATIO}
           />
         </CardContent>
       </Card>

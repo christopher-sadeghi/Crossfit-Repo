@@ -19,6 +19,30 @@ function load(relative, overrides = {}) {
 }
 const { computeConsistency } = load("src/lib/consistency.ts");
 const asOf = "2026-11-22";
+test("training load context summarizes both training sources and limits recent activity details", async () => {
+  const instance = {};
+  const activities = Array.from({ length: 7 }, () => ({
+    performed_on: asOf, activity_type: "hike", custom_label: "Hill hike", duration_minutes: 180, rpe: 5, notes: "Not needed in prompt",
+  }));
+  const { trainingLoadContext } = load("src/lib/ai/athlete-context.ts", {
+    "@/lib/consistency-data": {},
+    "@/lib/training-load-data": { loadTrainingLoad: async (...args) => {
+      assert.deepEqual(args, [instance, "athlete", asOf, 4]);
+      return { weekly: [{}, {}, {}, { gym: 200.2, outside: 900, estimatedGymSessions: 1 }],
+        acute: 1100.2, chronic: 700.1, ratio: 1.5714, estimatedGymSessions28: 2, activities };
+    } },
+  });
+  const context = await trainingLoadContext(instance, "athlete", asOf);
+  assert.equal(context.gym_load_last_7_days, 200);
+  assert.equal(context.outside_load_last_7_days, 900);
+  assert.equal(context.acute_chronic_ratio, 1.57);
+  assert.equal(context.estimated_gym_sessions_last_28_days, 2);
+  assert.equal(context.recent_outside_activities.length, 5);
+  assert.deepEqual(context.recent_outside_activities[0], {
+    date: asOf, type: "hike", label: "Hill hike", duration_minutes: 180, rpe: 5, session_load: 900,
+  });
+});
+
 function fixture({ input = {}, attendance = [], driftDays = 5, errorTable, loadError } = {}) {
   const stats = computeConsistency({ today: asOf, scheduled: [], results: [], attendance, ...input });
   const calls = [];

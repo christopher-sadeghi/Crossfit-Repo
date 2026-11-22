@@ -168,6 +168,7 @@ test("calendar renders Logged for matching results on any date, including today'
       source: "one_off", programId: null, programName: null, date, removed,
       overrides: { workoutId: "original", programId: "group", programName: "Shared plan", source: "group" },
     }],
+    activities: [{ id: "walk", performed_on: today, activity_type: "walk", custom_label: "Trail walk", duration_minutes: 45 }],
     results, library: [], programs: [],
   }));
   for (const date of ["2026-12-01", today, "2026-12-03"]) {
@@ -185,4 +186,7 @@ test("calendar renders Logged for matching results on any date, including today'
     assert.doesNotMatch(render(date, [{ workout_id: "unrelated", performed_on: date }]), /<span>(Logged|Not logged)<\/span>/);
   }
   assert.doesNotMatch(render("2026-12-01", [], true), /<span>Not logged<\/span>/);
+  assert.match(render(today, []), /Trail walk.*Outside · 45 min/);
+  assert.match(render(today, []), /tab=load&amp;date=2026-12-02#log-activity/);
+  assert.doesNotMatch(render(today, []), /tab=load&amp;date=2026-12-03/);
 });

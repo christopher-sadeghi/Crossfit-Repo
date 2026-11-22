@@ -264,6 +264,58 @@ export type Database = {
           },
         ];
       };
+      athlete_activities: {
+        Row: {
+          activity_type: string;
+          athlete_id: string;
+          coach_id: string;
+          created_at: string;
+          created_by: string | null;
+          custom_label: string | null;
+          distance_m: number | null;
+          duration_minutes: number;
+          id: string;
+          notes: string | null;
+          performed_on: string;
+          rpe: number;
+          source: string;
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          activity_type: string;
+          athlete_id: string;
+          coach_id: string;
+          created_at?: string;
+          created_by?: string | null;
+          custom_label?: string | null;
+          distance_m?: number | null;
+          duration_minutes: number;
+          id?: string;
+          notes?: string | null;
+          performed_on: string;
+          rpe: number;
+          source: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["athlete_activities"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "athlete_activities_athlete_id_coach_id_fkey";
+            columns: ["athlete_id", "coach_id"];
+            isOneToOne: false;
+            referencedRelation: "athletes";
+            referencedColumns: ["id", "coach_id"];
+          },
+          {
+            foreignKeyName: "athlete_activities_coach_id_fkey";
+            columns: ["coach_id"];
+            isOneToOne: false;
+            referencedRelation: "coaches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       athlete_journal_entries: {
         Row: {
           alcohol: boolean;
@@ -699,6 +751,7 @@ export type Database = {
       coaches: {
         Row: {
           drift_days: number;
+          load_warning_ratio: number;
           created_at: string;
           full_name: string | null;
           gym_name: string | null;
@@ -709,6 +762,7 @@ export type Database = {
         ComputedFields: never;
         Insert: {
           drift_days?: number;
+          load_warning_ratio?: number;
           created_at?: string;
           full_name?: string | null;
           gym_name?: string | null;
@@ -718,6 +772,7 @@ export type Database = {
         };
         Update: {
           drift_days?: number;
+          load_warning_ratio?: number;
           created_at?: string;
           full_name?: string | null;
           gym_name?: string | null;
