@@ -87,6 +87,20 @@ test("capped For Time handoff includes cap time plus reps accepted by buildScore
   assert.deepEqual(buildScore(scoreSchema.parse(workoutPrefill(query)), "for_time", "kg"), { score: { time_seconds: 600, reps: 42, rounds: null, load_kg: null } });
 });
 
+test("saved display-unit weights are isolated by units", () => withWorkoutStorage((records) => {
+  const kg = workoutHarness({ units: "kg" });
+  kg.states[0] = { ...kg.states[0], weights: { "0-0": 100 }, reps: 10 };
+  kg.states[1] = true;
+  kg.render(); kg.effects()[1]();
+  assert.ok([...records.keys()][0].endsWith(":kg"));
+  const lb = workoutHarness({ units: "lb" });
+  lb.effects()[0]();
+  assert.deepEqual(lb.states[0].weights, {});
+  const restored = workoutHarness({ units: "kg" });
+  restored.effects()[0]();
+  assert.deepEqual(restored.states[0].weights, { "0-0": 100 });
+}));
+
 test("prefill validates numbers, strips control characters and limits notes", () => {
   assert.deepEqual(workoutPrefill({ time_seconds: "125", rounds: "3", load: "105.5", is_rx: "scaled", notes: "Hi\u0000" }), { minutes: "2", seconds: "5", rounds: "3", load: "105.5", is_rx: "scaled", notes: "Hi" });
   assert.deepEqual(workoutPrefill({}), {});

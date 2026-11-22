@@ -96,7 +96,7 @@ export function WorkoutMode({
   latestResultCreatedAt: string | null;
 }) {
   const router = useRouter();
-  const storageKey = `workout:${athleteId}:${workout.id}:${date}`;
+  const storageKey = `workout:${athleteId}:${workout.id}:${date}:${units}`;
   const barKey = `workout-bar:${athleteId}:${units}`;
   const initial = (): Session => ({
     createdAt: Date.now(),
