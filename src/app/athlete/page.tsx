@@ -154,7 +154,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
 
   return (
     <div className="grid gap-6">
-      <details id="log-activity" key={activityDay} open={activityDate != null} className="rounded-lg border bg-card p-4">
+      <details id="log-activity" key={`log-activity-${activityDay}`} open={activityDate != null} className="rounded-lg border bg-card p-4">
         <summary className="w-fit cursor-pointer font-semibold">Log activity</summary>
         <div className="mt-4 grid gap-4">
           <nav aria-label="Outside activity calendar" className="grid grid-cols-4 gap-1 sm:grid-cols-7">
