@@ -40,7 +40,9 @@ export function normalizeUsda(value: unknown): FoodItem | null {
 export function normalizeOff(value: unknown): FoodItem | null {
   const f = record(value);
   const n = record(f.nutriments);
-  const name = str(f.product_name) || str(f.product_name_en);
+  const localizedName = record(f.product_name);
+  const name = str(f.product_name) || str(f.product_name_en) || str(localizedName.en) || Object.values(localizedName).map(str).find(Boolean) || "";
+  const brand = Array.isArray(f.brands) ? f.brands.map(str).filter(Boolean).join(", ") : str(f.brands);
   const code = str(f.code);
   const energy = (suffix: string) => num(n[`energy-kcal_${suffix}`]) ?? (() => { const kj = num(n[`energy-kj_${suffix}`]) ?? num(n[`energy_${suffix}`]); return kj === null ? null : kj / 4.184; })();
   const serving = (suffix: string, label: string, grams: number | null): FoodServing | null => {
@@ -58,5 +60,5 @@ export function normalizeOff(value: unknown): FoodItem | null {
     if (real) servings.push(real);
   }
   if (!servings.length) return null;
-  return { key: `off:${code}`, source: "off", sourceId: code, name, brand: str(f.brands) || null, ingredients: str(f.ingredients_text) || null, allergens: list(f.allergens_tags).filter((v): v is string => typeof v === "string").map(v => v.replace(/^en:/, "")), servings };
+  return { key: `off:${code}`, source: "off", sourceId: code, name, brand: brand || null, ingredients: str(f.ingredients_text) || null, allergens: list(f.allergens_tags).filter((v): v is string => typeof v === "string").map(v => v.replace(/^en:/, "")), servings };
 }

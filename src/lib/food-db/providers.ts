@@ -8,14 +8,14 @@ import type { LookupResult } from "./types";
 const fields = "code,product_name,product_name_en,brands,ingredients_text,allergens_tags,nutriments,serving_size,serving_quantity,serving_quantity_unit";
 const headers = { "User-Agent": "FitCoachAI/1.0 (https://github.com/christopher-sadeghi/Crossfit-Repo)" };
 
-async function lookup(url: URL, source: "usda" | "off", barcode = false): Promise<LookupResult> {
+async function lookup(url: URL, source: "usda" | "off", barcode = false, searchHits = false): Promise<LookupResult> {
   try {
     const response = await fetch(url.href.replace(/\+/g, "%20"), { headers, cache: "no-store", signal: AbortSignal.timeout(8000) });
     if (response.status === 429) return { ok: false, reason: "rate_limit" };
     if (barcode && response.status === 404) return { ok: true, items: [] };
     if (!response.ok) return { ok: false, reason: "unavailable" };
     const data = record(await response.json());
-    const raw = barcode ? (data.status === 0 ? [] : [data.product]) : data[source === "usda" ? "foods" : "products"];
+    const raw = barcode ? (data.status === 0 ? [] : [data.product]) : data[source === "usda" ? "foods" : searchHits ? "hits" : "products"];
     if (!Array.isArray(raw)) return { ok: false, reason: "unavailable" };
     return { ok: true, items: raw.flatMap(v => { const item = source === "usda" ? normalizeUsda(v) : normalizeOff(v); return item ? [item] : []; }) };
   } catch {
@@ -37,13 +37,17 @@ const cachedLookup = unstable_cache(async (source: "usda" | "off", term: string,
     url = new URL(`https://world.openfoodfacts.org/api/v2/product/${term}.json`);
     url.searchParams.set("fields", fields);
   } else {
+    url = new URL("https://search.openfoodfacts.org/search");
+    url.search = new URLSearchParams({ q: term, page_size: "15", fields }).toString();
+    const primary = await lookup(url, source, false, true);
+    if (primary.ok) return primary.items;
     url = new URL("https://world.openfoodfacts.org/cgi/search.pl");
     url.search = new URLSearchParams({ search_terms: term, json: "1", page_size: "15", fields }).toString();
   }
   const result = await lookup(url, source, barcode);
   if (!result.ok) throw new LookupFailure(result.reason);
   return result.items;
-}, ["food-db-v1"], { revalidate: 86400 });
+}, ["food-db-v2"], { revalidate: 86400 });
 
 async function search(source: "usda" | "off", term: string, barcode = false): Promise<LookupResult> {
   try {
