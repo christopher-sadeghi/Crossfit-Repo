@@ -15,11 +15,18 @@ export type SuggestionOptions<S extends z.ZodType> = {
   system: string;
   prompt: string;
   validate?: (proposal: unknown, input: Json) => void;
+  /** Last step before saving, e.g. dropping unsafe items. Throw to fail the suggestion. */
+  finalize?: (proposal: z.infer<S>, input: Json) => unknown;
+  /** Status once ready: "pending" waits for coach approval, "idea" is information only. */
+  successStatus?: "pending" | "idea";
+  /** Needed when an athlete asks, since the row belongs to their coach. */
+  coachId?: string;
   model?: LanguageModel;
 };
 
 const DEFAULT_ERROR = "The AI couldn't make a suggestion right now. Please try again in a minute.";
 const TIMEOUT_ERROR = "The AI took too long to answer. Please try again.";
+export const ALLERGEN_ERROR = "Every idea the AI came up with included one of the athlete's allergies, so none are shown. Please try again.";
 
 function modelId(model: LanguageModel | undefined) {
   return typeof model === "string" ? model : model?.modelId ?? null;
@@ -27,6 +34,7 @@ function modelId(model: LanguageModel | undefined) {
 
 export function friendlySuggestionError(error: string | null | undefined) {
   if (!error) return DEFAULT_ERROR;
+  if (error === ALLERGEN_ERROR) return ALLERGEN_ERROR;
   return /timeout|timed out|abort/i.test(error) ? TIMEOUT_ERROR : DEFAULT_ERROR;
 }
 
@@ -47,6 +55,7 @@ async function saveFailure<S extends z.ZodType>(
   const { error: insertError } = await supabase.from("ai_suggestions").insert({
     suggestion_type: opts.type,
     athlete_id: opts.athleteId,
+    ...(opts.coachId ? { coach_id: opts.coachId } : {}),
     input: opts.input as NonNullable<Json>,
     model: modelId(model),
     status: "failed",
@@ -94,6 +103,7 @@ export async function runSuggestionWithClient<S extends z.ZodType>(
     .insert({
       suggestion_type: opts.type,
       athlete_id: opts.athleteId,
+      ...(opts.coachId ? { coach_id: opts.coachId } : {}),
       input: opts.input as NonNullable<Json>,
       model: modelId(model),
       status: "failed",
@@ -127,11 +137,12 @@ export async function runSuggestionWithClient<S extends z.ZodType>(
     });
     const proposal = opts.schema.parse(output);
     opts.validate?.(proposal, opts.input);
+    const saved = opts.finalize ? opts.finalize(proposal, opts.input) : proposal;
     const { error } = await supabase
       .from("ai_suggestions")
       .update({
-        proposal: proposal as Json,
-        status: "pending",
+        proposal: saved as Json,
+        status: opts.successStatus ?? "pending",
         error: null,
       })
       .eq("id", reservation.id);

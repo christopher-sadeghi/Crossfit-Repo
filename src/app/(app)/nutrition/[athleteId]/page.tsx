@@ -6,8 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { FoodIdeaList, FoodPreferencesForm, SuggestFoodForm } from "@/components/nutrition/food-ideas";
 import { RequestMacroSuggestionForm } from "@/components/suggestions/suggestion-forms";
+import { FOOD_DISCLAIMER } from "@/lib/ai/suggest-food";
 import { MACRO_DISCLAIMER } from "@/lib/ai/suggestions";
+import { cookingLabel, DIET_LABELS, readPreferences } from "@/lib/food-preferences";
+import { latestFoodIdeas } from "@/lib/food-ideas";
 import { addDays, MEALS, onTarget, targetOn, totals, type Macros } from "@/lib/nutrition";
 import { getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
@@ -27,7 +31,7 @@ export default async function AthleteNutritionPage({ params, searchParams }: Pro
   const week = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   const supabase = await createClient();
-  const [{ data: athlete }, { data: targets }, { data: food }] = await Promise.all([
+  const [{ data: athlete }, { data: targets }, { data: food }, { data: prefsRow }, ideas] = await Promise.all([
     supabase.from("athletes").select("id, first_name, last_name").eq("id", athleteId).maybeSingle(),
     supabase.from("nutrition_targets").select("id, calories, protein_g, carbs_g, fat_g, start_date, end_date, notes").eq("athlete_id", athleteId).order("start_date", { ascending: false }),
     supabase
@@ -37,6 +41,8 @@ export default async function AthleteNutritionPage({ params, searchParams }: Pro
       .gte("logged_on", weekStart)
       .lte("logged_on", date)
       .order("created_at"),
+    supabase.from("athlete_food_preferences").select("diet_type, allergies, dislikes, cooking_minutes").eq("athlete_id", athleteId).maybeSingle(),
+    latestFoodIdeas(supabase, athleteId, date),
   ]);
   if (!athlete) notFound();
 
@@ -58,6 +64,7 @@ export default async function AthleteNutritionPage({ params, searchParams }: Pro
   const avg = (k: keyof Macros) => (logged.length ? Math.round(logged.reduce((s, r) => s + r.sum[k], 0) / logged.length) : null);
   const met = weekRows.filter((r) => r.met).length;
   const name = `${athlete.first_name} ${athlete.last_name}`;
+  const prefs = readPreferences(prefsRow);
 
   return (
     <>
@@ -116,6 +123,34 @@ export default async function AthleteNutritionPage({ params, searchParams }: Pro
           <p className="text-xs text-muted-foreground">{MACRO_DISCLAIMER}</p>
         </CardContent>
       </Card>
+
+      <div className="mb-6 grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Food ideas</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Meal and snack ideas that fit what&apos;s left of {date === now ? "today's" : `${weekday(date)}'s`} macros, {athlete.first_name}&apos;s goals and food preferences. Ideas change nothing until someone adds one to the food log.
+            </p>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <SuggestFoodForm athleteId={athlete.id} date={date} />
+            {ideas && <FoodIdeaList id={ideas.id} ideas={ideas.ideas} addedNames={ideas.addedNames} />}
+            <p className="text-xs text-muted-foreground">{FOOD_DISCLAIMER}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Food preferences</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {DIET_LABELS[prefs.diet_type]} · {cookingLabel(prefs.cooking_minutes)}
+              {prefs.allergies.length ? ` · Allergies: ${prefs.allergies.join(", ")}` : " · No allergies listed"}. {athlete.first_name} can edit these too.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <FoodPreferencesForm key={JSON.stringify(prefs)} athleteId={athlete.id} prefs={prefs} />
+          </CardContent>
+        </Card>
+      </div>
 
       <section aria-label="Daily intake" className="mb-6 grid gap-4">
         <h2 className="text-lg font-semibold">{date === now ? "Today" : weekday(date)}</h2>

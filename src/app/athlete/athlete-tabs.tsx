@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, History, NotebookPen, Trophy } from "lucide-react";
+import { Apple, CalendarDays, History, NotebookPen, Trophy } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -8,6 +8,7 @@ const TABS = [
   { href: "/athlete", label: "Today", Icon: CalendarDays },
   { href: "/athlete/history", label: "History", Icon: History },
   { href: "/athlete/prs", label: "PRs", Icon: Trophy },
+  { href: "/athlete/nutrition", label: "Nutrition", Icon: Apple },
   { href: "/athlete/journal", label: "Journal", Icon: NotebookPen },
 ];
 
@@ -19,7 +20,7 @@ export function AthleteTabs() {
       aria-label="Athlete pages"
       className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur"
     >
-      <div className="mx-auto grid max-w-md grid-cols-4">
+      <div className="mx-auto grid max-w-md grid-cols-5">
         {TABS.map(({ href, label, Icon }) => {
           const active = pathname === href;
           return (

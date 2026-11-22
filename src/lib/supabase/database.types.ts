@@ -21,6 +21,7 @@ export type Database = {
           input: NonNullable<Json>;
           model: string | null;
           proposal: Json | null;
+          requested_by: string | null;
           status: Database["public"]["Enums"]["suggestion_status"];
           suggestion_type: Database["public"]["Enums"]["suggestion_type"];
           target_id: string | null;
@@ -38,6 +39,7 @@ export type Database = {
           input?: NonNullable<Json>;
           model?: string | null;
           proposal?: Json | null;
+          requested_by?: string | null;
           status?: Database["public"]["Enums"]["suggestion_status"];
           suggestion_type: Database["public"]["Enums"]["suggestion_type"];
           target_id?: string | null;
@@ -54,6 +56,7 @@ export type Database = {
           input?: NonNullable<Json>;
           model?: string | null;
           proposal?: Json | null;
+          requested_by?: string | null;
           status?: Database["public"]["Enums"]["suggestion_status"];
           suggestion_type?: Database["public"]["Enums"]["suggestion_type"];
           target_id?: string | null;
@@ -69,6 +72,55 @@ export type Database = {
           },
           {
             foreignKeyName: "ai_suggestions_coach_id_fkey";
+            columns: ["coach_id"];
+            isOneToOne: false;
+            referencedRelation: "coaches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      athlete_food_preferences: {
+        Row: {
+          allergies: string[];
+          athlete_id: string;
+          coach_id: string;
+          cooking_minutes: number | null;
+          created_at: string;
+          diet_type: string;
+          dislikes: string[];
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          allergies?: string[];
+          athlete_id: string;
+          coach_id: string;
+          cooking_minutes?: number | null;
+          created_at?: string;
+          diet_type?: string;
+          dislikes?: string[];
+          updated_at?: string;
+        };
+        Update: {
+          allergies?: string[];
+          athlete_id?: string;
+          coach_id?: string;
+          cooking_minutes?: number | null;
+          created_at?: string;
+          diet_type?: string;
+          dislikes?: string[];
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "athlete_food_preferences_athlete_id_coach_id_fkey";
+            columns: ["athlete_id", "coach_id"];
+            isOneToOne: true;
+            referencedRelation: "athletes";
+            referencedColumns: ["id", "coach_id"];
+          },
+          {
+            foreignKeyName: "athlete_food_preferences_coach_id_fkey";
             columns: ["coach_id"];
             isOneToOne: false;
             referencedRelation: "coaches";
@@ -396,6 +448,7 @@ export type Database = {
       };
       food_logs: {
         Row: {
+          ai_suggestion_id: string | null;
           athlete_id: string;
           calories: number;
           carbs_g: number;
@@ -410,6 +463,7 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          ai_suggestion_id?: string | null;
           athlete_id: string;
           calories?: number;
           carbs_g?: number;
@@ -423,6 +477,7 @@ export type Database = {
           protein_g?: number;
         };
         Update: {
+          ai_suggestion_id?: string | null;
           athlete_id?: string;
           calories?: number;
           carbs_g?: number;
@@ -436,6 +491,13 @@ export type Database = {
           protein_g?: number;
         };
         Relationships: [
+          {
+            foreignKeyName: "food_logs_ai_suggestion_id_fkey";
+            columns: ["ai_suggestion_id"];
+            isOneToOne: false;
+            referencedRelation: "ai_suggestions";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "food_logs_athlete_id_coach_id_fkey";
             columns: ["athlete_id", "coach_id"];
@@ -1087,13 +1149,19 @@ export type Database = {
         "weightlifting" | "gymnastics" | "monostructural" | "other";
       movement_measure: "reps" | "load" | "distance" | "calories" | "time";
       suggestion_status:
-        "pending" | "approved" | "edited" | "rejected" | "failed";
+        | "pending"
+        | "approved"
+        | "edited"
+        | "rejected"
+        | "failed"
+        | "idea";
       suggestion_type:
         | "write_workout"
         | "scale_workout"
         | "adjust_macros"
         | "progress_summary"
-        | "movement_guide";
+        | "movement_guide"
+        | "suggest_food";
       weight_unit: "lb" | "kg";
       workout_type: "for_time" | "amrap" | "emom" | "strength" | "other";
     };
@@ -1241,6 +1309,7 @@ export const Constants = {
         "edited",
         "rejected",
         "failed",
+        "idea",
       ],
       suggestion_type: [
         "movement_guide",
@@ -1248,6 +1317,7 @@ export const Constants = {
         "scale_workout",
         "adjust_macros",
         "progress_summary",
+        "suggest_food",
       ],
       weight_unit: ["lb", "kg"],
       workout_type: ["for_time", "amrap", "emom", "strength", "other"],
