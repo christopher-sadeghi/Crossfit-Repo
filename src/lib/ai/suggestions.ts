@@ -26,10 +26,12 @@ import { progressSummaryEntry } from "./progress-summary";
 import { weeklyReportEntry } from "./weekly-report";
 import { athleteAdjustSchema } from "./athlete-adjust-schema";
 import { suggestFoodEntry } from "./suggest-food";
+import { draftProgramEntry } from "./draft-program";
 
 export { ApprovalError } from "./errors";
 
 export const SUGGESTION_LABELS: Record<Enums<"suggestion_type">, string> = {
+  draft_program: "Draft program",
   write_workout: "Write workout",
   scale_workout: "Scale workout",
   adjust_macros: "Adjust macros",
@@ -162,6 +164,7 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
     { data: weights, error: weightsError },
     { data: goals, error: goalsError },
     training,
+    { data: intake, error: intakeError },
     consistency,
   ] = await Promise.all([
     supabase
@@ -197,6 +200,7 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
       .eq("athlete_id", athleteId)
       .eq("status", "active"),
     trainingVolume(supabase, athleteId, asOf),
+    supabase.from("athlete_intakes").select("answers, status").eq("athlete_id", athleteId).maybeSingle(),
     consistencyContext(supabase, athleteId, asOf),
   ]);
 
@@ -205,6 +209,7 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
   if (foodError) throw foodError;
   if (weightsError) throw weightsError;
   if (goalsError) throw goalsError;
+  if (intakeError) throw intakeError;
 
   const input = {
     athlete: {
@@ -222,6 +227,7 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
     training_last_4_weeks: training,
     consistency,
     active_goals: goals ?? [],
+    intake: intake ? { status: intake.status, answers: intake.answers } : null,
   } satisfies Json;
 
   return {
@@ -454,6 +460,7 @@ async function applyMacroSuggestion(
 }
 
 export const SUGGESTION_REGISTRY: Record<Enums<"suggestion_type">, SuggestionEntry> = {
+  draft_program: draftProgramEntry,
   movement_guide: movementGuideEntry,
   write_workout: {
     label: SUGGESTION_LABELS.write_workout,

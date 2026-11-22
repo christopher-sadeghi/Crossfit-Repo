@@ -39,6 +39,21 @@ export async function updateSession(request: NextRequest) {
   const isLoggedIn = Boolean(data?.claims);
   const path = request.nextUrl.pathname;
 
+  if (isLoggedIn && path.startsWith("/athlete") && !path.startsWith("/athletes") && path !== "/athlete/onboarding") {
+    try {
+      const { data: intake, error } = await supabase.from("athlete_intakes").select("status, athletes!inner(user_id)").eq("athletes.user_id", String(data?.claims?.sub)).maybeSingle();
+      if (error) throw error;
+      if (intake && ["requested", "in_progress"].includes(intake.status)) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/athlete/onboarding";
+        url.search = "";
+        return redirectWithCookies(url, response);
+      }
+    } catch (error) {
+      console.error("Unable to check athlete intake:", error);
+    }
+  }
+
   if (!isLoggedIn && !matches(path, PUBLIC_PATHS)) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
