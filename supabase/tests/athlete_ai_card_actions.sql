@@ -17,6 +17,25 @@ insert into public.athlete_ai_messages(id,athlete_id,coach_id,role,content,metad
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"47000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
 do $$ declare first_ref uuid; replay_ref uuid; done boolean; begin
+  begin
+    insert into public.athlete_ai_card_actions(assistant_message_id,card_index,athlete_id,coach_id,action,ref_id)
+      values ('47000000-0000-4000-8000-000000000021',0,'47000000-0000-4000-8000-000000000011','47000000-0000-4000-8000-000000000001','sent',gen_random_uuid());
+    raise exception 'forged reference accepted';
+  exception when insufficient_privilege then null; end;
+  begin
+    perform public.complete_athlete_ai_card('47000000-0000-4000-8000-000000000021',0,'sent',
+      '{"body":"Bad link","link_type":"workout","link_id":"47000000-0000-4000-8000-000000000099"}');
+    raise exception 'invalid link accepted';
+  exception when raise_exception then if sqlerrm <> 'invalid_message_link' then raise; end if; end;
+  assert not exists(select 1 from public.athlete_ai_card_actions);
+  begin
+    perform public.complete_athlete_ai_card('47000000-0000-4000-8000-000000000021',9,'sent','{"body":"Bad index"}');
+    raise exception 'RPC accepted out of bounds card';
+  exception when raise_exception then if sqlerrm <> 'invalid_assistant_card' then raise; end if; end;
+  begin
+    perform public.complete_athlete_ai_card('47000000-0000-4000-8000-000000000023',0,'sent','{"body":"User row"}');
+    raise exception 'RPC accepted user card';
+  exception when raise_exception then if sqlerrm <> 'invalid_assistant_card' then raise; end if; end;
   select ref_id, already_completed into first_ref, done from public.complete_athlete_ai_card(
     '47000000-0000-4000-8000-000000000021',0,'sent','{"body":"Edited body"}');
   assert not done and first_ref is not null;
@@ -29,7 +48,7 @@ do $$ declare first_ref uuid; replay_ref uuid; done boolean; begin
     insert into public.athlete_ai_card_actions(assistant_message_id,card_index,athlete_id,coach_id,action,ref_id)
       values ('47000000-0000-4000-8000-000000000021',0,'47000000-0000-4000-8000-000000000011','47000000-0000-4000-8000-000000000001','sent',first_ref);
     raise exception 'duplicate action accepted';
-  exception when unique_violation then null; end;
+  exception when insufficient_privilege then null; end;
   begin
     perform public.complete_athlete_ai_card('47000000-0000-4000-8000-000000000021',1,'saved',
       '{"performed_on":"2026-01-01","activity_type":"run","duration_minutes":0,"rpe":5}');
@@ -44,6 +63,8 @@ do $$ declare first_ref uuid; replay_ref uuid; done boolean; begin
   assert (select count(*) from public.athlete_activities) = 1;
   assert (select duration_minutes from public.athlete_activities limit 1) = 30;
   assert (select source from public.athlete_activities limit 1) = 'ai';
+  assert (select created_by from public.athlete_activities limit 1) = auth.uid();
+  assert (select sender_id from public.messages where id = first_ref) = auth.uid();
   begin update public.athlete_ai_card_actions set action = 'saved'; raise exception 'update allowed'; exception when insufficient_privilege then null; end;
   begin delete from public.athlete_ai_card_actions; raise exception 'delete allowed'; exception when insufficient_privilege then null; end;
   begin
@@ -67,7 +88,7 @@ do $$ declare first_ref uuid; replay_ref uuid; done boolean; begin
   exception when raise_exception then if sqlerrm <> 'invalid_assistant_card' then raise; end if; end;
   perform public.create_notification('47000000-0000-4000-8000-000000000011','form_check','Form',null,null,'card-form');
   perform public.create_notification('47000000-0000-4000-8000-000000000011','assistant_red_flag','Safety',null,null,'card-safety');
-  raise notice 'PASS: atomic send/save deduplication, failed-save rollback and retry, immutable actions and card validation';
+  raise notice 'PASS: direct action forgery denied; authorized RPC deduplicates, validates links/cards, rolls back failed saves and permits retry';
 end $$;
 select set_config('request.jwt.claims','{"sub":"47000000-0000-4000-8000-000000000004","role":"authenticated"}',true);
 do $$ begin

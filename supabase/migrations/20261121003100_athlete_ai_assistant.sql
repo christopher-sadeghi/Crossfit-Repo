@@ -71,25 +71,15 @@ create policy "Athletes read own assistant card actions" on public.athlete_ai_ca
   for select to authenticated using (
     athlete_id = (select public.current_athlete_id()) and coach_id = (select public.current_athlete_coach_id())
   );
-create policy "Athletes complete own assistant cards" on public.athlete_ai_card_actions
-  for insert to authenticated with check (
-    athlete_id = (select public.current_athlete_id()) and coach_id = (select public.current_athlete_coach_id())
-    and exists (
-      select 1 from public.athlete_ai_messages m
-      where m.id = assistant_message_id and m.athlete_id = athlete_ai_card_actions.athlete_id
-        and m.coach_id = athlete_ai_card_actions.coach_id and m.role = 'assistant'
-        and m.metadata->'cards'->card_index->>'kind' = case action when 'sent' then 'coach_message' else 'activity' end
-    )
-  );
 revoke all on public.athlete_ai_card_actions from anon, authenticated;
-grant select, insert on public.athlete_ai_card_actions to authenticated;
+grant select on public.athlete_ai_card_actions to authenticated;
 grant all on public.athlete_ai_card_actions to service_role;
 
 -- The reservation and side effect commit together, or both roll back.
 create function public.complete_athlete_ai_card(
   p_message_id uuid, p_card_index integer, p_action text, p_values jsonb
 ) returns table (ref_id uuid, already_completed boolean)
-language plpgsql security invoker set search_path = ''
+language plpgsql security definer set search_path = ''
 as $$
 declare
   v_athlete uuid := public.current_athlete_id();
@@ -117,14 +107,14 @@ begin
     if p_values->>'link_type' is not null and (
       p_values->>'link_type' <> 'workout' or not coalesce(public.athlete_can_view_workout((p_values->>'link_id')::uuid), false)
     ) then raise exception 'invalid_message_link'; end if;
-    insert into public.messages(id, athlete_id, coach_id, body, link_type, link_id)
-      values (v_ref, v_athlete, v_coach, btrim(p_values->>'body'), p_values->>'link_type', (p_values->>'link_id')::uuid);
+    insert into public.messages(id, athlete_id, coach_id, sender_id, body, link_type, link_id)
+      values (v_ref, v_athlete, v_coach, auth.uid(), btrim(p_values->>'body'), p_values->>'link_type', (p_values->>'link_id')::uuid);
   else
     insert into public.athlete_activities(id, athlete_id, coach_id, performed_on, activity_type, custom_label,
-      duration_minutes, rpe, distance_m, notes, source)
+      duration_minutes, rpe, distance_m, notes, source, created_by)
       values (v_ref, v_athlete, v_coach, (p_values->>'performed_on')::date, p_values->>'activity_type',
         p_values->>'custom_label', (p_values->>'duration_minutes')::integer, (p_values->>'rpe')::integer,
-        (p_values->>'distance_m')::numeric, p_values->>'notes', 'ai');
+        (p_values->>'distance_m')::numeric, p_values->>'notes', 'ai', auth.uid());
   end if;
   return query select v_ref, false;
 end;
