@@ -3,6 +3,7 @@ import { openai } from "@ai-sdk/openai";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
+import { loadRecentCheckIns } from "@/lib/check-in";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { formatScore, fromKgPrecise, toKg, type Units } from "@/lib/units";
 
@@ -22,6 +23,7 @@ import {
 
 const ATHLETE_ADJUST_SYSTEM = `You help a CrossFit athlete adjust today's WOD to how they feel. The change applies right away and their coach reviews it afterwards.
 Rules:
+- Use recent_check_ins: readiness, sleep, soreness areas, stress, energy and mood. Lower readiness or high soreness means scale down and avoid sore areas.
 - You may only make the workout easier or safer: lighter loads, fewer reps, sets, or rounds, a longer time cap on a For Time WOD, a shorter AMRAP or EMOM, or easier substitutions. Never make anything harder.
 - If the athlete asks to make it harder, heavier, longer, or to add work, set asked_for_harder to true and copy the current values unchanged.
 - Start from "current" (what the athlete was given, which may already include the coach's scaling) and only make it easier from there. Keep the WOD's stimulus and format.
@@ -46,14 +48,12 @@ export async function buildAthleteAdjustRequest(
   supabase: SupabaseClient<Database>,
   params: { athleteId: string; workoutId: string; scheduledOn: string; feeling: string; units: Units; scaling: Scaling },
 ) {
-  const journalFrom = new Date(`${params.scheduledOn}T00:00:00Z`);
-  journalFrom.setUTCDate(journalFrom.getUTCDate() - 3);
   const [
     { data: library, error: libraryError },
     { data: athlete, error: athleteError },
     { data: workout, error: workoutError },
     { data: resultRows, error: resultsError },
-    { data: journal, error: journalError },
+    recentCheckIns,
   ] = await Promise.all([
     supabase.from("movements").select("id, name, category, measure").order("name"),
     supabase
@@ -77,19 +77,12 @@ export async function buildAthleteAdjustRequest(
       .eq("athlete_id", params.athleteId)
       .order("performed_on", { ascending: false })
       .limit(10),
-    supabase
-      .from("athlete_journal_entries")
-      .select("entry_on, sleep_hours, sleep_quality, high_stress, notes")
-      .eq("athlete_id", params.athleteId)
-      .gte("entry_on", journalFrom.toISOString().slice(0, 10))
-      .lte("entry_on", params.scheduledOn)
-      .order("entry_on", { ascending: false }),
+    loadRecentCheckIns(supabase, params.athleteId, params.scheduledOn, 7),
   ]);
   if (libraryError) throw libraryError;
   if (athleteError || !athlete) throw athleteError ?? new Error("Athlete not found.");
   if (workoutError || !workout) throw workoutError ?? new Error("Workout not found.");
   if (resultsError) throw resultsError;
-  if (journalError) throw journalError;
 
   const units = params.units;
   const movements = workout.workout_movements.map(({ movements: movement, load_kg, ...item }) => ({
@@ -172,7 +165,7 @@ export async function buildAthleteAdjustRequest(
       soreness: result.soreness,
       pain_notes: result.pain_notes,
     })),
-    recent_journal: (journal ?? []).map((entry) => ({ ...entry, notes: entry.notes?.slice(0, 300) ?? null })),
+    recent_check_ins: recentCheckIns,
   } satisfies Json;
 
   const ids = input.library.map(({ id }) => id);

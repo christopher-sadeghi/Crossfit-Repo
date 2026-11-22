@@ -38,15 +38,6 @@ export const athleteAdjustInputSchema = scaleWorkoutInputSchema.extend({
     time_cap_seconds: z.number().nullable(),
     movements: z.array(baselineMovementSchema),
   }),
-  recent_journal: z.array(
-    z.object({
-      entry_on: z.string(),
-      sleep_hours: z.number().nullable(),
-      sleep_quality: z.number().nullable(),
-      high_stress: z.boolean(),
-      notes: z.string().nullable(),
-    }),
-  ),
 });
 
 export type AthleteAdjustInput = z.infer<typeof athleteAdjustInputSchema>;
