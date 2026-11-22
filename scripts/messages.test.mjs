@@ -36,7 +36,7 @@ const coachId = "29000000-0000-4000-8000-000000000001";
 const userId = "29000000-0000-4000-8000-000000000003";
 const itemId = "29000000-0000-4000-8000-000000000021";
 const athlete = { id: athleteId, coach_id: coachId, user_id: userId, first_name: "Sam", last_name: "Athlete", status: "active" };
-const coach = { kind: "coach", id: coachId };
+const coach = { kind: "coach", id: coachId, gymId: coachId, role: "owner" };
 
 function clientFixture(tables = {}, queryError = null) {
   const calls = [];
@@ -93,7 +93,7 @@ test("link validation enforces athlete ownership, assignment and coach-only sugg
   const { validateMessageLink, messageAthlete } = loader()("src/lib/messages.ts");
   const { client } = clientFixture({ athletes: [athlete], workouts: [{ id: itemId, athlete_id: athleteId }], workout_results: [{ id: itemId, athlete_id: "other" }], ai_suggestions: [{ id: itemId, athlete_id: athleteId }] });
   assert.equal((await messageAthlete(client, coach, athleteId)).id, athleteId);
-  assert.equal(await messageAthlete(client, { kind: "coach", id: "stranger" }, athleteId), null);
+  assert.equal(await messageAthlete(client, { kind: "coach", id: "stranger", gymId: "stranger", role: "coach" }, athleteId), null);
   assert.equal(await messageAthlete(client, { kind: "athlete", athleteId: "other" }, athleteId), null);
   assert.equal(await validateMessageLink(client, athleteId, { type: "workout", id: itemId }, false), true);
   assert.equal(await validateMessageLink(client, athleteId, { type: "result", id: itemId }, true), false);
@@ -153,7 +153,7 @@ test("send rejects empty, oversized, forged links, strangers and database failur
   for (const [options, data] of [
     [{}, form("   ")], [{}, form("x".repeat(2001))], [{}, form("Hello", "bad")],
     [{}, form("Hello", `result:${itemId}`)], [{ viewer: null }, form()],
-    [{ viewer: { kind: "coach", id: "stranger" } }, form()], [{ error: { message: "offline" } }, form()],
+    [{ viewer: { kind: "coach", id: "stranger", gymId: "stranger", role: "coach" } }, form()], [{ error: { message: "offline" } }, form()],
   ]) {
     const { actions, notifications } = actionsFixture(options);
     assert.ok((await actions.sendMessage(athleteId, {}, data)).error);

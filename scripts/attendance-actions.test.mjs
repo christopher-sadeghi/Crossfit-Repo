@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, "..");
 const athleteId = "33000000-0000-4000-8000-000000000011";
 const coachId = "33000000-0000-4000-8000-000000000001";
-function fixture({ kind = "coach", ownsAthlete = true, dbError = null } = {}) {
+function fixture({ kind = "coach", role = kind === "coach" ? "owner" : undefined, ownsAthlete = true, dbError = null } = {}) {
   const writes = [];
   const filters = [];
   const invalidations = [];
@@ -30,7 +30,7 @@ function fixture({ kind = "coach", ownsAthlete = true, dbError = null } = {}) {
   };
   const overrides = {
     "next/cache": { revalidatePath: (...args) => invalidations.push(args) },
-    "@/lib/viewer": { getViewer: async () => kind ? { kind, id: coachId } : null },
+    "@/lib/viewer": { getViewer: async () => kind ? { kind, id: coachId, gymId: coachId, role } : null },
     "@/lib/time-zone": { getToday: async () => "2026-11-22" },
     "@/lib/supabase/server": { createClient: async () => client },
   };
@@ -114,4 +114,11 @@ test("settings reject invalid training load warning ratios", async () => {
     assert.ok((await f.settings.updateProfile({}, data)).error);
     assert.equal(f.writes.length, 0);
   }
+});
+test("staff can update their name without changing gym-wide settings", async () => {
+  const f = fixture({ role: "coach" });
+  const data = new FormData();
+  data.set("full_name", "Staff Coach");
+  assert.equal((await f.settings.updateProfile({}, data)).message, "Settings saved.");
+  assert.deepEqual(f.writes, [["update", { full_name: "Staff Coach" }]]);
 });

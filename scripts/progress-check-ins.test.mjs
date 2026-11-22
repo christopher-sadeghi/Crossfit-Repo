@@ -171,12 +171,12 @@ test("progress access enforces ownership and active athlete status before writes
     return progressAccess(athleteId);
   }
   const row = { id: athleteId, coach_id: coachId, status: "active" };
-  assert.equal((await access({ kind: "coach", id: coachId }, row)).athlete.id, athleteId);
+  assert.equal((await access({ kind: "coach", id: coachId, gymId: coachId, role: "owner" }, row)).athlete.id, athleteId);
   assert.equal((await access({ kind: "athlete", athleteId, coachId }, row)).athlete.id, athleteId);
   for (const [viewer, athlete] of [
-    [null, row], [{ kind: "none" }, row], [{ kind: "coach", id: photoId }, row],
+    [null, row], [{ kind: "none" }, row], [{ kind: "coach", id: photoId, gymId: photoId, role: "owner" }, row],
     [{ kind: "athlete", athleteId: photoId, coachId }, row],
     [{ kind: "athlete", athleteId, coachId }, { ...row, status: "archived" }],
-    [{ kind: "coach", id: coachId }, null],
+    [{ kind: "coach", id: coachId, gymId: coachId, role: "owner" }, null],
   ]) await assert.rejects(() => access(viewer, athlete), /access|log in/);
 });

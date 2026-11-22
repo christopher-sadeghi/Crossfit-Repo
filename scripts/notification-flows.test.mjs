@@ -334,7 +334,7 @@ test("approval actions notify only on successful athlete-specific approvals, inc
   for (const type of ["adjust_macros", "write_workout", "progress_summary", "scale_workout"]) {
     for (const mode of ["success", "failure", "no-athlete", "absent"]) {
       const suggestion = { id: itemId, athlete_id: mode === "no-athlete" ? null : athleteId, suggestion_type: type, status: "pending", proposal: { summary: "Report", goals: [] }, input: { mode: "write", workout_id: itemId } };
-      const { load, events } = actionHarness({ ai_suggestions: mode === "absent" ? [] : [suggestion] }, { viewer: { kind: "coach", id: userId } }, {
+      const { load, events } = actionHarness({ ai_suggestions: mode === "absent" ? [] : [suggestion] }, { viewer: { kind: "coach", id: userId, gymId: userId, role: "coach" } }, {
         "@/lib/ai/suggestions": { SUGGESTION_REGISTRY: { [type]: { apply: true, proposalSchema: z.any() } } },
         "@/lib/ai/decisions": { approveSuggestionWithClient: async () => { events.push(["approve"]); return mode === "failure" ? { error: "Failed" } : { status: "approved" }; } },
         "@/lib/ai/scale-workout": { scaleWorkoutSchema: z.any(), scaleWorkoutInputSchema: z.any(), applyScaleWorkoutLoadEdits: () => ({ data: {} }) },
@@ -467,7 +467,7 @@ test("Ask AI uses only an athlete message in the coach's thread and keeps a plai
   assert.match((await athlete.load(filename).askAthleteMessageAI(athleteId, itemId)).error, /signed in as an athlete in this browser/);
   assert.equal(calls.length, 0);
 
-  const coach = actionHarness(threads, { viewer: { kind: "coach", id: userId } }, mocks);
+  const coach = actionHarness(threads, { viewer: { kind: "coach", id: userId, gymId: userId, role: "owner" } }, mocks);
   const { askAthleteMessageAI } = coach.load(filename);
   assert.equal((await askAthleteMessageAI(athleteId, userId)).error, "This athlete message is unavailable.");
   assert.equal(calls.length, 0);
