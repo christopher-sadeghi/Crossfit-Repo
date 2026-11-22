@@ -14,6 +14,23 @@ import type { FormState } from "@/lib/auth/form-state";
 
 import { saveCheckIn } from "./actions";
 
+function readSkip(key: string) {
+  try {
+    return window.localStorage.getItem(key) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function writeSkip(key: string, skipped: boolean) {
+  try {
+    if (skipped) window.localStorage.setItem(key, "true");
+    else window.localStorage.removeItem(key);
+  } catch {
+    return;
+  }
+}
+
 export function CheckInForm({ entry, today, athleteId }: { entry: CheckIn | null; today: string; athleteId: string }) {
   const [editing, setEditing] = useState(false);
   const [skipped, setSkipped] = useState(false);
@@ -27,12 +44,12 @@ export function CheckInForm({ entry, today, athleteId }: { entry: CheckIn | null
   const [note, setNote] = useState(entry?.notes ?? "");
   const skipKey = `checkin-skip:${athleteId}:${today}`;
   useEffect(() => {
-    setSkipped(window.localStorage.getItem(skipKey) === "true");
+    setSkipped(readSkip(skipKey));
   }, [skipKey]);
   const [state, action, pending] = useActionState<FormState, FormData>(async (previous, data) => {
     const result = await saveCheckIn(previous, data);
     if (!result.error) {
-      window.localStorage.removeItem(skipKey);
+      writeSkip(skipKey, false);
       setSkipped(false);
       setEditing(false);
     }
@@ -49,17 +66,17 @@ export function CheckInForm({ entry, today, athleteId }: { entry: CheckIn | null
   ].filter((item): item is string => item !== null) : [];
   const showSkipped = skipped && !hasSavedEntry && !editing;
   const skipToday = () => {
-    window.localStorage.setItem(skipKey, "true");
+    writeSkip(skipKey, true);
     setSkipped(true);
     setEditing(false);
   };
   const fillItIn = () => {
-    window.localStorage.removeItem(skipKey);
+    writeSkip(skipKey, false);
     setSkipped(false);
     setEditing(true);
   };
   const editToday = () => {
-    window.localStorage.removeItem(skipKey);
+    writeSkip(skipKey, false);
     setSkipped(false);
     setEditing(true);
   };
