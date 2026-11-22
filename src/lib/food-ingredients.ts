@@ -4,6 +4,8 @@ type IngredientEntry = { name: string; ingredients: string | null; allergens?: s
 const commonAllergens = ["peanut", "tree nut", "milk", "egg", "fish", "shellfish", "soy", "gluten", "sesame", "mustard", "celery", "lupin", "sulphite"];
 
 export function foodIngredients(entries: IngredientEntry[], limit: number): string | null {
+  const whitespace = (text: string) => text.replace(/\s+/g, " ").trim();
+  entries = entries.map(entry => ({ name: whitespace(entry.name), ingredients: entry.ingredients === null ? null : whitespace(entry.ingredients), allergens: entry.allergens?.map(whitespace) }));
   const allergens = new Set<string>();
   const names = new Set<string>();
   const safety = new Set<string>();

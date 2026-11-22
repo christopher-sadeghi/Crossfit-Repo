@@ -30,3 +30,11 @@ test("handles empty and ingredient-free inputs", () => {
   assert.equal(foodIngredients([], 8000), "");
   assert.equal(foodIngredients([{ name: "Snack", ingredients: null }], 8000), "Foods: Snack");
 });
+
+test("preserves line-wrapped allergen phrases and odd whitespace", () => {
+  const ingredients = foodIngredients([{ name: "Snack", ingredients: `${"sugar, ".repeat(1200)}peanut\n butter, roasted tree\nnuts`, allergens: ["unusual\t\u00a0seed"] }], 8000);
+  assert.ok(ingredients);
+  assert.ok(ingredients.includes("peanut butter"));
+  assert.ok(ingredients.includes("tree nuts"));
+  assert.deepEqual(matchedAllergies(ingredients, ["peanut butter", "tree nut", "unusual seed"]), ["peanut butter", "tree nut", "unusual seed"]);
+});
