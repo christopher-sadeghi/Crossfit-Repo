@@ -1,9 +1,14 @@
 import { redirect } from "next/navigation";
 
+import { ActivityForm } from "@/components/activity-form";
+import { ActivityList } from "@/components/activity-list";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { feedbackSummary } from "@/lib/feedback";
 import { createClient } from "@/lib/supabase/server";
+import { getToday } from "@/lib/time-zone";
+import { gymSessionLoad } from "@/lib/training-load";
+import { loadActivities } from "@/lib/training-load-data";
 import { formatDate, formatScore } from "@/lib/units";
 import { getViewer } from "@/lib/viewer";
 
@@ -17,25 +22,40 @@ export default async function AthleteHistoryPage() {
   if (viewer.kind === "none") redirect("/no-access");
 
   const supabase = await createClient();
-  const [{ data: claims }, { data: results }] = await Promise.all([
+  const [{ data: claims }, { data: results }, today, activities] = await Promise.all([
     supabase.auth.getClaims(),
     supabase
       .from("workout_results")
       .select(
-        "id, workout_id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, logged_by, rpe, energy, sleep_hours, soreness, pain_notes, workouts(title, workout_type)",
+        "id, workout_id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, logged_by, rpe, energy, sleep_hours, soreness, pain_notes, workouts(title, workout_type, time_cap_seconds)",
       )
       .eq("athlete_id", viewer.athleteId)
       .order("performed_on", { ascending: false })
       .order("created_at", { ascending: false }),
+    getToday(),
+    loadActivities(supabase, viewer.athleteId),
   ]);
   const userId = claims?.claims?.sub;
 
   return (
     <div className="grid gap-3">
-      <h1 className="text-xl font-semibold tracking-tight">Workout history</h1>
+      <h1 className="text-xl font-semibold tracking-tight">Training history</h1>
       <AthleteConsistencyCard athleteId={viewer.athleteId} />
+      <Card>
+        <CardHeader><CardTitle>Outside activity history</CardTitle></CardHeader>
+        <CardContent className="grid gap-4">
+          <details>
+            <summary className="w-fit cursor-pointer font-medium underline underline-offset-4">Log activity</summary>
+            <div className="mt-3"><ActivityForm athleteId={viewer.athleteId} today={today} units={viewer.units} /></div>
+          </details>
+          <ActivityList activities={activities} today={today} units={viewer.units} />
+        </CardContent>
+      </Card>
+      <h2 className="text-lg font-semibold">Workout history</h2>
       {results?.length ? (
-        results.map((result) => (
+        results.map((result) => {
+          const session = gymSessionLoad(result, result.workouts);
+          return (
           <Card key={result.id}>
             <CardContent className="grid gap-2 py-4">
               <div className="flex items-start justify-between gap-3">
@@ -53,6 +73,7 @@ export default async function AthleteHistoryPage() {
                 <span className="text-muted-foreground">{formatDate(result.performed_on)}</span>
                 <span className="font-medium">{formatScore(result, viewer.units)}</span>
               </div>
+              <p className="text-sm text-muted-foreground">{Math.round(session.load)} load{session.estimated && " (estimated)"}</p>
               {feedbackSummary(result) && (
                 <p className="text-sm text-muted-foreground">{feedbackSummary(result)}</p>
               )}
@@ -76,7 +97,8 @@ export default async function AthleteHistoryPage() {
               )}
             </CardContent>
           </Card>
-        ))
+          );
+        })
       ) : (
         <Card>
           <CardContent className="py-6 text-sm text-muted-foreground">

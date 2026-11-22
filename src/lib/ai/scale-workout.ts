@@ -10,6 +10,7 @@ import { loadLiftMaxes } from "@/lib/benchmarks";
 import { formatLiftMaxes, liftMaxContextSchema, LIFT_LOAD_RULE } from "./lift-context";
 
 import { ApprovalError } from "./errors";
+import { trainingLoadContext } from "./athlete-context";
 import { ageOn, loadWorkoutContext, workoutLibraryEntrySchema } from "./workout-context";
 import { movementIdSchema } from "./movement-schema";
 import { scaleWorkoutChangeSchema } from "./scale-workout-schema";
@@ -171,8 +172,14 @@ export async function buildScaleRequest(
   if (resultsError) throw resultsError;
 
   const asOf = await getToday();
+  const [liftMaxes, recentCheckIns, trainingLoad] = await Promise.all([
+    loadLiftMaxes(supabase, athlete.id),
+    loadRecentCheckIns(supabase, athlete.id, asOf, 7),
+    trainingLoadContext(supabase, athlete.id, asOf),
+  ]);
   const athleteContext = {
-    lift_maxes: formatLiftMaxes(await loadLiftMaxes(supabase, athlete.id), units),
+    lift_maxes: formatLiftMaxes(liftMaxes, units),
+    training_load: trainingLoad,
     id: athlete.id,
     first_name: athlete.first_name,
     experience_level: athlete.experience_level,
@@ -214,7 +221,7 @@ export async function buildScaleRequest(
     workout: workoutContext,
     library,
     recent_results: recentResults,
-    recent_check_ins: await loadRecentCheckIns(supabase, athlete.id, asOf, 7),
+    recent_check_ins: recentCheckIns,
   } satisfies Json;
 
   return {

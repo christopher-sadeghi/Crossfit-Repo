@@ -92,13 +92,25 @@ test("settings accept 1–60 whole drift days and reject missing/out-of-range va
     const f = fixture();
     const data = new FormData();
     for (const [key, value] of Object.entries({ full_name: "Coach", gym_name: "", units: "lb", drift_days: days })) data.set(key, value);
+    data.set("load_warning_ratio", "1.75");
     assert.equal((await f.settings.updateProfile({}, data)).message, "Settings saved.");
     assert.equal(f.writes[0][1].drift_days, Number(days));
+    assert.equal(f.writes[0][1].load_warning_ratio, 1.75);
   }
   for (const days of ["", "0", "61", "1.5", "abc"]) {
     const f = fixture();
     const data = new FormData();
     for (const [key, value] of Object.entries({ full_name: "Coach", gym_name: "", units: "lb", drift_days: days })) data.set(key, value);
+    data.set("load_warning_ratio", "1.5");
+    assert.ok((await f.settings.updateProfile({}, data)).error);
+    assert.equal(f.writes.length, 0);
+  }
+});
+test("settings reject invalid training load warning ratios", async () => {
+  for (const ratio of ["", "0", "-1", "Infinity", "abc"]) {
+    const f = fixture();
+    const data = new FormData();
+    for (const [key, value] of Object.entries({ full_name: "Coach", gym_name: "", units: "lb", drift_days: "5", load_warning_ratio: ratio })) data.set(key, value);
     assert.ok((await f.settings.updateProfile({}, data)).error);
     assert.equal(f.writes.length, 0);
   }

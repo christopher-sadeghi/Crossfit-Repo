@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { activityLabel, type AthleteActivity } from "@/lib/athlete-activities";
 import { SCHEDULE_LABEL, type AthleteScheduleItem } from "@/lib/athlete-schedule";
 import type { FormState } from "@/lib/auth/form-state";
 import { scheduledWorkoutResultMatcher } from "@/lib/results";
@@ -27,6 +28,7 @@ type Props = {
   weekStart: string;
   selectedDate: string;
   items: AthleteScheduleItem<CalendarWorkout>[];
+  activities: Pick<AthleteActivity, "id" | "performed_on" | "activity_type" | "custom_label" | "duration_minutes">[];
   results: { workout_id: string; performed_on: string }[];
   library: { id: string; title: string }[];
   programs: { id: string; name: string; athlete_id: string | null }[];
@@ -151,7 +153,7 @@ function AddExistingForm({ athleteId, firstName, library, programs, selectedDate
 }
 
 export function AthleteCalendar(props: Props) {
-  const { athleteId, firstName, today, weekStart, items, results } = props;
+  const { athleteId, firstName, today, weekStart, items, activities, results } = props;
   const [suggestionIds, setSuggestionIds] = useState<string[]>([]);
   const isLogged = scheduledWorkoutResultMatcher(results);
   const weekLink = (date: string) => `?tab=workouts&week=${date}`;
@@ -177,6 +179,13 @@ export function AthleteCalendar(props: Props) {
               <DayMenu athleteId={athleteId} date={date} weekStart={weekStart} alignEnd={index > 3} onSuggestion={(id) => setSuggestionIds((ids) => [...ids, id])} />
             </div>
             {dayItems.map((item) => <WorkoutChip key={`${item.workout.id}-${item.date}`} item={item} athleteId={athleteId} today={today} logged={isLogged(item)} />)}
+            {activities.filter((activity) => activity.performed_on === date).map((activity) => (
+              <div key={activity.id} className="rounded bg-muted/60 px-1.5 py-2">
+                <span className="block break-words font-medium">{activityLabel(activity)}</span>
+                <span className="text-muted-foreground">Outside · {activity.duration_minutes} min</span>
+              </div>
+            ))}
+            {date <= today && <Link className="w-fit underline underline-offset-2" href={`?tab=workouts&week=${weekStart}&date=${date}#calendar-log-activity`}>Log activity</Link>}
             {!dayItems.length && <p className="py-2 text-muted-foreground">No WODs</p>}
           </div>;
         })}

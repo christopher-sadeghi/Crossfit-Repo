@@ -16,7 +16,7 @@ import type { Database, Json } from "@/lib/supabase/database.types";
 import { aiDailyLimit, aiLimitMessage, countAiUsageToday, runSuggestionWithClient } from "./service-core";
 import { SUGGESTION_REGISTRY } from "./suggestions";
 import { formatLiftMaxes, LIFT_LOAD_RULE } from "./lift-context";
-import { consistencyContext } from "./athlete-context";
+import { consistencyContext, trainingLoadContext } from "./athlete-context";
 
 export const chatContextSchema = z.object({
   athleteId: z.string().uuid().optional(),
@@ -140,6 +140,7 @@ async function getAthlete(supabase: Supabase, athleteId: string, today: string, 
     { data: journal },
     recentCheckIns,
     consistency,
+    trainingLoad,
   ] = await Promise.all([
     loadAthleteBenchmarks(supabase, athleteId, today),
     loadLiftMaxes(supabase, athleteId),
@@ -174,6 +175,7 @@ async function getAthlete(supabase: Supabase, athleteId: string, today: string, 
       .order("entry_on", { ascending: false }),
     loadRecentCheckIns(supabase, athleteId, today, 7),
     consistencyContext(supabase, athleteId, today),
+    trainingLoadContext(supabase, athleteId, today),
   ]);
   if (error) throw error;
   if (!athlete) return { error: "Athlete not found." };
@@ -191,6 +193,7 @@ async function getAthlete(supabase: Supabase, athleteId: string, today: string, 
   return {
     recent_check_ins: recentCheckIns,
     consistency,
+    training_load: trainingLoad,
     lift_maxes: formatLiftMaxes(liftMaxes, units),
     benchmark_bests: benchmarks.flatMap((b) => b.best ? [{
       name: b.name, workout_type: b.workout_type, date: b.best.performed_on,
@@ -497,7 +500,7 @@ export async function runChatWithClient(supabase: Supabase, opts: ChatOptions): 
     }) } : {}),
     get_athlete: tool({
       description:
-        "Full detail for one athlete: profile, injuries, goals and progress, PRs, recent results with feedback, consistency (7/30/90-day completion, streaks, coach-marked attendance and drifting), recovery journal, and schedule for the last 7 and next 14 days.",
+        "Full detail for one athlete: profile, injuries, goals and progress, PRs, recent results and outside activities, gym and outside training load, consistency (completion, streaks, attendance and drifting), recovery journal, and schedule for the last 7 and next 14 days.",
       inputSchema: z.object({ athlete_id: z.string().uuid() }),
       execute: safe(async ({ athlete_id }: { athlete_id: string }) => opts.thread && athlete_id !== opts.thread.athleteId
         ? { error: "Use only the athlete in this thread." } : getAthlete(supabase, athlete_id, opts.today, units)),

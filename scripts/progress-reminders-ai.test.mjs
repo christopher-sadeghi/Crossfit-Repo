@@ -132,6 +132,13 @@ function aiFixture(rows = measurements, errorTable) {
     "@/lib/consistency-data": { loadConsistency: async () => ({ stats: { windows: { 7: {}, 30: {} }, prev30: {} }, attendance: [], schedule: [] }) },
     "./athlete-context": { consistencyContext: async () => ({}), trainingVolume: async () => ({}), weightTrend: () => null, foodAverages: () => ({}) },
   };
+  overrides["./athlete-context"].trainingLoadContext = async (_client, _athleteId, endOn) => ({
+    gym_load_last_7_days: 0,
+    outside_load_last_7_days: 450,
+    weekly_average_load_last_28_days: 150,
+    acute_chronic_ratio: 3,
+    recent_outside_activities: [{ date: endOn, label: "Hill hike", duration_minutes: 90, rpe: 5, session_load: 450 }],
+  });
   return { client, overrides, queries, filters };
 }
 
@@ -191,6 +198,7 @@ test("both actual AI requests include trends only when present, never photos, an
     if (kind === "weekly-report") {
       const schema = load("src/lib/weekly-report.ts").weeklyReportInputSchema;
       assert.equal(schema.safeParse(request.input).success, true);
+      assert.ok(request.input.sections.training.some(({ label }) => label === "Hill hike"));
       entry.validate({ summary: "Steady progress.", focus: ["Keep moving.", "Stay consistent."] });
       assert.throws(() => entry.validate({ summary: "Lost 2 inches.", focus: ["Keep moving.", "Stay consistent."] }));
     } else {

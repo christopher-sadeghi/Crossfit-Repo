@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Pencil } from "lucide-react";
 import { z } from "zod";
 
+import { ActivityForm } from "@/components/activity-form";
+import { ActivityList } from "@/components/activity-list";
 import { RequestMacroSuggestionForm } from "@/components/suggestions/request-forms";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +27,8 @@ import ConsistencyTab from "./consistency-tab";
 import { WeeklyReportsTab } from "./weekly-reports-tab";
 import { personalRecords } from "@/lib/results";
 import { createClient } from "@/lib/supabase/server";
+import { DEFAULT_LOAD_WARNING_RATIO, gymSessionLoad } from "@/lib/training-load";
+import { loadActivities, loadTrainingLoad } from "@/lib/training-load-data";
 import { formatDate, formatScore, formatWeight, type Units } from "@/lib/units";
 
 import { ArchiveButton } from "../archive-button";
@@ -34,10 +38,11 @@ import { PersonalProgramCopyForm } from "./program-copy-form";
 import { GoalBar } from "./progress/goal-bar";
 import type { WhiteboardWorkout } from "../../programs/workouts/whiteboard";
 import { AthleteCalendar } from "./athlete-calendar";
+import { LoadTab } from "./load-tab";
 import { addDays, monday } from "./calendar-dates";
 import { LEVEL_LABELS } from "../options";
 
-const TABS = ["overview", "check-ins", "workouts", "journal", "nutrition", "goals", "ai", "benchmarks", "intake", "consistency", "reports"] as const;
+const TABS = ["overview", "check-ins", "workouts", "load", "journal", "nutrition", "goals", "ai", "benchmarks", "intake", "consistency", "reports"] as const;
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; week?: string; date?: string; checkins?: string }> };
 type ProfileScheduleWorkout = WhiteboardWorkout & {
@@ -62,6 +67,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const weekStart = monday(parsedWeek.success ? parsedWeek.data : now);
   const parsedDate = z.string().date().safeParse(date);
   const selectedDate = parsedDate.success ? parsedDate.data : now;
+  const activityDate = selectedDate <= today ? selectedDate : today;
   const [
     liftMaxes,
     athleteRes,
@@ -84,7 +90,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
     supabase.from("body_metrics").select("measured_on, weight_kg, body_fat_pct").eq("athlete_id", id).order("measured_on", { ascending: false }),
     supabase
       .from("workout_results")
-      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, workout_id, logged_by, rpe, energy, sleep_hours, soreness, pain_notes, workouts(title, workout_type, workout_movements(movement_id))")
+      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, workout_id, logged_by, rpe, energy, sleep_hours, soreness, pain_notes, workouts(title, workout_type, time_cap_seconds, workout_movements(movement_id))")
       .eq("athlete_id", id)
       .order("performed_on", { ascending: false })
       .order("created_at", { ascending: false }),
@@ -133,6 +139,8 @@ export default async function AthletePage({ params, searchParams }: Props) {
 
   const athlete = athleteRes.data;
   if (!athlete) notFound();
+  const [activities, load] = await Promise.all([loadActivities(supabase, id), loadTrainingLoad(supabase, id, today)]);
+  const calendarActivities = activities.filter((activity) => activity.performed_on >= weekStart && activity.performed_on <= addDays(weekStart, 6));
   const metrics = metricsRes.data ?? [];
   const latestWeight = latestMetric(metrics, "weight_kg");
   const results = resultsRes.data ?? [];
@@ -199,11 +207,12 @@ export default async function AthletePage({ params, searchParams }: Props) {
         </div>
       </div>
 
-      <Tabs defaultValue={TABS.includes(tab as (typeof TABS)[number]) ? tab : "overview"}>
+      <Tabs key={tab} defaultValue={TABS.includes(tab as (typeof TABS)[number]) ? tab : "overview"}>
         <div className="mb-4 max-w-full overflow-x-auto">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="workouts">Workouts</TabsTrigger>
+          <TabsTrigger value="load">Load</TabsTrigger>
           <TabsTrigger value="check-ins">Check-ins</TabsTrigger>
           <TabsTrigger value="journal">Journal</TabsTrigger>
           <TabsTrigger value="nutrition">Nutrition</TabsTrigger>
@@ -279,11 +288,20 @@ export default async function AthletePage({ params, searchParams }: Props) {
             weekStart={weekStart}
             selectedDate={selectedDate}
             items={scheduleItems}
+            activities={calendarActivities.map(({ id, performed_on, activity_type, custom_label, duration_minutes }) => ({ id, performed_on, activity_type, custom_label, duration_minutes }))}
             results={results.map(({ workout_id, performed_on }) => ({ workout_id, performed_on }))}
             library={libraryRes.data ?? []}
             programs={(athleteAssignmentsRes.data ?? []).flatMap((assignment) => assignment.programs ? [assignment.programs] : [])}
           />
+          <Card id="calendar-log-activity">
+            <CardHeader><CardTitle>Log activity</CardTitle></CardHeader>
+            <CardContent><ActivityForm key={activityDate} athleteId={id} today={today} defaultDate={activityDate} units={units} /></CardContent>
+          </Card>
           <PersonalProgramCopyForm athleteId={athlete.id} programs={groupPrograms} defaultStart={now} />
+          <Card id="activity-history">
+            <CardHeader><CardTitle>Outside activity history</CardTitle></CardHeader>
+            <CardContent><ActivityList activities={activities} today={today} units={units} /></CardContent>
+          </Card>
           <ListCard title="Personal records" empty="No results logged yet." show={prs.length > 0}>
             <Table>
               <TableHeader>
@@ -317,13 +335,16 @@ export default async function AthletePage({ params, searchParams }: Props) {
                   <TableHead className="pl-4">Date</TableHead>
                   <TableHead>Workout</TableHead>
                   <TableHead>Score</TableHead>
+                  <TableHead>Load</TableHead>
                   <TableHead>Rx / Scaled</TableHead>
                   <TableHead>Feedback</TableHead>
                   <TableHead>Notes</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {results.map((r) => (
+                {results.map((r) => {
+                  const session = gymSessionLoad(r, r.workouts);
+                  return (
                   <TableRow key={r.id}>
                     <TableCell className="pl-4">{formatDate(r.performed_on)}</TableCell>
                     <TableCell className="font-medium">
@@ -335,6 +356,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
                       </div>
                     </TableCell>
                     <TableCell>{formatScore(r, units)}</TableCell>
+                    <TableCell>{Math.round(session.load)}{session.estimated && " (estimated)"}</TableCell>
                     <TableCell>
                       <Badge variant={r.is_rx ? "default" : "outline"}>{r.is_rx ? "Rx" : "Scaled"}</Badge>
                     </TableCell>
@@ -348,12 +370,16 @@ export default async function AthletePage({ params, searchParams }: Props) {
                     </TableCell>
                     <TableCell className="max-w-xs truncate text-muted-foreground">{r.notes ?? ""}</TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </ListCard>
         </TabsContent>
 
+        <TabsContent value="load" className="grid gap-4">
+          <LoadTab athleteId={id} units={units} today={today} defaultDate={activityDate} load={load} threshold={coach?.loadWarningRatio ?? DEFAULT_LOAD_WARNING_RATIO} />
+        </TabsContent>
         <TabsContent value="benchmarks"><BenchmarksTab athleteId={id} units={units} /></TabsContent>
         <TabsContent value="intake"><IntakeTab athleteId={id} units={units} /></TabsContent>
         <TabsContent value="consistency"><ConsistencyTab athleteId={id} /></TabsContent>
