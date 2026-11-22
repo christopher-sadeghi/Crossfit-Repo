@@ -28,6 +28,15 @@ do $$ begin
   update public.push_subscriptions set user_agent = 'updated';
   assert (select user_agent from public.push_subscriptions) = 'updated', 'can update own row';
   begin
+    update public.push_subscriptions set p256dh = repeat('k', 501);
+    raise exception 'oversized p256dh allowed';
+  exception when check_violation then null; end;
+  begin
+    update public.push_subscriptions set auth = repeat('a', 501);
+    raise exception 'oversized auth allowed';
+  exception when check_violation then null; end;
+  update public.push_subscriptions set p256dh = repeat('k', 500), auth = repeat('a', 500);
+  begin
     update public.push_subscriptions set user_id = '36000000-0000-0000-0000-000000000001';
     raise exception 'owner change allowed';
   exception when insufficient_privilege then null; end;

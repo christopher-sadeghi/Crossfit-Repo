@@ -2,8 +2,8 @@ create table public.push_subscriptions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users on delete cascade,
   endpoint text not null unique check (endpoint like 'https://%' and length(endpoint) <= 2000),
-  p256dh text not null,
-  auth text not null,
+  p256dh text not null check (length(p256dh) <= 500),
+  auth text not null check (length(auth) <= 500),
   user_agent text check (length(user_agent) <= 500),
   created_at timestamptz default now(),
   last_used_at timestamptz
