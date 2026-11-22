@@ -78,6 +78,8 @@ export const writeWorkoutInputSchema = z.object({
   ),
   workout_id: z.string().uuid().optional(),
   workout_updated_at: z.string().optional(),
+  athlete_id: z.string().uuid().optional(),
+  scheduled_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   current_workout: z
     .object({
       title: z.string(),
@@ -109,6 +111,7 @@ export type SuggestionParams = {
   athleteId: string | null;
   workoutId?: string | null;
   request?: string | null;
+  scheduledOn?: string | null;
   movementId?: string;
 };
 export type SuggestionApplyOptions = { saveAs?: "update" | "new" };
@@ -226,7 +229,38 @@ Rules:
 - Set fields that do not apply to null.
 - Match workout_type to the format: for_time (usually with a time cap), amrap (time_cap_minutes is the AMRAP length), emom (time_cap_minutes is total minutes; rounds optional), strength (sets and reps with load), or other.
 - For adjust mode, keep the WOD's intent and structure unless requested otherwise; change only what is needed. A title suffix such as "(harder)" may be used only when saving as a new WOD.
+- When an athlete is given, this WOD is individual programming for that athlete on that date: fit it to their experience level, goals and recent results, and work around injuries or recent pain.
 - Write the rationale for the coach in 2–4 short, plain-English sentences.`;
+
+async function loadAthleteProgrammingContext(supabase: SupabaseClient<Database>, athleteId: string, units: "lb" | "kg") {
+  const [{ data: athlete, error: athleteError }, { data: goals, error: goalsError }, { data: results, error: resultsError }] =
+    await Promise.all([
+      supabase
+        .from("athletes")
+        .select("first_name, experience_level, injuries, notes")
+        .eq("id", athleteId)
+        .maybeSingle(),
+      supabase.from("goals").select("title, metric, unit, target_value, target_date").eq("athlete_id", athleteId).eq("status", "active"),
+      supabase
+        .from("workout_results")
+        .select("performed_on, time_seconds, rounds, reps, load_kg, is_rx, rpe, soreness, pain_notes, workouts(title)")
+        .eq("athlete_id", athleteId)
+        .order("performed_on", { ascending: false })
+        .limit(10),
+    ]);
+  if (athleteError || !athlete) throw athleteError ?? new Error("Athlete not found.");
+  if (goalsError) throw goalsError;
+  if (resultsError) throw resultsError;
+  return {
+    ...athlete,
+    goals: goals ?? [],
+    recent_results: (results ?? []).map(({ workouts: resultWorkout, load_kg, ...result }) => ({
+      ...result,
+      workout: resultWorkout?.title ?? null,
+      load: load_kg == null ? null : fromKgPrecise(load_kg, units),
+    })),
+  };
+}
 
 async function buildWorkoutRequest(
   supabase: SupabaseClient<Database>,
@@ -268,6 +302,8 @@ async function buildWorkoutRequest(
     } satisfies Json;
   }
 
+  const athleteId = !workoutId && params.athleteId && params.scheduledOn ? params.athleteId : null;
+  const athlete = athleteId ? await loadAthleteProgrammingContext(supabase, athleteId, units) : null;
   const input = {
     mode: workoutId ? "adjust" : "write",
     request,
@@ -276,11 +312,12 @@ async function buildWorkoutRequest(
     ...(workoutId && workoutUpdatedAt && currentWorkout
       ? { workout_id: workoutId, workout_updated_at: workoutUpdatedAt, current_workout: currentWorkout }
       : {}),
+    ...(athleteId && params.scheduledOn ? { athlete_id: athleteId, scheduled_on: params.scheduledOn } : {}),
   } satisfies Json;
   return {
     input,
     system: WRITE_WORKOUT_SYSTEM.replace("<units>", units),
-    prompt: `Request: ${request}\n\nProgram context (JSON):\n${JSON.stringify(input, null, 2)}\n\nReturn a complete WOD proposal.`,
+    prompt: `Request: ${request}\n\n${athlete ? `Athlete this WOD is for, on ${params.scheduledOn} (JSON):\n${JSON.stringify(athlete, null, 2)}\n\n` : ""}Program context (JSON):\n${JSON.stringify(input, null, 2)}\n\nReturn a complete WOD proposal.`,
     schema: writeWorkoutSchema.extend({
       movements: z
         .array(writeWorkoutMovementSchema.extend({ movement_id: movementIdSchema((library ?? []).map(({ id }) => id)) }))
@@ -349,6 +386,9 @@ async function applyWorkoutSuggestion(
     p_workout: workout,
     p_movements: movements,
     p_expected_updated_at: expectedUpdatedAt,
+    ...(input.data.mode === "write" && input.data.athlete_id && input.data.scheduled_on
+      ? { p_athlete_id: input.data.athlete_id, p_scheduled_on: input.data.scheduled_on }
+      : {}),
   });
   if (error) {
     if (error.message.includes("workout_changed"))

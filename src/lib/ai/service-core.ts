@@ -68,20 +68,34 @@ async function failReservation(
   return { error: friendlyError(error) };
 }
 
+export const aiDailyLimit = () => Number(process.env.AI_DAILY_LIMIT ?? 25);
+export const aiLimitMessage = (limit: number) => `You've used today's ${limit} AI requests. You can ask for more tomorrow.`;
+
+/** AI requests today: suggestions plus coach chat messages share one daily cap. */
+export async function countAiUsageToday(supabase: SupabaseClient<Database>) {
+  const now = new Date();
+  const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+  const [suggestions, chats] = await Promise.all([
+    supabase.from("ai_suggestions").select("id", { count: "exact", head: true }).gte("created_at", startOfToday),
+    supabase
+      .from("ai_chat_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("role", "user")
+      .gte("created_at", startOfToday),
+  ]);
+  const error = suggestions.error ?? chats.error;
+  return { count: (suggestions.count ?? 0) + (chats.count ?? 0), error };
+}
+
 export async function runSuggestionWithClient<S extends z.ZodType>(
   supabase: SupabaseClient<Database>,
   opts: SuggestionOptions<S>,
 ): Promise<{ id: string } | { error: string }> {
-  const limit = Number(process.env.AI_DAILY_LIMIT ?? 25);
-  const now = new Date();
-  const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
-  const { count, error: countError } = await supabase
-    .from("ai_suggestions")
-    .select("id", { count: "exact", head: true })
-    .gte("created_at", startOfToday);
+  const limit = aiDailyLimit();
+  const { count, error: countError } = await countAiUsageToday(supabase);
 
   if (countError) return saveFailure(supabase, opts, countError, opts.model);
-  if ((count ?? 0) >= limit) return { error: `You've used today's ${limit} AI suggestions. You can ask for more tomorrow.` };
+  if (count >= limit) return { error: aiLimitMessage(limit) };
 
   let model = opts.model;
   if (!model) {
@@ -104,15 +118,12 @@ export async function runSuggestionWithClient<S extends z.ZodType>(
   if (reservationError || !reservation)
     return saveFailure(supabase, opts, reservationError ?? new Error("The suggestion could not be reserved."), model);
 
-  const { count: reservedCount, error: reservationCountError } = await supabase
-    .from("ai_suggestions")
-    .select("id", { count: "exact", head: true })
-    .gte("created_at", startOfToday);
+  const { count: reservedCount, error: reservationCountError } = await countAiUsageToday(supabase);
   if (reservationCountError) return failReservation(supabase, reservation.id, reservationCountError);
-  if ((reservedCount ?? 0) > limit) {
+  if (reservedCount > limit) {
     const { error } = await supabase.from("ai_suggestions").update({ error: "daily_limit" }).eq("id", reservation.id);
     if (error) console.error("Could not update daily-limited AI suggestion:", error);
-    return { error: `You've used today's ${limit} AI suggestions. You can ask for more tomorrow.` };
+    return { error: aiLimitMessage(limit) };
   }
 
   try {

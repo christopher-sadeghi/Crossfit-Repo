@@ -9,6 +9,48 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      ai_chat_messages: {
+        Row: {
+          cleared: boolean;
+          coach_id: string;
+          content: string;
+          context: Json | null;
+          created_at: string;
+          id: string;
+          role: string;
+          suggestion_ids: string[];
+        };
+        ComputedFields: never;
+        Insert: {
+          cleared?: boolean;
+          coach_id?: string;
+          content: string;
+          context?: Json | null;
+          created_at?: string;
+          id?: string;
+          role: string;
+          suggestion_ids?: string[];
+        };
+        Update: {
+          cleared?: boolean;
+          coach_id?: string;
+          content?: string;
+          context?: Json | null;
+          created_at?: string;
+          id?: string;
+          role?: string;
+          suggestion_ids?: string[];
+        };
+        Relationships: [
+          {
+            foreignKeyName: "ai_chat_messages_coach_id_fkey";
+            columns: ["coach_id"];
+            isOneToOne: false;
+            referencedRelation: "coaches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       ai_suggestions: {
         Row: {
           athlete_id: string | null;
@@ -1045,8 +1087,10 @@ export type Database = {
       };
       save_ai_workout: {
         Args: {
+          p_athlete_id?: string | null;
           p_expected_updated_at?: string | null;
           p_movements: Json;
+          p_scheduled_on?: string | null;
           p_workout: Json;
           p_workout_id: string | null;
         };
