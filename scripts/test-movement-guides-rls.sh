@@ -20,9 +20,21 @@ create function auth.uid() returns uuid language sql stable as $$
 $$;
 grant usage on schema auth to anon, authenticated, service_role;
 grant execute on function auth.uid() to anon, authenticated, service_role;
+create schema storage;
+create table storage.buckets (
+  id text primary key, name text not null, public boolean, file_size_limit bigint, allowed_mime_types text[]
+);
+create table storage.objects (bucket_id text references storage.buckets, name text, primary key (bucket_id, name));
+create function storage.foldername(name text) returns text[] language sql immutable as $$
+  select folders[1:cardinality(folders)-1] from string_to_array(name, '/') as folders;
+$$;
+alter table storage.objects enable row level security;
+grant usage on schema storage to authenticated, anon;
+grant select, insert, delete on storage.objects to authenticated, anon;
 SQL
 for migration in supabase/migrations/*.sql; do
   echo "Applying $migration"
   docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 -1 < "$migration"
 done
 docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 < supabase/tests/rls_isolation.sql
+docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 < supabase/tests/movement_demos.sql

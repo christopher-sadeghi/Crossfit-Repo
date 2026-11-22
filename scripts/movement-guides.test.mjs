@@ -26,6 +26,8 @@ const { demoEmbedUrl, videoUrlSchema, hasGuideText, readGuideText, editedGuideSc
 const { HowTo } = load("src/components/movements/how-to.tsx");
 const { renderToStaticMarkup } = require("react-dom/server");
 const { createElement } = require("react");
+const blankGuide = { cues: [], common_mistakes: [], easier_versions: [], harder_versions: [] };
+const blankDemo = { name: "Thruster", videoUrl: null, clipUrl: null, guide: blankGuide, easier: null, harder: null };
 const valid = {
   cues: [" Stand tall. ", "Brace your trunk.", "Move with control."],
   common_mistakes: ["Rounding your back.", "Losing balance."],
@@ -71,12 +73,12 @@ test("YouTube and Vimeo URLs embed safely; unrelated and unsafe URLs do not", ()
 });
 
 test("HowTo renders embeds, external links, empty placeholders and escaped cues", () => {
-  const render = (videoUrl, guide = null) => renderToStaticMarkup(createElement(HowTo, { name: "Thruster", videoUrl, guide }));
+  const render = (videoUrl, guide = blankGuide) => renderToStaticMarkup(createElement(HowTo, { demo: { ...blankDemo, videoUrl, guide } }));
   const empty = render(null);
   assert.match(empty, /No demo video yet/);
   assert.equal((empty.match(/hasn&#x27;t added this yet/g) ?? []).length, 4);
   const coachEmpty = renderToStaticMarkup(createElement(HowTo, {
-    name: "Thruster", videoUrl: null, guide: null, emptyMessage: "Not written yet. Ask AI or add it below.",
+    demo: blankDemo, emptyMessage: "Not written yet. Ask AI or add it below.",
   }));
   assert.equal((coachEmpty.match(/Not written yet\. Ask AI or add it below\./g) ?? []).length, 4);
   assert.doesNotMatch(coachEmpty, /Your coach/);
@@ -86,6 +88,35 @@ test("HowTo renders embeds, external links, empty placeholders and escaped cues"
   assert.match(embedded, /&lt;script&gt;/);
   assert.match(render("https://example.com/demo"), /rel="noopener noreferrer"/);
   assert.doesNotMatch(render("javascript:alert(1)"), /href=|iframe/);
+});
+
+test("HowTo renders uploaded video controls and links to variation demos", () => {
+  const demo = { ...blankDemo, clipUrl: "https://storage.example/demo.mp4?token=signed",
+    easier: { id: "press", name: "Push Press" }, harder: { id: "jerk", name: "Push Jerk" } };
+  const text = renderToStaticMarkup(createElement(HowTo, { demo,
+    renderVariation: ({ id, name }) => createElement("a", { href: `/athlete/movements/${id}` }, name) }));
+  assert.match(text, /<video[^>]*controls/);
+  assert.match(text, /demo\.mp4\?token=signed/);
+  assert.match(text, /href="\/athlete\/movements\/press">Push Press/);
+  assert.match(text, /href="\/athlete\/movements\/jerk">Push Jerk/);
+});
+
+test("workout context prefers visible gym variations and filters IDs outside the library", async () => {
+  const { loadWorkoutMovementLibrary } = load("src/lib/ai/workout-context.ts");
+  const ids = ["original", "easier", "harder", "custom"];
+  const mock = {
+    from: (table) => ({ select: () => table === "movements" ? {
+      order: async () => ({ data: ids.map((id) => ({
+        id, easier_movement_id: id === "original" ? "easier" : null, harder_movement_id: id === "original" ? "harder" : null,
+      })) }),
+    } : {
+      or: async () => ({ data: [{ movement_id: "original", easier_movement_id: "custom", harder_movement_id: null },
+        { movement_id: "custom", easier_movement_id: "unavailable", harder_movement_id: null }] }),
+    } }),
+  };
+  const library = await loadWorkoutMovementLibrary(mock);
+  assert.deepEqual(library[0], { id: "original", easier_movement_id: "custom", harder_movement_id: "harder" });
+  assert.equal(library[3].easier_movement_id, null);
 });
 
 test("buildRequest uses the exact movement and propagates a missing movement", async () => {

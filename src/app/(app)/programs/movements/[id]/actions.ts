@@ -7,7 +7,8 @@ import { approveSuggestionWithClient, rejectSuggestionWithClient } from "@/lib/a
 import { movementGuideEntry, movementGuideSchema } from "@/lib/ai/movement-guides";
 import { runSuggestion } from "@/lib/ai/service";
 import { failure, type FormState } from "@/lib/auth/form-state";
-import { editedGuideSchema, hasGuideText, readGuideText, videoUrlSchema } from "@/lib/movement-guides";
+import { loadMovementDemoSource } from "@/lib/movement-demos";
+import { demoEmbedUrl, editedGuideSchema, hasGuideText, MOVEMENT_DEMO_BUCKET, readGuideText } from "@/lib/movement-guides";
 import { createClient } from "@/lib/supabase/server";
 import { getViewer } from "@/lib/viewer";
 
@@ -47,15 +48,44 @@ export async function saveMovementGuide(_: FormState, form: FormData): Promise<F
   const id = uuid.safeParse(form.get("movement_id"));
   if (viewer?.kind !== "coach" || !id.success) return failure(form, "Movement not found.");
   const rawVideo = String(form.get("video_url") ?? "").trim();
-  const video = rawVideo ? videoUrlSchema.safeParse(rawVideo) : null;
   const text = editedGuideSchema.safeParse(readGuideText(form));
-  if (video && !video.success) return failure(form, "Use a valid https video URL (up to 2048 characters).");
   if (!text.success) return failure(form, "Use up to 20 items per section, each up to 200 characters.");
+  if (text.data.cues.length < 3 || text.data.cues.length > 5) return failure(form, "Enter 3–5 coaching cues.");
+  const easier = uuid.nullable().safeParse(form.get("easier_movement_id") || null);
+  const harder = uuid.nullable().safeParse(form.get("harder_movement_id") || null);
+  if (!easier.success || !harder.success) return failure(form, "Choose a movement from your library.");
   const supabase = await createClient();
+  const source = await loadMovementDemoSource(supabase, id.data, viewer.id).catch(() => null);
+  if (!source) return failure(form, "Couldn't find this movement.");
+  const { movement, guide } = source;
+  const easierId = easier.data ?? movement.easier_movement_id;
+  const harderId = harder.data ?? movement.harder_movement_id;
+  if (easierId === id.data || harderId === id.data || (easierId && easierId === harderId)) {
+    return failure(form, "Choose different movements for the easier and harder variations.");
+  }
+  if (rawVideo && rawVideo !== guide?.video_url && !demoEmbedUrl(rawVideo)) {
+    return failure(form, "Enter a YouTube or Vimeo video link.");
+  }
+  const currentClip = guide?.clip_path ?? null;
+  const uploaded = String(form.get("uploaded_clip") ?? "");
+  const keepClip = form.get("remove_clip") !== "on";
+  if (rawVideo && (uploaded || (currentClip && keepClip))) {
+    return failure(form, "Choose an uploaded clip or a video link, not both.");
+  }
+  const storage = supabase.storage.from(MOVEMENT_DEMO_BUCKET);
+  if (uploaded) {
+    const prefix = `${viewer.id}/${id.data}/`;
+    if (!uploaded.startsWith(prefix) || !/^[a-f0-9-]+\.(mp4|webm)$/.test(uploaded.slice(prefix.length)) ||
+      (await storage.info(uploaded)).error) return failure(form, "Couldn't find the uploaded clip. Upload it again.");
+  }
+  const clipPath = uploaded || (keepClip ? currentClip : null);
   const { error } = await supabase.from("movement_guides").upsert({
-    coach_id: viewer.id, movement_id: id.data, video_url: video?.success ? video.data : null, ...text.data,
+    coach_id: viewer.id, movement_id: id.data, video_url: rawVideo || null, clip_path: clipPath,
+    easier_movement_id: easier.data, harder_movement_id: harder.data, ...text.data,
   }, { onConflict: "coach_id,movement_id" });
+  if (error?.code === "23514" || error?.code === "23503") return failure(form, "Choose variations that are in your library.");
   if (error) return failure(form, "Couldn't save this how-to. Please try again.");
+  if (currentClip && currentClip !== clipPath) await storage.remove([currentClip]);
   refresh(id.data);
   return { message: "How-to saved. Athletes can now see your changes." };
 }

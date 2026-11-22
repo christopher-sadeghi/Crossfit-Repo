@@ -2,6 +2,7 @@ import { CalendarDays } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { MovementDemoSheet } from "@/components/movements/movement-demo-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,6 +40,18 @@ type TodayWorkout = WhiteboardWorkout & {
     movements: { id: string; name: string } | null;
   }[];
 };
+
+function ScheduledMovementDemos({ workout }: { workout: TodayWorkout }) {
+  const movements = [...(workout.workout_movements ?? [])].sort((a, b) => a.position - b.position);
+  if (!movements.length) return null;
+  return (
+    <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm">
+      {movements.map(({ position, movements: movement }) => movement && (
+        <li key={position}><MovementDemoSheet movement={movement}>{movement.name}</MovementDemoSheet></li>
+      ))}
+    </ul>
+  );
+}
 
 export default async function AthleteTodayPage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
   const { saved } = await searchParams;
@@ -158,7 +171,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
             return (
               <div key={workout.id} className="grid gap-3">
                 <p className="text-sm text-muted-foreground">{SCHEDULE_LABEL(item, "athlete")}</p>
-                <Whiteboard workout={workout} movements={movements} units={viewer.units} howToHref={(id) => `/athlete/movements/${id}`} />
+                <Whiteboard workout={workout} movements={movements} units={viewer.units} showDemoSheet />
                 <Link href={`/athlete/messages?link=workout:${workout.id}`} className="text-sm underline underline-offset-4">Message coach about this WOD</Link>
                 {scaling && (
                   <Card>
@@ -187,7 +200,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                         <ul className="grid gap-2">
                           {scalingDetails.data.movements.map((movement, index) => (
                             <li key={`${movement.movement_id}-${index}`}>
-                              <p>{formatMovementLine({
+                              <MovementDemoSheet movement={{ id: movement.movement_id, name: movement.movement_name }}>{formatMovementLine({
                                 name: movement.movement_name,
                                 sets: movement.sets,
                                 reps: movement.reps,
@@ -196,7 +209,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                                 calories: movement.calories,
                                 duration_seconds: movement.duration_seconds,
                                 notes: null,
-                              }, viewer.units)}</p>
+                              }, viewer.units)}</MovementDemoSheet>
                               <p className="text-xs text-muted-foreground">{movement.reason}</p>
                             </li>
                           ))}
@@ -283,6 +296,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                     {SCHEDULE_LABEL(item, "athlete")}
                     {formatHeadline(item.workout) ? ` · ${formatHeadline(item.workout)}` : ""}
                   </p>
+                  <ScheduledMovementDemos workout={item.workout} />
                 </div>
                 <Button asChild size="sm">
                   <Link href={`/athlete/log/${item.workout.id}?date=${item.date}`}>Log result</Link>
@@ -307,6 +321,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                     {SCHEDULE_LABEL(item, "athlete")}
                     {formatHeadline(item.workout) ? ` · ${formatHeadline(item.workout)}` : ""}
                   </p>
+                  <ScheduledMovementDemos workout={item.workout} />
                 </div>
               </CardContent>
             </Card>
