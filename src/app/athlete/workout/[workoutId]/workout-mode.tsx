@@ -303,9 +303,10 @@ export function WorkoutMode({
         session.config.mode === "for_time"
           ? session.config.capSeconds
           : workout.time_cap_seconds;
-      if (cap && workSeconds >= cap && !session.completedAtCap)
+      if (cap && workSeconds >= cap && !session.completedAtCap) {
+        params.set("time_seconds", String(cap));
         params.set("reps", String(session.reps));
-      else
+      } else
         params.set(
           "time_seconds",
           String(cap ? Math.min(cap, workSeconds) : workSeconds),

@@ -21,6 +21,44 @@ const { parsePercentages, percentageLoad } = load("src/lib/percent-loads.ts");
 const { workoutVersion } = load("src/lib/workout-version.ts");
 const { workoutPrefill } = load("src/lib/workout-prefill.ts");
 
+const elements = (node) => !node || typeof node !== "object" ? [] : [node, ...[node.props?.children].flat(Infinity).flatMap(elements)];
+function workoutHarness(extra = {}) {
+  const states = [], refs = [];
+  let stateIndex, refIndex, effects;
+  const navigations = [];
+  const props = { athleteId: "a", date: "2026-01-01", units: "kg", maxes: [], workout: { id: "w", title: "WOD", workout_type: "for_time", time_cap_seconds: 600, rounds: 5, movements: [], isScaled: false }, ...extra };
+  const { WorkoutMode } = load("src/app/athlete/workout/[workoutId]/workout-mode.tsx", {
+    react: {
+      useEffect: (effect) => { effects.push(effect); },
+      useRef: (value) => refs[refIndex++] ??= { current: value },
+      useState(value) {
+        const index = stateIndex++;
+        if (!(index in states)) states[index] = typeof value === "function" ? value() : value;
+        return [states[index], (next) => { states[index] = typeof next === "function" ? next(states[index]) : next; }];
+      },
+    },
+    "next/link": { default: "a" },
+    "next/navigation": { useRouter: () => ({ push: (url) => navigations.push(url) }) },
+    "@/components/movements/movement-demo-sheet": { MovementDemoSheet: "movement-demo" },
+  });
+  const render = () => { stateIndex = 0; refIndex = 0; effects = []; return WorkoutMode(props); };
+  render();
+  return { states, navigations, render, effects: () => effects, props };
+}
+
+test("capped For Time handoff includes cap time plus reps accepted by buildScore", () => {
+  const h = workoutHarness();
+  h.states[0] = { ...h.states[0], reps: 42, clock: { startedAt: Date.now() - 611000, pausedAt: null, accumulated: 0 } };
+  h.states[1] = true;
+  const finish = elements(h.render()).find((node) => node.type === "button" && node.props.children === "Finish & review result");
+  finish.props.onClick();
+  const query = Object.fromEntries(new URL(h.navigations[0], "https://example.test").searchParams);
+  assert.equal(query.time_seconds, "600");
+  assert.equal(query.reps, "42");
+  const { buildScore, scoreSchema } = load("src/lib/result-score.ts");
+  assert.deepEqual(buildScore(scoreSchema.parse(workoutPrefill(query)), "for_time", "kg"), { score: { time_seconds: 600, reps: 42, rounds: null, load_kg: null } });
+});
+
 test("prefill validates numbers, strips control characters and limits notes", () => {
   assert.deepEqual(workoutPrefill({ time_seconds: "125", rounds: "3", load: "105.5", is_rx: "scaled", notes: "Hi\u0000" }), { minutes: "2", seconds: "5", rounds: "3", load: "105.5", is_rx: "scaled", notes: "Hi" });
   assert.deepEqual(workoutPrefill({}), {});
