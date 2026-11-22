@@ -4,7 +4,7 @@ import { Apple, CalendarDays, ClipboardList, History, MessageSquare, NotebookPen
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const TABS = [
+export const ATHLETE_TABS = [
   { href: "/athlete", label: "Today", Icon: CalendarDays },
   { href: "/athlete/history", label: "History", Icon: History },
   { href: "/athlete/prs", label: "Benchmarks", Icon: Trophy },
@@ -24,7 +24,7 @@ export function AthleteTabs({ unreadMessages = 0 }: { unreadMessages?: number })
       className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur"
     >
       <div className="mx-auto grid max-w-md grid-cols-7">
-        {TABS.map(({ href, label, Icon }) => {
+        {ATHLETE_TABS.map(({ href, label, Icon }) => {
           const active = pathname === href;
           return (
             <Link
