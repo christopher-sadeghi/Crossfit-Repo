@@ -12,6 +12,7 @@ type Props = {
   fullName: string;
   gymName: string;
   units: "lb" | "kg";
+  driftDays: number;
 };
 
 const UNIT_OPTIONS = [
@@ -19,7 +20,7 @@ const UNIT_OPTIONS = [
   { value: "kg", label: "Kilograms (kg)" },
 ] as const;
 
-export function SettingsForm({ fullName, gymName, units }: Props) {
+export function SettingsForm({ fullName, gymName, units, driftDays }: Props) {
   const [state, formAction, pending] = useActionState(updateProfile, {});
   const values = state.values;
 
@@ -47,6 +48,11 @@ export function SettingsForm({ fullName, gymName, units }: Props) {
           ))}
         </div>
       </fieldset>
+      <div className="grid gap-2">
+        <Label htmlFor="drift_days">Flag athletes as drifting after X days with no activity</Label>
+        <Input id="drift_days" name="drift_days" type="number" min={1} max={60} step={1} required defaultValue={values?.drift_days ?? driftDays} />
+        <p className="text-xs text-muted-foreground">Choose 1–60 days. A drop in completion can also flag an athlete.</p>
+      </div>
       {state.error && (
         <p role="alert" className="text-sm text-destructive">
           {state.error}

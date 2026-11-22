@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { loadAthleteSchedule } from "@/lib/athlete-schedule";
+import { loadDriftingAthletes } from "@/lib/consistency-data";
 import { programDate } from "@/lib/program-dates";
 import type { Database } from "@/lib/supabase/database.types";
 import { getToday } from "@/lib/time-zone";
@@ -85,6 +86,30 @@ export async function notifySuggestionApproved(supabase: Client, athleteId: stri
 
 export function notifyProgressReport(supabase: Client, athleteId: string, reportId: string) {
   return notify(supabase, { athleteId, kind: "progress_report", title: "Progress report from your coach", body: "Your coach shared a new progress report. Open your messages to read it.", link: "/athlete/messages", dedupeKey: `report:${reportId}` });
+}
+
+export async function checkDriftingAthletes(supabase: Client, coach: { id: string; driftDays?: number }): Promise<void> {
+  try {
+    const today = await getToday();
+    const athletes = await loadDriftingAthletes(supabase, coach.id, today, coach.driftDays);
+    await Promise.all(athletes.flatMap(({ athlete, stats, reasons, daysSinceActivity, last30Rate, prev30Rate }) =>
+      reasons.map((reason) => {
+        const detail = reason === "inactive"
+          ? daysSinceActivity === null ? "no activity recorded" : `no activity in ${daysSinceActivity} days`
+          : `completion down from ${prev30Rate}% to ${last30Rate ?? 0}%`;
+        const episode = reason === "inactive" ? stats.lastActivityDate ?? "never" : today.slice(0, 7);
+        return notify(supabase, {
+          athleteId: athlete.id,
+          kind: "missed_workouts",
+          title: `${athlete.first_name} ${athlete.last_name}: drifting — ${detail}`,
+          link: `/athletes/${athlete.id}?tab=consistency`,
+          dedupeKey: `drifting:${reason}:${athlete.id}:${episode}`,
+        });
+      }),
+    ));
+  } catch (error) {
+    console.error("Drifting-athlete check failed:", error);
+  }
 }
 
 export async function checkMissedWorkouts(supabase: Client, coach: { id: string }): Promise<void> {

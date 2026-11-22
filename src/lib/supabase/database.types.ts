@@ -698,6 +698,7 @@ export type Database = {
       };
       coaches: {
         Row: {
+          drift_days: number;
           created_at: string;
           full_name: string | null;
           gym_name: string | null;
@@ -707,6 +708,7 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          drift_days?: number;
           created_at?: string;
           full_name?: string | null;
           gym_name?: string | null;
@@ -715,6 +717,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          drift_days?: number;
           created_at?: string;
           full_name?: string | null;
           gym_name?: string | null;
@@ -723,6 +726,55 @@ export type Database = {
           updated_at?: string;
         };
         Relationships: [];
+      };
+      attendance: {
+        Row: {
+          id: string;
+          coach_id: string;
+          athlete_id: string;
+          attended_on: string;
+          kind: string;
+          note: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          id?: string;
+          coach_id?: string;
+          athlete_id: string;
+          attended_on: string;
+          kind: string;
+          note?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          coach_id?: string;
+          athlete_id?: string;
+          attended_on?: string;
+          kind?: string;
+          note?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "attendance_athlete_id_coach_id_fkey";
+            columns: ["athlete_id", "coach_id"];
+            isOneToOne: false;
+            referencedRelation: "athletes";
+            referencedColumns: ["id", "coach_id"];
+          },
+          {
+            foreignKeyName: "attendance_coach_id_fkey";
+            columns: ["coach_id"];
+            isOneToOne: false;
+            referencedRelation: "coaches";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       food_logs: {
         Row: {
