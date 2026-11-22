@@ -30,7 +30,7 @@ const librarySchema = z.object({
   source_id: z.string().trim().min(1).max(64).nullable().default(null),
 }).refine(v => v.kind !== "food" || v.is_favorite, "Database foods must be favorites.");
 export type LibraryFoodInput = z.input<typeof librarySchema>;
-const logSchema = z.object({ date, meal: z.enum(MEALS), name, serving: z.string().trim().max(120).nullable().default(null), ingredients: z.string().trim().max(2000).nullable().default(null), ...macros });
+const logSchema = z.object({ date, meal: z.enum(MEALS), name, serving: z.string().trim().max(120).nullable().default(null), ingredients: z.string().trim().max(8000).nullable().default(null), ...macros });
 export type LogFoodInput = z.input<typeof logSchema>;
 const denied = { error: "You can't change food for this athlete." };
 

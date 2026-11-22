@@ -91,7 +91,7 @@ export function FoodLogger({ athleteId, date, allergies, recent, saved, todayEnt
   }
   function add(item: Candidate, serving: FoodServing, amount: number, meal: Meal) {
     if (!Number.isFinite(amount) || amount < 0.25 || amount > 20) { setState({ error: "Choose a quantity between 0.25 and 20." }); return; }
-    const ingredients = foodIngredients([item], 2000);
+    const ingredients = foodIngredients([item], 8000);
     if (ingredients === null) { setState({ error: "This food has too much allergy information to log safely. Enter it manually instead." }); return; }
     run(() => logFood(athleteId, { date, meal, name: item.name.slice(0, 120), ingredients, serving: (amount === 1 ? servingLabel(serving) : `${amount} × ${servingLabel(serving)}`).slice(0, 120), ...scaled(serving, amount) }));
   }
