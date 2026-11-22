@@ -47,6 +47,8 @@ export async function loadDemoDataWithClipCleanup(supabase, reset) {
  * @param {string} coachId
  */
 export async function removeProgressPhotos(supabase, coachId) {
+  const { error: rowError } = await supabase.from("progress_photos").delete().eq("coach_id", coachId);
+  if (rowError) return rowError;
   const bucket = supabase.storage.from("progress-photos");
   /** @type {string[]} */
   const prefixes = [];
