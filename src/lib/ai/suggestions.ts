@@ -21,7 +21,7 @@ import {
 } from "./scale-workout";
 import { ageOn, loadWorkoutContext } from "./workout-context";
 import { movementIdSchema } from "./movement-schema";
-import { foodAverages, trainingVolume, weightTrend } from "./athlete-context";
+import { consistencyContext, foodAverages, trainingVolume, weightTrend } from "./athlete-context";
 import { progressSummaryEntry } from "./progress-summary";
 import { athleteAdjustSchema } from "./athlete-adjust-schema";
 import { suggestFoodEntry } from "./suggest-food";
@@ -142,6 +142,7 @@ export const MACRO_DISCLAIMER =
   "AI suggestions are general fitness guidance, not medical or dietetic advice. Check with a doctor or registered dietitian for athletes with medical conditions, eating disorders, pregnancy, or other health concerns.";
 
 const ADJUST_MACROS_SYSTEM = `You help a CrossFit coach set daily macro targets for one athlete. The coach reviews every suggestion before anything changes.
+- Use consistency to mention low completion or drifting and keep plans realistic; missing rates mean unknown, not zero.
 Rules:
 - Use only the data provided. Do not invent measurements.
 - Consider the athlete's goals, body weight trend, recent food intake, and training volume together.
@@ -166,6 +167,7 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
     { data: weights, error: weightsError },
     { data: goals, error: goalsError },
     training,
+    consistency,
   ] = await Promise.all([
     supabase
       .from("athletes")
@@ -200,6 +202,7 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
       .eq("athlete_id", athleteId)
       .eq("status", "active"),
     trainingVolume(supabase, athleteId, asOf),
+    consistencyContext(supabase, athleteId, asOf),
   ]);
 
   if (athleteError || !athlete) throw athleteError ?? new Error("Athlete not found.");
@@ -222,6 +225,7 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
     body_weight_trend: weightTrend(weights ?? []),
     body_weight_kg_last_8_weeks: (weights ?? []).map((row) => ({ date: row.measured_on, kg: row.weight_kg })),
     training_last_4_weeks: training,
+    consistency,
     active_goals: goals ?? [],
   } satisfies Json;
 
@@ -233,6 +237,7 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
 }
 
 const WRITE_WORKOUT_SYSTEM = `You help a CrossFit coach program WODs. The coach reviews every suggestion before anything changes.
+- Use consistency to mention low completion or drifting and keep plans realistic; missing rates mean unknown, not zero.
 Rules:
 - ${LIFT_LOAD_RULE}
 - Use recent_check_ins: readiness, sleep, soreness areas, stress, energy and mood. Lower readiness or high soreness means scale down and avoid sore areas.
@@ -245,6 +250,7 @@ Rules:
 - Write the rationale for the coach in 2–4 short, plain-English sentences.`;
 
 async function loadAthleteProgrammingContext(supabase: SupabaseClient<Database>, athleteId: string, units: "lb" | "kg") {
+  const asOf = await getToday();
   const [liftMaxes, { data: athlete, error: athleteError }, { data: goals, error: goalsError }, { data: results, error: resultsError }] =
     await Promise.all([
       loadLiftMaxes(supabase, athleteId),
@@ -267,7 +273,8 @@ async function loadAthleteProgrammingContext(supabase: SupabaseClient<Database>,
   return {
     ...athlete,
     lift_maxes: formatLiftMaxes(liftMaxes, units),
-    recent_check_ins: await loadRecentCheckIns(supabase, athleteId, await getToday(), 7),
+    recent_check_ins: await loadRecentCheckIns(supabase, athleteId, asOf, 7),
+    consistency: await consistencyContext(supabase, athleteId, asOf),
     goals: goals ?? [],
     recent_results: (results ?? []).map(({ workouts: resultWorkout, load_kg, ...result }) => ({
       ...result,

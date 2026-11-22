@@ -11,7 +11,7 @@ export const getCoach = cache(async () => {
 
   const { data: coach } = await supabase
     .from("coaches")
-    .select("id, full_name, gym_name, units")
+    .select("id, full_name, gym_name, units, drift_days")
     .eq("id", userId)
     .maybeSingle();
 
@@ -21,5 +21,6 @@ export const getCoach = cache(async () => {
     fullName: coach?.full_name ?? "",
     gymName: coach?.gym_name ?? "",
     units: coach?.units ?? "lb",
+    driftDays: coach?.drift_days ?? 5,
   };
 });
