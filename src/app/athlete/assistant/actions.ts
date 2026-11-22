@@ -13,6 +13,31 @@ import { getViewer } from "@/lib/viewer";
 import { loadAssistantCard, type AssistantCardIdentity } from "@/lib/ai/assistant-card-actions";
 import { saveActivity } from "@/lib/activity-actions";
 import type { FormState } from "@/lib/auth/form-state";
+import type { ChatEntry } from "./use-assistant";
+
+export async function loadAssistantMessages(): Promise<{ messages: ChatEntry[] } | { error: string }> {
+  const viewer = await getViewer();
+  if (viewer?.kind !== "athlete") return { error: "Sign in as an athlete to open this chat." };
+
+  try {
+    const supabase = await createClient();
+    const messages: ChatEntry[] = [];
+    for (let offset = 0; ; offset += 500) {
+      const { data, error } = await supabase.from("athlete_ai_messages")
+        .select("id, role, content, metadata, actions:athlete_ai_card_actions(card_index, action, ref_id)")
+        .eq("athlete_id", viewer.athleteId)
+        .order("created_at")
+        .order("id")
+        .range(offset, offset + 499);
+      if (error) return { error: "Couldn't load your conversation. Please refresh to try again." };
+      messages.push(...data.map((row) => ({ ...row, role: row.role as ChatEntry["role"] })));
+      if (data.length < 500) break;
+    }
+    return { messages };
+  } catch {
+    return { error: "Couldn't load your conversation. Please refresh to try again." };
+  }
+}
 
 export async function sendAssistantCoachMessage(input: unknown, identity: AssistantCardIdentity): Promise<{ error?: string; sentId?: string; suggestionId?: string; warning?: string }> {
   const viewer = await getViewer();
