@@ -12,7 +12,7 @@ export default async function AthleteAssistantPage() {
   const messages: ChatEntry[] = [];
   let failed = false;
   for (let offset = 0; ; offset += 500) {
-    const { data, error } = await supabase.from("athlete_ai_messages").select("id, role, content, metadata")
+    const { data, error } = await supabase.from("athlete_ai_messages").select("id, role, content, metadata, actions:athlete_ai_card_actions(card_index, action, ref_id)")
       .eq("athlete_id", viewer.athleteId).order("created_at").order("id").range(offset, offset + 499);
     if (error) { failed = true; break; }
     messages.push(...data.map((row) => ({ ...row, role: row.role as ChatEntry["role"] })));

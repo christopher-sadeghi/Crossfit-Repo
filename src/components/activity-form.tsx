@@ -11,14 +11,16 @@ import { draftActivity } from "@/lib/ai/activity-draft";
 import { ACTIVITY_TYPES, activityLabel, distanceUnit, fromActivityMeters, type ActivityDraft, type AthleteActivity } from "@/lib/athlete-activities";
 import type { FormState } from "@/lib/auth/form-state";
 import type { Units } from "@/lib/units";
+import type { AssistantCardIdentity } from "@/lib/ai/assistant-card-actions";
+import { saveAssistantActivity } from "@/app/athlete/assistant/actions";
 
-type Props = { athleteId: string; today: string; defaultDate?: string; units: Units; activity?: AthleteActivity; initialDraft?: ActivityDraft };
+type Props = { athleteId: string; today: string; defaultDate?: string; units: Units; activity?: AthleteActivity; initialDraft?: ActivityDraft; assistantCard?: AssistantCardIdentity };
 
 function distanceValue(meters: number | null | undefined, units: Units) {
   return meters == null ? "" : String(Number(fromActivityMeters(meters, units).toPrecision(12)));
 }
 
-export function ActivityForm({ athleteId, today, defaultDate = today, units, activity, initialDraft }: Props) {
+export function ActivityForm({ athleteId, today, defaultDate = today, units, activity, initialDraft, assistantCard }: Props) {
   const initialValues = {
     activity_type: activity?.activity_type ?? initialDraft?.activity_type ?? "",
     custom_label: activity?.custom_label ?? initialDraft?.custom_label ?? "",
@@ -35,7 +37,8 @@ export function ActivityForm({ athleteId, today, defaultDate = today, units, act
   const [draftPending, startDraft] = useTransition();
   const [state, action, pending] = useActionState(async (previous: FormState, data: FormData) => {
     try {
-      const result = await saveActivity(athleteId, activity?.id ?? null, previous, data);
+      const result = assistantCard ? await saveAssistantActivity(assistantCard, previous, data)
+        : await saveActivity(athleteId, activity?.id ?? null, previous, data);
       if (!activity && result.message) {
         setValues(initialValues);
         setDraft(null);

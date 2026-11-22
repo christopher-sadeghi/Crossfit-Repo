@@ -10,15 +10,21 @@ import { DEFAULT_DRIFT_DAYS } from "@/lib/consistency";
 import { validateMessageLink } from "@/lib/messages";
 import { createClient } from "@/lib/supabase/server";
 import { getViewer } from "@/lib/viewer";
+import { loadAssistantCard, type AssistantCardIdentity } from "@/lib/ai/assistant-card-actions";
+import { saveActivity } from "@/lib/activity-actions";
+import type { FormState } from "@/lib/auth/form-state";
 
-export async function sendAssistantCoachMessage(input: unknown): Promise<{ error?: string; sentId?: string; suggestionId?: string; warning?: string }> {
+export async function sendAssistantCoachMessage(input: unknown, identity: AssistantCardIdentity): Promise<{ error?: string; sentId?: string; suggestionId?: string; warning?: string }> {
   const viewer = await getViewer();
   if (viewer?.kind !== "athlete") return { error: "Sign in as an athlete to send a message." };
   const parsed = coachMessageDraftSchema.safeParse(input);
   if (!parsed.success) return { error: "Check your message and requested change." };
   const supabase = await createClient();
-  const { body, change } = parsed.data;
+  const { body } = parsed.data;
   try {
+    const card = await loadAssistantCard(supabase, viewer, identity);
+    if (card?.kind !== "coach_message") return { error: "This message draft could not be found." };
+    const change = card.change;
     const { data: settings, error: settingsError } = await supabase.rpc("athlete_assistant_settings");
     if (settingsError || !settings?.[0]) return { error: "Your active athlete profile could not be found." };
     if (change && (assistantSafety(body).flagged || assistantSafety(change.note).flagged))
@@ -30,7 +36,8 @@ export async function sendAssistantCoachMessage(input: unknown): Promise<{ error
     const form = new FormData();
     form.set("body", body);
     if (change?.workoutId) form.set("link", `workout:${change.workoutId}`);
-    const sent = await sendMessage(viewer.athleteId, {}, form);
+    const sent = await sendMessage(viewer.athleteId, {}, form, identity);
+    if (sent.alreadyCompleted) return { sentId: sent.sentId, warning: "Already sent to your coach." };
     if (!sent.sentId || !change) return sent;
     try {
       const { data: claims, error: claimsError } = await supabase.auth.getClaims();
@@ -58,5 +65,19 @@ export async function sendAssistantCoachMessage(input: unknown): Promise<{ error
     }
   } catch {
     return { error: "Couldn't send your message. Please try again." };
+  }
+}
+
+export async function saveAssistantActivity(identity: AssistantCardIdentity, previous: FormState, formData: FormData): Promise<FormState> {
+  const viewer = await getViewer();
+  if (viewer?.kind !== "athlete") return { error: "Sign in as an athlete to save an activity." };
+  try {
+    const supabase = await createClient();
+    const card = await loadAssistantCard(supabase, viewer, identity);
+    if (card?.kind !== "activity") return { error: "This activity draft could not be found." };
+    formData.set("source", "ai");
+    return await saveActivity(viewer.athleteId, null, previous, formData, identity);
+  } catch {
+    return { error: "Couldn't save the activity. Please try again." };
   }
 }

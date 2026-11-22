@@ -147,7 +147,7 @@ test("stream engine reserves before generation, scopes counts/history, and persi
   await f.options.onFinish({ steps: [{ text: "First part" }, { text: "Final answer" }] });
   assert.equal(f.inserted[1].content, "First part\n\nFinal answer");
   assert.deepEqual(f.inserted[1].metadata.cards, [card]);
-  assert.deepEqual(f.responseOptions.messageMetadata({ part: { type: "finish" } }), { cards: [card] });
+  assert.deepEqual(f.responseOptions.messageMetadata({ part: { type: "finish" } }), { cards: [card], assistantMessageId: f.inserted[1].id });
   assert.ok(f.filters.some((row) => row.join() === "athlete_ai_messages,eq,athlete_id," + athleteId));
   assert.ok(f.filters.some((row) => row.join() === "athlete_ai_messages,gte,created_at,2026-11-22T05:00:00.000Z"));
   assert.ok(f.filters.some((row) => row.join() === "athlete_ai_messages,lt,created_at,2026-11-23T05:00:00.000Z"));
@@ -234,7 +234,7 @@ test("shared athlete context omits coach notes only for athlete callers", async 
 });
 
 test("edited coach draft uses FIT-29 first, then registry/reservation with own identity and sent source", async () => {
-  for (const mode of ["success", "coach", "invalid-link", "send-failed", "suggestion-failed"]) {
+  for (const mode of ["success", "coach", "invalid-link", "send-failed", "suggestion-failed", "already-sent", "missing-card"]) {
     const events = [];
     const supabase = { rpc: async () => ({ data: [defaultAssistantSettings], error: null }),
       auth: { getClaims: async () => ({ data: { claims: { sub: "signed-in-athlete" } }, error: null }) } };
@@ -242,8 +242,14 @@ test("edited coach draft uses FIT-29 first, then registry/reservation with own i
       "next/cache": { revalidatePath: () => {} },
       "@/lib/viewer": { getViewer: async () => mode === "coach" ? { kind: "coach" } : viewer },
       "@/lib/supabase/server": { createClient: async () => supabase },
+      "@/lib/activity-actions": { saveActivity: () => assert.fail("No activity save") },
+      "@/lib/ai/assistant-card-actions": { loadAssistantCard: async (_, fixedViewer, identity) => {
+        assert.equal(fixedViewer.athleteId, athleteId);
+        assert.deepEqual(identity, { assistantMessageId: messageId, cardIndex: 0 });
+        return mode === "missing-card" ? null : { kind: "coach_message", body: "Original", change: { type: "scale_workout", workoutId: athleteId, note: "Make it easier" } };
+      } },
       "@/lib/messages": { validateMessageLink: async (_, id, link, isCoach) => { assert.equal(id, athleteId); assert.equal(isCoach, false); return mode !== "invalid-link"; } },
-      "@/app/messages-actions": { sendMessage: async (id, _, form) => { events.push("send"); assert.equal(id, athleteId); assert.equal(form.get("body"), "Edited request"); return mode === "send-failed" ? { error: "offline" } : { sentId: messageId }; } },
+      "@/app/messages-actions": { sendMessage: async (id, _, form, identity) => { events.push("send"); assert.equal(id, athleteId); assert.equal(form.get("body"), "Edited request"); assert.equal(identity.cardIndex, 0); return mode === "send-failed" ? { error: "offline" } : { sentId: messageId, alreadyCompleted: mode === "already-sent" }; } },
       "@/lib/ai/suggestions": { SUGGESTION_REGISTRY: { scale_workout: { proposalSchema: "schema", buildRequest: async (_, params) => {
         events.push("build"); assert.equal(params.athleteId, athleteId); assert.equal(params.session.units, "lb"); assert.equal(params.session.driftDays, 5);
         return { input: { workout_id: athleteId }, system: "system", prompt: "prompt" };
@@ -256,9 +262,10 @@ test("edited coach draft uses FIT-29 first, then registry/reservation with own i
     });
     const result = await sendAssistantCoachMessage({ kind: "coach_message", body: "Edited request", change: {
       type: "scale_workout", workoutId: athleteId, note: "Make it easier",
-    } });
+    } }, { assistantMessageId: messageId, cardIndex: 0 });
     if (mode === "success") { assert.deepEqual(events, ["send", "build", "reserve"]); assert.equal(result.suggestionId, "suggestion"); }
     else if (mode === "suggestion-failed") { assert.equal(result.sentId, messageId); assert.match(result.warning, /Message sent/); }
+    else if (mode === "already-sent") { assert.match(result.warning, /Already sent/); assert.deepEqual(events, ["send"]); }
     else { assert.ok(result.error); assert.ok(!events.includes("reserve")); }
   }
 });
@@ -318,6 +325,7 @@ test("installed AI SDK transports parse the real UI message SSE stream without R
   for await (const message of sdk.readUIMessageStream({ stream, terminateOnError: true })) last = message;
   assert.equal(last.parts.find((part) => part.type === "text").text, "Hello athlete");
   assert.deepEqual(last.metadata.cards, []);
+  assert.equal(last.metadata.assistantMessageId, f.inserted[1].id);
   assert.equal(f.inserted[1].content, "Hello athlete");
 });
 

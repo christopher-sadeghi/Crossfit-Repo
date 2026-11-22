@@ -3,7 +3,7 @@
 import { DefaultChatTransport, readUIMessageStream } from "ai";
 import { useEffect, useRef, useState } from "react";
 
-export type ChatEntry = { id: string; role: "user" | "assistant"; content: string; metadata: unknown };
+export type ChatEntry = { id: string; role: "user" | "assistant"; content: string; metadata: unknown; actions?: { card_index: number; action: string; ref_id: string }[] };
 
 export function useAssistant(initialMessages: ChatEntry[]) {
   const [messages, setMessages] = useState(initialMessages);

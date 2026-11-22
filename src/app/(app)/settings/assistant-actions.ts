@@ -14,9 +14,9 @@ export async function loadAthleteAssistantTranscript(athleteId: string) {
   if (viewer?.kind !== "coach") return { error: COACH_SESSION_ERROR };
   if (!z.string().uuid().safeParse(athleteId).success) return { error: "Choose an athlete." };
   const supabase = await createClient();
-  const messages: Tables<"athlete_ai_messages">[] = [];
+  const messages: (Tables<"athlete_ai_messages"> & { actions: { card_index: number; action: string; ref_id: string }[] })[] = [];
   for (let offset = 0; ; offset += 500) {
-    const { data, error } = await supabase.from("athlete_ai_messages").select("*")
+    const { data, error } = await supabase.from("athlete_ai_messages").select("*, actions:athlete_ai_card_actions(card_index, action, ref_id)")
       .eq("athlete_id", athleteId).eq("coach_id", viewer.id).order("created_at").order("id").range(offset, offset + 499);
     if (error) return { error: "Couldn't load the conversation." };
     messages.push(...data);

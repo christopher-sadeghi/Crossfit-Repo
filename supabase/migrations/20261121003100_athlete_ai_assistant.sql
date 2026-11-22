@@ -51,6 +51,87 @@ revoke all on public.athlete_ai_messages from anon, authenticated;
 grant select, insert on public.athlete_ai_messages to authenticated;
 grant all on public.athlete_ai_messages to service_role;
 
+create table public.athlete_ai_card_actions (
+  id uuid primary key default gen_random_uuid(),
+  assistant_message_id uuid not null references public.athlete_ai_messages(id) on delete cascade,
+  card_index integer not null check (card_index >= 0),
+  athlete_id uuid not null,
+  coach_id uuid not null references public.coaches(id) on delete cascade,
+  action text not null check (action in ('sent', 'saved')),
+  ref_id uuid not null,
+  created_at timestamptz not null default now(),
+  unique (assistant_message_id, card_index),
+  foreign key (athlete_id, coach_id) references public.athletes(id, coach_id) on delete cascade
+);
+create index athlete_ai_card_actions_athlete_idx on public.athlete_ai_card_actions(athlete_id);
+alter table public.athlete_ai_card_actions enable row level security;
+create policy "Coaches read assistant card actions" on public.athlete_ai_card_actions
+  for select to authenticated using (coach_id = (select auth.uid()));
+create policy "Athletes read own assistant card actions" on public.athlete_ai_card_actions
+  for select to authenticated using (
+    athlete_id = (select public.current_athlete_id()) and coach_id = (select public.current_athlete_coach_id())
+  );
+create policy "Athletes complete own assistant cards" on public.athlete_ai_card_actions
+  for insert to authenticated with check (
+    athlete_id = (select public.current_athlete_id()) and coach_id = (select public.current_athlete_coach_id())
+    and exists (
+      select 1 from public.athlete_ai_messages m
+      where m.id = assistant_message_id and m.athlete_id = athlete_ai_card_actions.athlete_id
+        and m.coach_id = athlete_ai_card_actions.coach_id and m.role = 'assistant'
+        and m.metadata->'cards'->card_index->>'kind' = case action when 'sent' then 'coach_message' else 'activity' end
+    )
+  );
+revoke all on public.athlete_ai_card_actions from anon, authenticated;
+grant select, insert on public.athlete_ai_card_actions to authenticated;
+grant all on public.athlete_ai_card_actions to service_role;
+
+-- The reservation and side effect commit together, or both roll back.
+create function public.complete_athlete_ai_card(
+  p_message_id uuid, p_card_index integer, p_action text, p_values jsonb
+) returns table (ref_id uuid, already_completed boolean)
+language plpgsql security invoker set search_path = ''
+as $$
+declare
+  v_athlete uuid := public.current_athlete_id();
+  v_coach uuid := public.current_athlete_coach_id();
+  v_ref uuid := gen_random_uuid();
+  v_inserted uuid;
+begin
+  if v_athlete is null or p_card_index is null or p_card_index < 0 or p_action is null or p_action not in ('sent', 'saved') then
+    raise exception 'invalid_assistant_card';
+  end if;
+  if not exists (
+    select 1 from public.athlete_ai_messages m where m.id = p_message_id and m.athlete_id = v_athlete
+      and m.coach_id = v_coach and m.role = 'assistant'
+      and m.metadata->'cards'->p_card_index->>'kind' = case p_action when 'sent' then 'coach_message' else 'activity' end
+  ) then raise exception 'invalid_assistant_card'; end if;
+  insert into public.athlete_ai_card_actions(assistant_message_id, card_index, athlete_id, coach_id, action, ref_id)
+    values (p_message_id, p_card_index, v_athlete, v_coach, p_action, v_ref)
+    on conflict (assistant_message_id, card_index) do nothing returning id into v_inserted;
+  if v_inserted is null then
+    return query select a.ref_id, true from public.athlete_ai_card_actions a
+      where a.assistant_message_id = p_message_id and a.card_index = p_card_index;
+    return;
+  end if;
+  if p_action = 'sent' then
+    if p_values->>'link_type' is not null and (
+      p_values->>'link_type' <> 'workout' or not coalesce(public.athlete_can_view_workout((p_values->>'link_id')::uuid), false)
+    ) then raise exception 'invalid_message_link'; end if;
+    insert into public.messages(id, athlete_id, coach_id, body, link_type, link_id)
+      values (v_ref, v_athlete, v_coach, btrim(p_values->>'body'), p_values->>'link_type', (p_values->>'link_id')::uuid);
+  else
+    insert into public.athlete_activities(id, athlete_id, coach_id, performed_on, activity_type, custom_label,
+      duration_minutes, rpe, distance_m, notes, source)
+      values (v_ref, v_athlete, v_coach, (p_values->>'performed_on')::date, p_values->>'activity_type',
+        p_values->>'custom_label', (p_values->>'duration_minutes')::integer, (p_values->>'rpe')::integer,
+        (p_values->>'distance_m')::numeric, p_values->>'notes', 'ai');
+  end if;
+  return query select v_ref, false;
+end;
+$$;
+revoke all on function public.complete_athlete_ai_card(uuid, integer, text, jsonb) from public, anon, authenticated;
+grant execute on function public.complete_athlete_ai_card(uuid, integer, text, jsonb) to authenticated;
+
 create policy "Athletes read own assistant suggestions" on public.ai_suggestions
   for select to authenticated using (athlete_id = (select public.current_athlete_id())
     and coach_id = (select public.current_athlete_coach_id())

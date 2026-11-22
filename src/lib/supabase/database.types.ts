@@ -9,6 +9,12 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      athlete_ai_card_actions: {
+        Row: { id: string; assistant_message_id: string; card_index: number; athlete_id: string; coach_id: string; action: string; ref_id: string; created_at: string };
+        Insert: { id?: string; assistant_message_id: string; card_index: number; athlete_id: string; coach_id: string; action: string; ref_id: string; created_at?: string };
+        Update: { id?: string; assistant_message_id?: string; card_index?: number; athlete_id?: string; coach_id?: string; action?: string; ref_id?: string; created_at?: string };
+        Relationships: [{ foreignKeyName: "athlete_ai_card_actions_assistant_message_id_fkey"; columns: ["assistant_message_id"]; isOneToOne: false; referencedRelation: "athlete_ai_messages"; referencedColumns: ["id"] }];
+      };
       athlete_ai_messages: {
         Row: { id: string; athlete_id: string; coach_id: string; role: string; content: string; metadata: Json; red_flag: boolean; created_at: string };
         Insert: { id?: string; athlete_id: string; coach_id: string; role: string; content: string; metadata?: Json; red_flag?: boolean; created_at?: string };
@@ -1687,6 +1693,7 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      complete_athlete_ai_card: { Args: { p_message_id: string; p_card_index: number; p_action: string; p_values: Json }; Returns: { ref_id: string; already_completed: boolean }[] };
       athlete_assistant_settings: {
         Args: Record<PropertyKey, never>;
         Returns: { coach_rules: string | null; athlete_rules: string | null; assistant_training: boolean; assistant_nutrition: boolean; assistant_recovery: boolean; athlete_ai_daily_limit: number }[];

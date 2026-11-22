@@ -1,11 +1,20 @@
 import { assistantCardSchema, type AssistantCard } from "./assistant-schema";
 
 export function assistantCards(metadata: unknown): AssistantCard[] {
+  return assistantCardEntries(metadata).map(({ card }) => card);
+}
+
+export function assistantCardEntries(metadata: unknown): { card: AssistantCard; index: number }[] {
   if (!metadata || typeof metadata !== "object" || !("cards" in metadata) || !Array.isArray(metadata.cards)) return [];
-  return metadata.cards.flatMap((card) => {
+  return metadata.cards.slice(0, 6).flatMap((card, index) => {
     const parsed = assistantCardSchema.safeParse(card);
-    return parsed.success ? [parsed.data] : [];
-  }).slice(0, 6);
+    return parsed.success ? [{ card: parsed.data, index }] : [];
+  });
+}
+
+export function assistantMessageId(metadata: unknown, fallback: string): string {
+  return metadata && typeof metadata === "object" && "assistantMessageId" in metadata && typeof metadata.assistantMessageId === "string"
+    ? metadata.assistantMessageId : fallback;
 }
 
 export function safeAssistantHref(href: string): string | null {

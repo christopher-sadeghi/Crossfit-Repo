@@ -2,7 +2,8 @@ import { AssistantRulesForm } from "@/components/assistant-rules-form";
 import { AssistantText } from "@/components/assistant-text";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { loadAthleteAssistantTranscript } from "@/app/(app)/settings/assistant-actions";
-import { assistantCards } from "@/lib/ai/assistant-ui";
+import { assistantCardEntries } from "@/lib/ai/assistant-ui";
+import Link from "next/link";
 import { getTimeZone } from "@/lib/time-zone";
 
 export async function AssistantTab({ athleteId, rules }: { athleteId: string; rules: string | null }) {
@@ -22,9 +23,14 @@ export async function AssistantTab({ athleteId, rules }: { athleteId: string; ru
           </div>
           {message.red_flag && <p className="mb-2 text-sm font-semibold text-destructive">Safety flag</p>}
           {message.role === "assistant" ? <AssistantText text={message.content} /> : <p className="whitespace-pre-wrap break-words text-sm">{message.content}</p>}
-          <ul className="mt-2 grid gap-1 text-xs text-muted-foreground">{assistantCards(message.metadata).map((card, index) => <li key={index}>
-            {card.kind === "coach_message" ? "Drafted a message to you" : card.kind === "activity" ? "Drafted an activity" : "Offered today's workout adjustment form"}
-          </li>)}</ul>
+          <ul className="mt-2 grid gap-1 text-xs text-muted-foreground">{assistantCardEntries(message.metadata).map(({ card, index }) => {
+            const completed = message.actions.find((action) => action.card_index === index);
+            return <li key={index}>{completed
+              ? <Link className="underline" href={completed.action === "sent" ? `/messages/${athleteId}` : `/athletes/${athleteId}?tab=load`}>
+                {completed.action === "sent" ? "Sent to your coach" : "Saved"}</Link>
+              : card.kind === "coach_message" ? "Drafted a message to you" : card.kind === "activity" ? "Drafted an activity" : "Offered today's workout adjustment form"}
+            </li>;
+          })}</ul>
         </li>)}</ol>}
     </CardContent></Card>
   </div>;

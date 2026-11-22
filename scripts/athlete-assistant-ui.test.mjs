@@ -22,13 +22,16 @@ function load(relative, mocks = {}, fetcher = globalThis.fetch) {
   new Function("require", "module", "exports", "fetch", code)(resolve, loaded, loaded.exports, fetcher);
   return loaded.exports;
 }
-const { assistantCards, safeAssistantHref, assistantTextParts } = load("src/lib/ai/assistant-ui.ts");
+const { assistantCards, assistantCardEntries, assistantMessageId, safeAssistantHref, assistantTextParts } = load("src/lib/ai/assistant-ui.ts");
 
 test("transcript metadata keeps valid unsaved cards, ignores malformed/legacy data and caps count", () => {
   for (const input of [null, {}, [], { cards: "bad" }, { cards: [null, { kind: "unknown" }] }]) assert.deepEqual(assistantCards(input), []);
   const card = { kind: "coach_message", body: "Could we talk?" };
   assert.deepEqual(assistantCards({ cards: [card, { kind: "activity", draft: {} }] }), [card]);
   assert.equal(assistantCards({ cards: Array(10).fill(card) }).length, 6);
+  assert.deepEqual(assistantCardEntries({ cards: [null, card] }), [{ index: 1, card }]);
+  assert.equal(assistantMessageId({ assistantMessageId: "persisted-id" }, "local-id"), "persisted-id");
+  assert.equal(assistantMessageId(null, "local-id"), "local-id");
 });
 
 test("safe markdown supports only internal links and leaves unsafe markup inert as text", () => {
@@ -149,15 +152,22 @@ test("activity cards reuse editable fields, submit source ai, retain failures an
       useTransition: () => [false, () => assert.fail("Must not extract another AI draft")],
       useActionState(fn) { action = async (data) => { state = await fn(state, data); }; return [state, action, false]; },
     };
-    const { ActivityForm } = load("src/components/activity-form.tsx", {
-      ...uiMocks, react,
-      "@/lib/activity-actions": { saveActivity: async (id, activityId, _, data) => {
+    const mocksSave = async (id, activityId, _, data) => {
         calls.push(Object.fromEntries(data)); assert.equal(id, "own-athlete"); assert.equal(activityId, null);
         return complete ? { message: "Activity saved." } : { error: "Couldn't save the activity. Please try again." };
-      } },
+    };
+    const { ActivityForm } = load("src/components/activity-form.tsx", {
+      ...uiMocks, react,
+      "@/lib/activity-actions": { saveActivity: () => assert.fail("Card must use the assistant wrapper") },
       "@/lib/ai/activity-draft": { draftActivity: () => assert.fail("Must not reserve another AI request") },
+      "@/app/athlete/assistant/actions": { saveAssistantActivity: async (identity, previous, data) => {
+        assert.deepEqual(identity, { assistantMessageId: "assistant-row", cardIndex: 1 });
+        const result = await mocksSave("own-athlete", null, previous, data);
+        return result;
+      } },
     });
     const props = { athleteId: "own-athlete", today: "2026-11-22", units: "kg",
+      assistantCard: { assistantMessageId: "assistant-row", cardIndex: 1 },
       initialDraft: { activity_type: "run", custom_label: "Easy run", performed_on: null,
         duration_minutes: complete ? 30 : null, rpe: complete ? 5 : null, distance_m: complete ? 2000 : null } };
     const render = () => { cursor = 0; return ActivityForm(props); };
@@ -197,12 +207,14 @@ test("coach draft sends edited text and preserves warnings, errors and sent stat
     };
     const { DraftCard } = load("src/app/athlete/assistant/draft-card.tsx", {
       ...uiMocks, react, "next/link": "a", "@/components/activity-form": { ActivityForm: "activity-form" },
-      "./actions": { sendAssistantCoachMessage: async (input) => {
+      "./actions": { sendAssistantCoachMessage: async (input, identity) => {
+        assert.deepEqual(identity, { assistantMessageId: "assistant-row", cardIndex: 0 });
         calls.push(input); return success ? { sentId: "message", warning: "Message sent, but the change card couldn't be created." } : { error: "Please try again." };
       } },
     });
     const card = { kind: "coach_message", body: "Original draft", change: { type: "adjust_macros", note: "More carbs" } };
-    const child = DraftCard({ card, athleteId: "own-athlete", today: "2026-11-22", units: "kg", disabled: false }).props.children;
+    const child = DraftCard({ card, athleteId: "own-athlete", today: "2026-11-22", units: "kg", disabled: false,
+      identity: { assistantMessageId: "assistant-row", cardIndex: 0 } }).props.children;
     const render = () => { cursor = 0; return child.type(child.props); };
     let tree = render();
     nodes(tree).find((node) => node.type === "textarea").props.onChange({ target: { value: "Edited request" } });
@@ -217,4 +229,44 @@ test("coach draft sends edited text and preserves warnings, errors and sent stat
       assert.ok(nodes(tree).some((node) => typeof node.props?.children === "string" && node.props.children.includes("change card couldn't")));
     } else assert.ok(nodes(tree).some((node) => node.props?.role === "alert"));
   }
+});
+
+test("replayed completed cards expose only durable status links, never send/save controls", () => {
+  const { DraftCard } = load("src/app/athlete/assistant/draft-card.tsx", {
+    ...uiMocks, "next/link": "a", "@/components/activity-form": { ActivityForm: "activity-form" },
+    "./actions": { sendAssistantCoachMessage: () => assert.fail("Completed cards cannot send") },
+  });
+  for (const action of ["sent", "saved"]) {
+    const tree = DraftCard({ card: { kind: action === "sent" ? "coach_message" : "activity" }, completed: { action } });
+    const all = nodes(tree);
+    assert.equal(tree.props.role, "status");
+    assert.ok(all.some((node) => node.props?.href === (action === "sent" ? "/athlete/messages" : "/athlete/history")));
+    assert.ok(!all.some((node) => ["button", "form", "activity-form"].includes(node.type)));
+  }
+});
+
+test("card identity validation and metadata lookup bind server actions to own assistant row and exact index", async () => {
+  const { assistantCardIdentitySchema, loadAssistantCard } = load("src/lib/ai/assistant-card-actions.ts");
+  const identity = { assistantMessageId: "47000000-0000-4000-8000-000000000021", cardIndex: 1 };
+  assert.equal(assistantCardIdentitySchema.safeParse(identity).success, true);
+  for (const bad of [{}, { ...identity, cardIndex: -1 }, { ...identity, cardIndex: 6 }, { ...identity, assistantMessageId: "bad" }]) {
+    assert.equal(assistantCardIdentitySchema.safeParse(bad).success, false);
+  }
+  const filters = [];
+  let response = { data: { metadata: { cards: [null, { kind: "coach_message", body: "Original" }] } }, error: null };
+  const client = { from: (table) => {
+    assert.equal(table, "athlete_ai_messages");
+    const q = { select: () => q, eq: (...args) => { filters.push(args); return q; }, maybeSingle: async () => response };
+    return q;
+  } };
+  const viewer = { athleteId: "own-athlete", coachId: "own-coach" };
+  assert.equal((await loadAssistantCard(client, viewer, identity)).body, "Original");
+  assert.ok(filters.some(([key, value]) => key === "athlete_id" && value === viewer.athleteId));
+  assert.ok(filters.some(([key, value]) => key === "coach_id" && value === viewer.coachId));
+  assert.ok(filters.some(([key, value]) => key === "role" && value === "assistant"));
+  assert.equal(await loadAssistantCard(client, viewer, { ...identity, cardIndex: 0 }), null);
+  response = { data: null, error: null };
+  assert.equal(await loadAssistantCard(client, viewer, identity), null);
+  response = { data: null, error: Error("DB unavailable") };
+  await assert.rejects(loadAssistantCard(client, viewer, identity), /DB unavailable/);
 });

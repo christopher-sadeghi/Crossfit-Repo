@@ -5,7 +5,7 @@ import { AssistantText } from "@/components/assistant-text";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { assistantCards } from "@/lib/ai/assistant-ui";
+import { assistantCardEntries, assistantMessageId } from "@/lib/ai/assistant-ui";
 import type { Units } from "@/lib/units";
 import { DraftCard } from "./draft-card";
 import { useAssistant, type ChatEntry } from "./use-assistant";
@@ -21,8 +21,10 @@ export function AssistantChat({ initialMessages, athleteId, today, units }: { in
       {messages.map((message) => <li key={message.id} className={`min-w-0 rounded-lg border p-4 ${message.role === "user" ? "ml-6 bg-muted" : "mr-2 bg-card"}`}>
         <p className="mb-2 text-xs font-semibold text-muted-foreground">{message.role === "user" ? "You" : "AI assistant"}</p>
         {message.role === "assistant" ? <AssistantText text={message.content} /> : <p className="whitespace-pre-wrap break-words text-sm">{message.content}</p>}
-        <div className="mt-3 grid gap-3">{assistantCards(message.metadata).map((card, index) =>
-          <DraftCard key={index} card={card} athleteId={athleteId} today={today} units={units} disabled={pending} />)}</div>
+        <div className="mt-3 grid gap-3">{assistantCardEntries(message.metadata).map(({ card, index }) =>
+          <DraftCard key={index} card={card} athleteId={athleteId} today={today} units={units} disabled={pending}
+            identity={{ assistantMessageId: assistantMessageId(message.metadata, message.id), cardIndex: index }}
+            completed={message.actions?.find((action) => action.card_index === index)} />)}</div>
       </li>)}
     </ol>
     {pending && <p role="status" className="text-sm text-muted-foreground">AI is replying…</p>}

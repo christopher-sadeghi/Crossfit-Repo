@@ -57,8 +57,10 @@ export async function streamAthleteAssistant(supabase: Client, viewer: AthleteVi
     return card;
   };
   let saved: Promise<void> | undefined;
+  const assistantMessageId = crypto.randomUUID();
   const persist = (text: string) => saved ??= (async () => {
     const result = await supabase.from("athlete_ai_messages").insert({
+      id: assistantMessageId,
       athlete_id: viewer.athleteId, coach_id: viewer.coachId, role: "assistant",
       content: (text.trim() || (cards.length ? "Here are your drafts. Nothing has been sent, saved or changed." : FRIENDLY_ERROR)).slice(0, 8000),
       metadata: { cards, source_message_id: reserved.data.id } as unknown as Json,
@@ -140,7 +142,7 @@ export async function streamAthleteAssistant(supabase: Client, viewer: AthleteVi
     return result.toUIMessageStreamResponse({
       sendReasoning: false,
       onError: () => FRIENDLY_ERROR,
-      messageMetadata: ({ part }) => part.type === "finish" ? { cards } : undefined,
+      messageMetadata: ({ part }) => part.type === "finish" ? { cards, assistantMessageId } : undefined,
       consumeSseStream: async ({ stream }) => {
         const reader = stream.getReader();
         try { while (!(await reader.read()).done) {} } finally { reader.releaseLock(); }
