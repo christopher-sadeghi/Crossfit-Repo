@@ -3,7 +3,7 @@ import { matchedAllergies } from "@/lib/ai/food-safety";
 type IngredientEntry = { name: string; ingredients: string | null; allergens?: string[] };
 const commonAllergens = ["peanut", "tree nut", "milk", "egg", "fish", "shellfish", "soy", "gluten", "sesame", "mustard", "celery", "lupin", "sulphite"];
 
-export function foodIngredients(entries: IngredientEntry[], limit: number): string | null {
+export function foodIngredients(entries: IngredientEntry[], limit: number): string {
   const whitespace = (text: string) => text.replace(/\s+/g, " ").trim();
   const declarations = new Set<string>();
   entries = entries.map(entry => {
@@ -17,7 +17,12 @@ export function foodIngredients(entries: IngredientEntry[], limit: number): stri
       const content = start + marker[0].length;
       const next = markers[i + 1]?.index ?? raw.length;
       const boundary = raw.slice(content, next).search(/[.;]/);
-      const end = boundary < 0 ? next : content + boundary;
+      let end = boundary < 0 ? next : content + boundary;
+      if (end - start > 300) {
+        const prefix = raw.slice(start, start + 300);
+        const cut = Math.max(prefix.lastIndexOf(","), prefix.search(/\s+\S*$/));
+        end = start + (cut >= marker[0].length ? cut : marker[0].length);
+      }
       declarations.add(whitespace(raw.slice(start, end)));
       remaining += `${raw.slice(cursor, start)}; `;
       cursor = end;
@@ -25,7 +30,7 @@ export function foodIngredients(entries: IngredientEntry[], limit: number): stri
     remaining += raw.slice(cursor);
     return { name: whitespace(entry.name), ingredients: whitespace(remaining), allergens: entry.allergens?.map(whitespace) };
   });
-  const allergens = new Set<string>();
+  const allergens = new Set<string>(matchedAllergies([...declarations].join(" "), commonAllergens));
   const names = new Set<string>();
   const safety = new Set<string>(declarations);
   const plain: string[] = [];
@@ -50,7 +55,7 @@ export function foodIngredients(entries: IngredientEntry[], limit: number): stri
     }
   }
   const priority = [allergens.size ? `Allergens: ${[...allergens].join(", ")}` : null, names.size ? `Foods: ${[...names].join(", ")}` : null, ...safety].filter(Boolean).join("; ");
-  if (priority.length > limit) return null;
+  if (priority.length > limit) return priority.slice(0, limit);
   const text = plain.join(", ");
   return priority + (text && limit - priority.length > 2 ? `; ${text.slice(0, limit - priority.length - 2)}` : "");
 }

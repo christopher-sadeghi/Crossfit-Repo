@@ -109,6 +109,5 @@ export async function saveMealFromLog(athleteId: string, day: string, mealName: 
   totals.carbs_g = Math.round(totals.carbs_g * 10) / 10;
   totals.fat_g = Math.round(totals.fat_g * 10) / 10;
   const ingredients = foodIngredients(entries.map(e => ({ name: e.food_name, ingredients: e.ingredients })), 8000);
-  if (ingredients === null) return { error: "This meal has too much allergy information to save safely. Choose fewer entries and try again." };
   return saveFoodToLibrary(athleteId, { ...totals, name: parsed.data.name, kind: "meal", is_favorite: false, serving_label: "1 meal", ingredients, source: "log" });
 }

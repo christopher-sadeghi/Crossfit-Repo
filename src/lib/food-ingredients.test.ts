@@ -22,8 +22,11 @@ test("keeps explicit allergen tags and deduplicates full allergen-bearing text",
   assert.equal(ingredients.split("; almonds").length - 1, 1);
 });
 
-test("rejects oversized allergy text instead of truncating it", () => {
-  assert.equal(foodIngredients([{ name: "Snack", ingredients: `${"x".repeat(8000)} almonds` }], 8000), null);
+test("keeps the allergy summary first when safety text exceeds the limit", () => {
+  const ingredients = foodIngredients([{ name: "Snack", ingredients: `${"almonds ".repeat(1200)}` }], 8000);
+  assert.equal(ingredients.length, 8000);
+  assert.ok(ingredients.startsWith("Allergens: tree nut;"));
+  assert.deepEqual(matchedAllergies(ingredients, ["almond"]), ["almond"]);
 });
 
 test("handles empty and ingredient-free inputs", () => {
@@ -59,4 +62,12 @@ test("keeps wrapped phrases within allergen declarations", () => {
   assert.ok(ingredients);
   assert.ok(ingredients.includes("Contains: tree nuts"));
   assert.deepEqual(matchedAllergies(ingredients, ["tree nuts"]), ["tree nuts"]);
+});
+
+test("saves declarations followed by oversized plain ingredient lists", () => {
+  for (const allergen of ["milk", "tree\nnuts"]) {
+    const ingredients = foodIngredients([{ name: "Snack", ingredients: `Contains: ${allergen}\n${"sugar, ".repeat(1400)}` }], 8000);
+    assert.ok(ingredients.length <= 8000);
+    assert.deepEqual(matchedAllergies(ingredients, [allergen.replace(/\s+/g, " ")]), [allergen.replace(/\s+/g, " ")]);
+  }
 });
