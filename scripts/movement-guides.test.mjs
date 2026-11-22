@@ -24,6 +24,7 @@ function load(relative, mocks = {}) {
   return loaded.exports;
 }
 const { movementGuideSchema, movementGuideEntry, newMovementGuideSchema } = load("src/lib/ai/movement-guides.ts");
+const { movementDemoValues } = load("src/lib/movement-demos.ts");
 const { canSaveDemoCues, demoEmbedUrl, videoUrlSchema, hasGuideText, readGuideText, editedGuideSchema } = load("src/lib/movement-guides.ts");
 const { HowTo } = load("src/components/movements/how-to.tsx");
 const { renderToStaticMarkup } = require("react-dom/server");
@@ -59,6 +60,21 @@ test("coach edits permit empty sections and form lines are normalized", () => {
   const form = new FormData();
   form.set("cues", " Brace.\r\n\n Stand. ");
   assert.deepEqual(readGuideText(form), { ...empty, cues: ["Brace.", "Stand."] });
+});
+
+test("movement demos inherit unset lists but keep explicitly empty coach lists", () => {
+  const movement = { demo_cues: ["Library cue."], demo_common_faults: ["Library fault."] };
+  const form = new FormData();
+  form.set("cues", "Brace.\nStand.\nBreathe.");
+  form.set("common_mistakes", "  ");
+  const saved = editedGuideSchema.parse(readGuideText(form));
+  assert.equal(canSaveDemoCues(saved.cues), true);
+  assert.deepEqual(movementDemoValues(movement, saved).cues, saved.cues);
+  assert.deepEqual(movementDemoValues(movement, saved).common_mistakes, []);
+  assert.deepEqual(movementDemoValues(movement, blankGuide).cues, []);
+  assert.deepEqual(movementDemoValues(movement, { cues: null, common_mistakes: null }).common_mistakes, movement.demo_common_faults);
+  assert.deepEqual(movementDemoValues(movement, null).cues, movement.demo_cues);
+  assert.deepEqual(movementDemoValues(movement, null).common_mistakes, movement.demo_common_faults);
 });
 
 test("demo reset collects only its coach's custom movement clips before deleting them", async () => {

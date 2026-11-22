@@ -14,8 +14,8 @@ export async function loadMovementDemoSource(supabase: SupabaseClient<Database>,
 
 export function movementDemoValues(movement: Tables<"movements">, guide: Tables<"movement_guides"> | null) {
   return {
-    cues: guide?.cues.length ? guide.cues : movement.demo_cues,
-    common_mistakes: guide?.common_mistakes.length ? guide.common_mistakes : movement.demo_common_faults,
+    cues: guide?.cues ?? movement.demo_cues,
+    common_mistakes: guide?.common_mistakes ?? movement.demo_common_faults,
     easier_versions: guide?.easier_versions ?? [],
     harder_versions: guide?.harder_versions ?? [],
     easier_movement_id: guide?.easier_movement_id ?? movement.easier_movement_id,
