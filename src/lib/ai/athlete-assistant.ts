@@ -17,7 +17,15 @@ import { aiLimitMessage } from "./service-core";
 type Client = SupabaseClient<Database>;
 const jsonError = (error: string, status: number) => Response.json({ error }, { status });
 
-export async function streamAthleteAssistant(supabase: Client, viewer: AthleteViewer, message: string, today: string, timeZone: string, injectedModel?: LanguageModel) {
+export async function streamAthleteAssistant(
+  supabase: Client,
+  viewer: AthleteViewer,
+  message: string,
+  today: string,
+  timeZone: string,
+  assistantWriter: Client,
+  injectedModel?: LanguageModel,
+) {
   const safety = assistantSafety(message);
   if (safety.flagged) {
     await notify(supabase, { athleteId: viewer.athleteId, kind: "assistant_red_flag",
@@ -43,7 +51,7 @@ export async function streamAthleteAssistant(supabase: Client, viewer: AthleteVi
       ? "Stop exercising and contact emergency services now. Message your coach as soon as you can."
       : "Stop exercising and contact your coach or a medical professional before continuing. Message your coach about these symptoms.";
     const metadata = { cards: [], assistantMessageId: id };
-    const saved = await supabase.from("athlete_ai_messages").insert({
+    const saved = await assistantWriter.from("athlete_ai_messages").insert({
       id, athlete_id: viewer.athleteId, coach_id: viewer.coachId, role: "assistant", content,
       metadata: { cards: [], source_message_id: sourceMessageId }, red_flag: true,
     });
@@ -84,7 +92,7 @@ export async function streamAthleteAssistant(supabase: Client, viewer: AthleteVi
   let saved: Promise<void> | undefined;
   const assistantMessageId = crypto.randomUUID();
   const persist = (text: string) => saved ??= (async () => {
-    const result = await supabase.from("athlete_ai_messages").insert({
+    const result = await assistantWriter.from("athlete_ai_messages").insert({
       id: assistantMessageId,
       athlete_id: viewer.athleteId, coach_id: viewer.coachId, role: "assistant",
       content: (text.trim() || (cards.length ? "Here are your drafts. Nothing has been sent, saved or changed." : FRIENDLY_ERROR)).slice(0, 8000),
