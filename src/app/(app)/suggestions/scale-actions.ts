@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { approveSuggestionWithClient } from "@/lib/ai/decisions";
+import { notifyScheduleChanged, notifySuggestionApproved } from "@/lib/notifications";
 import { runSuggestion } from "@/lib/ai/service";
 import {
   applyScaleWorkoutLoadEdits,
@@ -87,6 +88,7 @@ export async function approveScaleSuggestion(_: FormState, formData: FormData): 
   if ("error" in final) return failure(formData, final.error);
   const result = await approveSuggestionWithClient(supabase, suggestion, final.data);
   if ("error" in result) return failure(formData, result.error);
+  if (suggestion.athlete_id) await notifySuggestionApproved(supabase, suggestion.athlete_id, suggestion.id);
 
   revalidatePath("/suggestions");
   revalidatePath(`/suggestions/${id.data}`);
@@ -103,6 +105,7 @@ export async function removeWorkoutScaling(_: FormState, formData: FormData): Pr
   try {
     const scaling = await deleteWorkoutScalingWithClient(supabase, id.data);
     if (!scaling) return failure(formData, "This scaling was already removed.");
+    await notifyScheduleChanged(supabase, scaling.athlete_id, { action: "restored" });
     revalidatePath(`/programs/workouts/${scaling.workout_id}`);
     revalidatePath(`/athletes/${scaling.athlete_id}`);
     revalidatePath("/athlete");

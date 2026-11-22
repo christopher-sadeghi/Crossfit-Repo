@@ -6,6 +6,7 @@ import { z } from "zod";
 import { effectiveScaling } from "@/lib/ai/athlete-adjust-schema";
 import { athleteAdjustFeelingSchema, buildAthleteAdjustRequest, runAthleteAdjustment } from "@/lib/ai/athlete-adjust";
 import { loadAthleteSchedule } from "@/lib/athlete-schedule";
+import { notifyWorkoutAdjusted } from "@/lib/notifications";
 import { createClient } from "@/lib/supabase/server";
 import { getToday } from "@/lib/time-zone";
 import { getViewer } from "@/lib/viewer";
@@ -63,6 +64,7 @@ export async function adjustTodaysWorkout(_: AdjustState, formData: FormData): P
     console.error("Athlete adjustment failed:", error);
     return { error: "The AI couldn't adjust your WOD right now. Please try again in a minute.", feeling: feeling.data };
   }
+  if (result.suggestionId && (result.ok || result.checkWithCoach)) await notifyWorkoutAdjusted(supabase, viewer.athleteId, result.suggestionId, { applied: result.ok, checkWithCoach: result.checkWithCoach });
   if (!result.ok) return { error: result.error, checkWithCoach: result.checkWithCoach, feeling: feeling.data };
 
   revalidatePath("/athlete");

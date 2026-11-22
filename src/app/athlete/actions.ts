@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { failure, type FormState } from "@/lib/auth/form-state";
+import { notifyResultLogged } from "@/lib/notifications";
 import { buildScore, feedbackFields, scoreFields } from "@/lib/result-score";
 import { createClient } from "@/lib/supabase/server";
 import { fromKgPrecise } from "@/lib/units";
@@ -99,9 +100,10 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
     const { data, error } = await supabase
       .from("workout_results")
       .insert(values)
-      .select("workout_id, athlete_id")
+      .select("id, workout_id, athlete_id")
       .maybeSingle();
     if (error || !data) return failure(formData, "Couldn't save the result. Please try again.");
+    await notifyResultLogged(supabase, data.athlete_id, data.id);
     revalidateResultPaths(data.workout_id, data.athlete_id);
   }
 

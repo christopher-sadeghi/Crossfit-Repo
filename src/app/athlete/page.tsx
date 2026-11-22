@@ -159,6 +159,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
               <div key={workout.id} className="grid gap-3">
                 <p className="text-sm text-muted-foreground">{SCHEDULE_LABEL(item, "athlete")}</p>
                 <Whiteboard workout={workout} movements={movements} units={viewer.units} howToHref={(id) => `/athlete/movements/${id}`} />
+                <Link href={`/athlete/messages?link=workout:${workout.id}`} className="text-sm underline underline-offset-4">Message coach about this WOD</Link>
                 {scaling && (
                   <Card>
                     <CardHeader className="pb-2">

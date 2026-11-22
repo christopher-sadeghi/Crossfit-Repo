@@ -4,6 +4,7 @@ import {
   CalendarDays,
   Trophy,
   LayoutDashboard,
+  MessageSquare,
   Salad,
   Settings,
   Sparkles,
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
   { href: "/benchmarks", label: "Benchmarks", icon: Trophy },
   { href: "/nutrition", label: "Nutrition", icon: Salad },
   { href: "/suggestions", label: "AI Suggestions", icon: Sparkles },
+  { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -48,7 +50,7 @@ export function NavLinks({ badges = {} }: { badges?: Record<string, number> }) {
             {badges[href] ? (
               <span
                 className="ml-auto rounded-full bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white"
-                aria-label={`${badges[href]} athlete change${badges[href] === 1 ? "" : "s"} to review`}
+                aria-label={`${badges[href]} unread ${label.toLowerCase()} items`}
               >
                 {badges[href]}
               </span>

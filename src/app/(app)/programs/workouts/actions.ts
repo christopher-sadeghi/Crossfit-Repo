@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { failure, type FormState } from "@/lib/auth/form-state";
+import { notifyScheduleChanged } from "@/lib/notifications";
 import { createClient } from "@/lib/supabase/server";
 
 import { WORKOUT_TYPES } from "../options";
@@ -149,6 +150,7 @@ export async function saveWorkout(_: FormState, formData: FormData): Promise<For
 
   revalidatePath("/programs/workouts");
   if (oneOffAthleteId) {
+    await notifyScheduleChanged(supabase, oneOffAthleteId, { action: id ? "updated" : "added", date: String(formData.get("scheduled_on")) });
     revalidatePath(`/athletes/${oneOffAthleteId}`);
     redirect(`/athletes/${oneOffAthleteId}?tab=workouts`);
   }
