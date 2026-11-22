@@ -20,6 +20,12 @@ export default async function AthleteFormChecksPage({ searchParams }: { searchPa
       .order("performed_on", { ascending: false }).order("created_at", { ascending: false }).limit(50),
     supabase.from("movements").select("id, name").order("name").limit(500),
   ]);
+  const options = results ?? [];
+  if (result && !options.some((row) => row.id === result)) {
+    const { data: requested } = await supabase.from("workout_results").select("id, performed_on, workouts(title)")
+      .eq("athlete_id", athlete.id).eq("id", result).maybeSingle();
+    if (requested) options.unshift(requested);
+  }
   return <div className="grid min-w-0 gap-5">
     <header>
       <p className="mb-1 text-xs font-medium uppercase tracking-widest text-muted-foreground">Technique</p>
@@ -31,7 +37,7 @@ export default async function AthleteFormChecksPage({ searchParams }: { searchPa
       <CardContent>
         <FormVideoUpload
           athleteId={athlete.id} coachId={athlete.coach_id} today={today} defaultResultId={result}
-          results={(results ?? []).map((row) => ({ id: row.id, performed_on: row.performed_on, title: row.workouts?.title ?? "Workout" }))}
+          results={options.map((row) => ({ id: row.id, performed_on: row.performed_on, title: row.workouts?.title ?? "Workout" }))}
           movements={movements ?? []}
         />
       </CardContent>
