@@ -14,6 +14,7 @@ const FILTERS = [
   { value: "pending", label: "Pending" },
   { value: "athlete", label: "Athlete changes" },
   { value: "decided", label: "Decided" },
+  { value: "ideas", label: "Food ideas" },
   { value: "failed", label: "Failed" },
 ] as const;
 
@@ -40,6 +41,7 @@ export default async function Page({ searchParams }: Props) {
       if (status === "pending") query = query.eq("status", "pending");
       else if (status === "athlete") query = query.eq("suggestion_type", "athlete_adjust_workout");
       else if (status === "failed") query = query.eq("status", "failed");
+      else if (status === "ideas") query = query.eq("status", "idea");
       else query = query.in("status", ["approved", "edited", "rejected"]);
       return query;
     })(),
@@ -50,7 +52,7 @@ export default async function Page({ searchParams }: Props) {
     ? await supabase.from("athletes").select("id, first_name, last_name").in("id", athleteIds)
     : { data: [] };
   const athleteNames = new Map((athletes ?? []).map((athlete) => [athlete.id, `${athlete.first_name} ${athlete.last_name}`]));
-  const emptyMessage = status === "pending" ? "There are no pending suggestions." : status === "athlete" ? "No athlete has adjusted a WOD yet." : status === "failed" ? "There are no failed suggestions." : "There are no decided suggestions.";
+  const emptyMessage = status === "pending" ? "There are no pending suggestions." : status === "athlete" ? "No athlete has adjusted a WOD yet." : status === "failed" ? "There are no failed suggestions." : status === "ideas" ? "No food ideas yet." : "There are no decided suggestions.";
 
   return (
     <>
