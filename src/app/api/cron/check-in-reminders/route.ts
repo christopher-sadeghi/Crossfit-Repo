@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { CHECK_IN_COLUMNS, isCheckIn } from "@/lib/check-in";
-import { reminderDue } from "@/lib/check-in-reminders";
+import { checkInReminderDecision, reminderDue } from "@/lib/check-in-reminders";
 import { pushNewNotifications } from "@/lib/push/send";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -47,8 +47,11 @@ export async function POST(request: Request) {
           admin.from("check_in_skips").select("athlete_id").in("athlete_id", ids).eq("skipped_on", localDate),
         ]);
         if (journals.error || skips.error) throw journals.error ?? skips.error;
-        const suppressed = new Set([...(journals.data ?? []).filter(isCheckIn), ...(skips.data ?? [])].map((row) => row.athlete_id));
-        const eligible = dueRows.filter((row) => !suppressed.has(row.athlete_id));
+        const checkedIn = new Set((journals.data ?? []).filter(isCheckIn).map((row) => row.athlete_id));
+        const skipped = new Set((skips.data ?? []).map((row) => row.athlete_id));
+        const eligible = dueRows.filter((row) => checkInReminderDecision({
+          reminder: row, now, hasCheckedIn: checkedIn.has(row.athlete_id), hasSkipped: skipped.has(row.athlete_id),
+        }).send);
         counts.suppressed += dueRows.length - eligible.length;
         if (!eligible.length) continue;
         const reserved = await admin.from("check_in_reminder_sends").upsert(
@@ -58,7 +61,9 @@ export async function POST(request: Request) {
         if (reserved.error) throw reserved.error;
         const created = new Set((reserved.data ?? []).map((row) => row.athlete_id));
         counts.alreadySent += eligible.length - created.size;
-        const recipients = eligible.filter((row) => created.has(row.athlete_id));
+        const recipients = eligible.filter((row) => checkInReminderDecision({
+          reminder: row, now, alreadySent: !created.has(row.athlete_id),
+        }).send);
         if (!recipients.length) continue;
         const notifications = await admin.from("notifications").insert(recipients.map((row) => ({
           recipient_id: row.athletes.user_id!, athlete_id: row.athlete_id, kind: "check_in_reminder",
