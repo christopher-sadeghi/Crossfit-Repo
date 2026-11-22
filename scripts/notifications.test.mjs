@@ -162,7 +162,7 @@ test("missed workouts uses one results batch and dedupes by latest missed day", 
   const { helpers, client, calls, queries } = fixture({
     athletes: [{ id: "a", first_name: "Alex", last_name: "A" }, { id: "b" }],
     schedules: { a: [...items, { date: "2026-11-20", removed: true, workout: { id: "removed" } }], b: items },
-    results: [{ athlete_id: "b", workout_id: "w19" }],
+    results: [{ athlete_id: "b", workout_id: "w19", performed_on: "2026-11-19" }],
   });
   await helpers.checkMissedWorkouts(client, { id: "coach" });
   assert.equal(queries.filter((table) => table === "workout_results").length, 1);
@@ -174,12 +174,26 @@ test("no athletes, insufficient schedule, completed source workouts and query er
   for (const options of [
     {},
     { athletes: [{ id: "a" }], schedules: { a: items.slice(1) } },
-    { athletes: [{ id: "a" }], schedules: { a: items.map((item) => ({ ...item, workout: { ...item.workout, source_workout_id: "source" } })) }, results: [{ athlete_id: "a", workout_id: "source" }] },
+    { athletes: [{ id: "a" }], schedules: { a: items.map((item) => ({ ...item, workout: { ...item.workout, source_workout_id: "source" } })) }, results: [{ athlete_id: "a", workout_id: "source", performed_on: "2026-11-19" }] },
     { queryError: { message: "denied" } },
   ]) {
     const { helpers, client, calls, errors } = fixture(options);
     await helpers.checkMissedWorkouts(client, { id: "coach" });
     assert.equal(calls.length, 0);
     assert.equal(errors.length, options.queryError ? 1 : 0);
+  }
+});
+
+test("missed-workout results must belong to the scheduled date window, including copied WOD sources", async () => {
+  for (const [index, performedOn, expected] of [[2, "2026-11-17", 1], [2, "2026-11-20", 0], [2, "2026-11-21", 0], [0, "2026-11-19", 1], [0, "2026-11-18", 0]]) {
+    for (const source of [false, true]) {
+      const schedule = items.map((item, i) => i === index && source ? { ...item, workout: { ...item.workout, source_workout_id: "source" } } : item);
+      const { helpers, client, calls } = fixture({
+        athletes: [{ id: "a" }], schedules: { a: schedule },
+        results: [{ athlete_id: "a", workout_id: source ? "source" : items[index].workout.id, performed_on: performedOn }],
+      });
+      await helpers.checkMissedWorkouts(client, { id: "coach" });
+      assert.equal(calls.length, expected, `${source ? "source" : "copy"}: ${index} / ${performedOn}`);
+    }
   }
 });

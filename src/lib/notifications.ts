@@ -104,12 +104,19 @@ export async function checkMissedWorkouts(supabase: Client, coach: { id: string 
       workout.source_workout_id ? [workout.id, workout.source_workout_id] : [workout.id])))];
     if (!workoutIds.length) return;
     const { data: results, error: resultError } = await supabase.from("workout_results")
-      .select("athlete_id, workout_id").in("athlete_id", athletes.map(({ id }) => id)).in("workout_id", workoutIds);
+      .select("athlete_id, workout_id, performed_on").in("athlete_id", athletes.map(({ id }) => id)).in("workout_id", workoutIds);
     if (resultError) throw resultError;
-    const completed = new Set((results ?? []).map((result) => `${result.athlete_id}:${result.workout_id}`));
+    const completed = new Map<string, string[]>();
+    for (const result of results ?? []) {
+      const key = `${result.athlete_id}:${result.workout_id}`;
+      completed.set(key, [...(completed.get(key) ?? []), result.performed_on]);
+    }
     await Promise.all(schedules.map(async ({ athlete, items }) => {
-      if (items.length !== 3 || items.some(({ workout }) => completed.has(`${athlete.id}:${workout.id}`) ||
-        (workout.source_workout_id && completed.has(`${athlete.id}:${workout.source_workout_id}`)))) return;
+      if (items.length !== 3 || items.some(({ workout, date }) => {
+        const nextDate = items.find((item) => item.date > date)?.date;
+        return [workout.id, workout.source_workout_id].some((id) => id &&
+          completed.get(`${athlete.id}:${id}`)?.some((performedOn) => performedOn >= date && (!nextDate || performedOn < nextDate)));
+      })) return;
       await notify(supabase, {
         athleteId: athlete.id, kind: "missed_workouts", title: `${athlete.first_name} ${athlete.last_name}: Three scheduled WODs missed`,
         body: `${athlete.first_name} ${athlete.last_name} has no results for their last three scheduled workouts.`,
