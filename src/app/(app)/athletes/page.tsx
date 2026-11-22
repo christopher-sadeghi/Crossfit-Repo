@@ -40,7 +40,7 @@ export default async function AthletesPage({ searchParams }: Props) {
     const like = `ilike."%${word}%"`;
     query = query.or(`first_name.${like},last_name.${like},email.${like}`);
   }
-  const [{ data: athletes = [] }, { data: invites = [] }, { data: results = [] }, checkInAttention] = await Promise.all([
+  const [athleteRows, inviteRows, resultRows, checkInAttention] = await Promise.all([
     query,
     supabase
       .from("athlete_invites")
@@ -55,6 +55,11 @@ export default async function AthletesPage({ searchParams }: Props) {
       .or("pain_notes.not.is.null,rpe.gte.9"),
     loadCheckInAttention(supabase, todayIso),
   ]);
+  const error = athleteRows.error ?? inviteRows.error ?? resultRows.error;
+  if (error) throw new Error("Couldn't load athletes.", { cause: error });
+  const { data: athletes } = athleteRows;
+  const { data: invites } = inviteRows;
+  const { data: results } = resultRows;
   const invitedAthletes = new Set((invites ?? []).map((invite) => invite.athlete_id));
   const attentionResults = new Map<string, typeof results>();
   for (const result of results ?? []) {

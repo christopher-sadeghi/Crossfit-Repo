@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_LOAD_WARNING_RATIO } from "@/lib/training-load";
 
 import { DemoDataCard } from "./demo-data-card";
+import { DemoDataSection } from "./demo-data-section";
 
 import { SettingsForm } from "./settings-form";
 import { AssistantSettings } from "./assistant-settings";
@@ -43,9 +44,9 @@ export default async function SettingsPage() {
           <p className="mt-1 text-sm text-muted-foreground">View pending, decided and failed AI suggestions.</p>
         </CardContent>
       </Card>
-      <div className="mt-6">
+      <DemoDataSection>
         <DemoDataCard hasAthletes={(count ?? 0) > 0} />
-      </div>
+      </DemoDataSection>
     </>
   );
 }

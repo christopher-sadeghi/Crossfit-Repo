@@ -111,10 +111,14 @@ export function notifyProgressReport(supabase: Client, athleteId: string, report
   });
 }
 
-export async function checkDriftingAthletes(supabase: Client, coach: { id: string; driftDays?: number }): Promise<void> {
+export async function checkDriftingAthletes(
+  supabase: Client,
+  coach: { id: string; driftDays?: number },
+  snapshot?: { today: string; athletes: Awaited<ReturnType<typeof loadDriftingAthletes>> },
+): Promise<void> {
   try {
-    const today = await getToday();
-    const athletes = await loadDriftingAthletes(supabase, coach.id, today, coach.driftDays);
+    const today = snapshot?.today ?? await getToday();
+    const athletes = snapshot?.athletes ?? await loadDriftingAthletes(supabase, coach.id, today, coach.driftDays);
     await Promise.all(athletes.flatMap(({ athlete, stats, reasons, daysSinceActivity, last30Rate, prev30Rate }) =>
       reasons.map((reason) => {
         const detail = reason === "inactive"
