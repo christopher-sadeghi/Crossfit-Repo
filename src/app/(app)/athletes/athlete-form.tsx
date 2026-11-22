@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { cmToFtIn } from "@/lib/height";
 import type { Tables } from "@/lib/supabase/database.types";
 
 import { saveAthlete } from "./actions";
@@ -17,8 +18,15 @@ const selectClass =
 
 export function AthleteForm({ athlete }: { athlete?: Tables<"athletes"> }) {
   const [state, formAction, pending] = useActionState(saveAthlete, {});
-  const v = (name: keyof Tables<"athletes">) =>
-    state.values?.[name] ?? (athlete?.[name] == null ? "" : String(athlete[name]));
+  const initialHeight = cmToFtIn(athlete?.height_cm);
+  const v = (name: keyof Tables<"athletes"> | "height_ft" | "height_in") => {
+    const submittedValue = state.values?.[name];
+    if (submittedValue !== undefined) return submittedValue;
+    if (name === "height_ft") return initialHeight?.ft.toString() ?? "";
+    if (name === "height_in") return initialHeight?.in.toString() ?? "";
+    const value = athlete?.[name];
+    return value == null ? "" : String(value);
+  };
 
   return (
     // Remount on each failed submit: React won't update a focused number input's value from new defaultValues.
@@ -45,8 +53,37 @@ export function AthleteForm({ athlete }: { athlete?: Tables<"athletes"> }) {
             <option value="other">Other</option>
           </select>
         </Field>
-        <Field label="Height (cm)" name="height_cm">
-          <Input id="height_cm" name="height_cm" type="number" step="0.5" defaultValue={v("height_cm")} />
+        <Field label="Height" name="height_ft">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex items-center gap-2">
+              <Input
+                id="height_ft"
+                name="height_ft"
+                type="number"
+                min={3}
+                max={8}
+                step={1}
+                placeholder="ft"
+                aria-label="Height in feet"
+                defaultValue={v("height_ft")}
+              />
+              <span className="text-sm text-muted-foreground">ft</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                id="height_in"
+                name="height_in"
+                type="number"
+                min={0}
+                max={11.5}
+                step={0.5}
+                placeholder="in"
+                aria-label="Height in inches"
+                defaultValue={v("height_in")}
+              />
+              <span className="text-sm text-muted-foreground">in</span>
+            </div>
+          </div>
         </Field>
         <Field label="Experience level *" name="experience_level">
           <select

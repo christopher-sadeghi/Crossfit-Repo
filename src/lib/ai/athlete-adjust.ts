@@ -4,6 +4,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { loadRecentCheckIns } from "@/lib/check-in";
+import { loadLiftMaxes } from "@/lib/benchmarks";
+import { formatLiftMaxes, LIFT_LOAD_RULE } from "./lift-context";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { formatScore, fromKgPrecise, toKg, type Units } from "@/lib/units";
 
@@ -23,6 +25,7 @@ import {
 
 const ATHLETE_ADJUST_SYSTEM = `You help a CrossFit athlete adjust today's WOD to how they feel. The change applies right away and their coach reviews it afterwards.
 Rules:
+- ${LIFT_LOAD_RULE}
 - Use recent_check_ins: readiness, sleep, soreness areas, stress, energy and mood. Lower readiness or high soreness means scale down and avoid sore areas.
 - You may only make the workout easier or safer: lighter loads, fewer reps, sets, or rounds, a longer time cap on a For Time WOD, a shorter AMRAP or EMOM, or easier substitutions. Never make anything harder.
 - If the athlete asks to make it harder, heavier, longer, or to add work, set asked_for_harder to true and copy the current values unchanged.
@@ -133,6 +136,7 @@ export async function buildAthleteAdjustRequest(
     feeling: params.feeling,
     mentions_pain: mentionsPain(params.feeling),
     athlete: {
+      lift_maxes: formatLiftMaxes(await loadLiftMaxes(supabase, athlete.id), units),
       id: athlete.id,
       first_name: athlete.first_name,
       experience_level: athlete.experience_level,

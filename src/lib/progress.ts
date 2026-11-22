@@ -1,5 +1,6 @@
 import type { Enums } from "@/lib/supabase/database.types";
 import { formatWeight, type Units } from "@/lib/units";
+import type { LiftMax } from "@/lib/benchmarks";
 
 /** How a goal's current value is worked out. Derived from the goal's metric, unit and movement. */
 export const TRACKING = ["body_weight", "body_fat", "max_load", "max_reps", "manual"] as const;
@@ -67,11 +68,15 @@ function movementScore(r: MovementResult, movementId: string, kind: "load" | "re
   return value == null ? null : Number(value);
 }
 
-export function bestForMovement(results: MovementResult[], movementId: string, kind: "load" | "reps") {
+export function bestForMovement(results: MovementResult[], movementId: string, kind: "load" | "reps", liftMaxes: LiftMax[] = []) {
   let best: number | null = null;
   for (const r of results) {
     const v = movementScore(r, movementId, kind);
     if (v != null && (best == null || v > best)) best = v;
+  }
+  if (kind === "load") {
+    const lift = liftMaxes.find((l) => l.movement_id === movementId)?.bestLoadKg;
+    if (lift != null && (best == null || lift > best)) best = lift;
   }
   return best;
 }
@@ -87,7 +92,7 @@ export function loadPrsByMovement(results: MovementResult[]) {
   return best;
 }
 
-export function goalProgress(goal: GoalLike, data: { metrics: MetricRow[]; results: MovementResult[] }) {
+export function goalProgress(goal: GoalLike, data: { metrics: MetricRow[]; results: MovementResult[]; liftMaxes?: LiftMax[] }) {
   const tracking = trackingOf(goal);
   const current =
     tracking === "body_weight"
@@ -95,7 +100,7 @@ export function goalProgress(goal: GoalLike, data: { metrics: MetricRow[]; resul
       : tracking === "body_fat"
         ? numberOrNull(latestMetric(data.metrics, "body_fat_pct")?.body_fat_pct)
         : tracking === "max_load" || tracking === "max_reps"
-          ? bestForMovement(data.results, goal.movement_id!, tracking === "max_load" ? "load" : "reps")
+          ? bestForMovement(data.results, goal.movement_id!, tracking === "max_load" ? "load" : "reps", data.liftMaxes)
           : null;
 
   const { start_value: start, target_value: target } = goal;
