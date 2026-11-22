@@ -41,7 +41,7 @@ export default async function SettingsPage() {
           <p className="mt-1 text-sm text-muted-foreground">View pending, decided and failed AI suggestions.</p>
         </CardContent>
       </Card>
-      <div className="mt-6">
+      <div id="demo-data" className="mt-6">
         <DemoDataCard hasAthletes={(count ?? 0) > 0} />
       </div>
     </>

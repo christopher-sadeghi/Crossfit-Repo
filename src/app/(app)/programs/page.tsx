@@ -12,10 +12,11 @@ import { ProgramsNav } from "./programs-nav";
 
 export default async function ProgramsPage() {
   const supabase = await createClient();
-  const { data: programs } = await supabase
+  const { data: programs, error } = await supabase
     .from("programs")
     .select("id, name, description, weeks, athlete_id, athletes(first_name, last_name), workouts(count), program_assignments(count)")
     .order("created_at", { ascending: false });
+  if (error) throw new Error("Couldn't load programs.", { cause: error });
   const groupPrograms = (programs ?? []).filter((program) => !program.athlete_id);
   const personalPrograms = (programs ?? []).filter((program) => program.athlete_id);
 

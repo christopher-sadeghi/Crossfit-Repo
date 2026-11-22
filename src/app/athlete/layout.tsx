@@ -56,7 +56,7 @@ export default async function AthleteLayout({
           </form>
         </div>
       </aside>
-      <main className="mx-auto max-w-md px-4 pt-5 pb-24 md:mx-0 md:max-w-none md:flex-1 md:overflow-x-hidden md:p-8">
+      <main className="mx-auto min-w-0 max-w-md px-4 pt-5 pb-24 md:mx-0 md:max-w-none md:flex-1 md:overflow-x-hidden md:p-8">
         <header className="mb-6 flex items-center justify-between gap-4 md:hidden">
           <div className="min-w-0">
             <div className="flex items-center gap-2 truncate font-semibold">
