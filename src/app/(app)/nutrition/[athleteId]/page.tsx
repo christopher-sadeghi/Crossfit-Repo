@@ -7,11 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FoodIdeaList, FoodPreferencesForm, SuggestFoodForm } from "@/components/nutrition/food-ideas";
+import { FoodLogger } from "@/components/nutrition/food-logger";
 import { RequestMacroSuggestionForm } from "@/components/suggestions/suggestion-forms";
 import { FOOD_DISCLAIMER } from "@/lib/ai/suggest-food";
 import { MACRO_DISCLAIMER } from "@/lib/ai/suggestions";
 import { cookingLabel, DIET_LABELS, readPreferences } from "@/lib/food-preferences";
 import { latestFoodIdeas } from "@/lib/food-ideas";
+import { loadFoodLibrary } from "@/lib/food-library";
 import { addDays, MEALS, onTarget, targetOn, totals, type Macros } from "@/lib/nutrition";
 import { getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
@@ -31,18 +33,19 @@ export default async function AthleteNutritionPage({ params, searchParams }: Pro
   const week = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   const supabase = await createClient();
-  const [{ data: athlete }, { data: targets }, { data: food }, { data: prefsRow }, ideas] = await Promise.all([
+  const [{ data: athlete }, { data: targets }, { data: food }, { data: prefsRow }, ideas, library] = await Promise.all([
     supabase.from("athletes").select("id, first_name, last_name").eq("id", athleteId).maybeSingle(),
     supabase.from("nutrition_targets").select("id, calories, protein_g, carbs_g, fat_g, start_date, end_date, notes").eq("athlete_id", athleteId).order("start_date", { ascending: false }),
     supabase
       .from("food_logs")
-      .select("id, logged_on, meal, food_name, calories, protein_g, carbs_g, fat_g")
+      .select("id, logged_on, meal, food_name, serving, calories, protein_g, carbs_g, fat_g")
       .eq("athlete_id", athleteId)
       .gte("logged_on", weekStart)
       .lte("logged_on", date)
       .order("created_at"),
     supabase.from("athlete_food_preferences").select("diet_type, allergies, dislikes, cooking_minutes").eq("athlete_id", athleteId).maybeSingle(),
     latestFoodIdeas(supabase, athleteId, date),
+    loadFoodLibrary(supabase, athleteId, now),
   ]);
   if (!athlete) notFound();
 
@@ -194,7 +197,7 @@ export default async function AthleteNutritionPage({ params, searchParams }: Pro
             <CardTitle>Add food</CardTitle>
           </CardHeader>
           <CardContent>
-            <AddFoodForm athleteId={athlete.id} date={date} />
+            <FoodLogger key={`${athlete.id}:${date}`} athleteId={athlete.id} date={date} allergies={prefs.allergies} {...library} todayEntries={entries} manual={<AddFoodForm athleteId={athlete.id} date={date} />} />
           </CardContent>
         </Card>
       </section>

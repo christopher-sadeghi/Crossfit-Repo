@@ -524,6 +524,7 @@ export type Database = {
           logged_on: string;
           meal: Database["public"]["Enums"]["meal_type"];
           protein_g: number;
+          serving: string | null;
         };
         ComputedFields: never;
         Insert: {
@@ -539,6 +540,7 @@ export type Database = {
           logged_on?: string;
           meal: Database["public"]["Enums"]["meal_type"];
           protein_g?: number;
+          serving?: string | null;
         };
         Update: {
           ai_suggestion_id?: string | null;
@@ -553,6 +555,7 @@ export type Database = {
           logged_on?: string;
           meal?: Database["public"]["Enums"]["meal_type"];
           protein_g?: number;
+          serving?: string | null;
         };
         Relationships: [
           {
@@ -571,6 +574,82 @@ export type Database = {
           },
           {
             foreignKeyName: "food_logs_coach_id_fkey";
+            columns: ["coach_id"];
+            isOneToOne: false;
+            referencedRelation: "coaches";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      saved_foods: {
+        Row: {
+          id: string;
+          athlete_id: string;
+          coach_id: string;
+          kind: string;
+          is_favorite: boolean;
+          name: string;
+          brand: string | null;
+          serving_label: string;
+          calories: number;
+          protein_g: number;
+          carbs_g: number;
+          fat_g: number;
+          ingredients: string | null;
+          source: string;
+          source_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          id?: string;
+          athlete_id: string;
+          coach_id?: string;
+          kind: string;
+          is_favorite?: boolean;
+          name: string;
+          brand?: string | null;
+          serving_label: string;
+          calories: number;
+          protein_g: number;
+          carbs_g: number;
+          fat_g: number;
+          ingredients?: string | null;
+          source: string;
+          source_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          athlete_id?: string;
+          coach_id?: string;
+          kind?: string;
+          is_favorite?: boolean;
+          name?: string;
+          brand?: string | null;
+          serving_label?: string;
+          calories?: number;
+          protein_g?: number;
+          carbs_g?: number;
+          fat_g?: number;
+          ingredients?: string | null;
+          source?: string;
+          source_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "saved_foods_athlete_id_coach_id_fkey";
+            columns: ["athlete_id", "coach_id"];
+            isOneToOne: false;
+            referencedRelation: "athletes";
+            referencedColumns: ["id", "coach_id"];
+          },
+          {
+            foreignKeyName: "saved_foods_coach_id_fkey";
             columns: ["coach_id"];
             isOneToOne: false;
             referencedRelation: "coaches";

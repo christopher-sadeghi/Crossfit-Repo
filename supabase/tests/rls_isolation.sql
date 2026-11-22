@@ -361,4 +361,64 @@ end $$;
 
 select 'rls_isolation: all checks passed' as result;
 
+-- Saved food library (FIT-34).
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000a"}', true);
+insert into public.saved_foods (id, athlete_id, kind, name, serving_label, calories, protein_g, carbs_g, fat_g, source)
+values ('00000000-0000-0000-0000-0000000000f9', '00000000-0000-0000-0000-0000000000a1', 'custom', 'Banana', '1 banana', 100, 1, 25, 0, 'custom');
+do $$ begin
+  assert (select count(*) from public.saved_foods) = 1, 'coach reads own food';
+  update public.saved_foods set calories = 101;
+  assert found, 'coach updates own food';
+end $$;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000b"}', true);
+do $$ begin
+  assert (select count(*) from public.saved_foods) = 0, 'other coach cannot read';
+  update public.saved_foods set calories = 999;
+  assert not found, 'other coach cannot update';
+  delete from public.saved_foods;
+  assert not found, 'other coach cannot delete';
+  begin
+    insert into public.saved_foods (coach_id, athlete_id, kind, name, serving_label, calories, protein_g, carbs_g, fat_g, source)
+    values ('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-0000000000a1', 'custom', 'Bad', '1', 1, 0, 0, 0, 'custom');
+    raise exception 'other coach inserted';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000b4"}', true);
+do $$ begin
+  assert (select count(*) from public.saved_foods) = 0, 'other athlete cannot read';
+  update public.saved_foods set calories = 999;
+  assert not found, 'other athlete cannot update';
+  delete from public.saved_foods;
+  assert not found, 'other athlete cannot delete';
+  begin
+    insert into public.saved_foods (coach_id, athlete_id, kind, name, serving_label, calories, protein_g, carbs_g, fat_g, source)
+    values ('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-0000000000a1', 'custom', 'Bad', '1', 1, 0, 0, 0, 'custom');
+    raise exception 'other athlete inserted';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000000a4"}', true);
+do $$ begin
+  assert (select count(*) from public.saved_foods) = 1, 'athlete reads own food';
+  update public.saved_foods set calories = 102;
+  assert found, 'athlete updates own food';
+  begin
+    update public.saved_foods set coach_id = '00000000-0000-0000-0000-00000000000b';
+    raise exception 'athlete moved food to other coach';
+  exception when insufficient_privilege then null;
+  end;
+  delete from public.saved_foods;
+  assert found, 'athlete deletes own food';
+end $$;
+insert into public.saved_foods (athlete_id, coach_id, kind, name, serving_label, calories, protein_g, carbs_g, fat_g, source)
+values ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-00000000000a', 'custom', 'Yogurt', '100 g', 60, 10, 4, 0, 'custom');
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-00000000000a"}', true);
+do $$ begin
+  delete from public.saved_foods;
+  assert found, 'coach deletes own food';
+  assert not has_table_privilege('authenticated', 'public.saved_foods', 'TRUNCATE'), 'no truncate privilege';
+  assert not has_table_privilege('anon', 'public.saved_foods', 'SELECT'), 'no anonymous reads';
+end $$;
+select 'saved_foods coach/athlete CRUD and isolation passed' as result;
 rollback;

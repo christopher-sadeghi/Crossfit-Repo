@@ -1,9 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import type { FormState } from "@/lib/auth/form-state";
+import { actor, revalidateFood } from "@/lib/food-actor";
 import { foodPreferencesFormSchema, readPreferences } from "@/lib/food-preferences";
 import { MEALS } from "@/lib/nutrition";
 import { createClient } from "@/lib/supabase/server";
@@ -17,24 +17,6 @@ import { buildFoodRequest, foodIdeasInputSchema, foodIdeasSchema, ideaText, remo
 const idSchema = z.string().uuid();
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const NOT_ALLOWED = "You can't change food for this athlete.";
-
-/** Coaches act for their athletes (RLS checks ownership); athletes only for themselves. */
-async function actor(athleteId: string) {
-  const viewer = await getViewer();
-  if (!idSchema.safeParse(athleteId).success) return null;
-  if (viewer?.kind === "coach") return { athleteId, coachId: viewer.id, isAthlete: false };
-  if (viewer?.kind === "athlete" && viewer.athleteId === athleteId) return { athleteId, coachId: viewer.coachId, isAthlete: true };
-  return null;
-}
-
-function revalidateFood(athleteId: string, suggestionId?: string) {
-  revalidatePath(`/nutrition/${athleteId}`);
-  revalidatePath("/nutrition");
-  revalidatePath(`/athletes/${athleteId}`);
-  revalidatePath("/athlete/nutrition");
-  revalidatePath("/suggestions");
-  if (suggestionId) revalidatePath(`/suggestions/${suggestionId}`);
-}
 
 export async function saveFoodPreferences(athleteId: string, _: FormState, formData: FormData): Promise<FormState> {
   const who = await actor(athleteId);
