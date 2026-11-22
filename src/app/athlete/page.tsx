@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CHECK_WITH_COACH_MESSAGE } from "@/lib/ai/athlete-adjust-copy";
 import { scaleWorkoutDetailsSchema } from "@/lib/ai/scale-workout";
 import { SCHEDULE_LABEL, loadAthleteSchedule } from "@/lib/athlete-schedule";
 import { getToday } from "@/lib/time-zone";
@@ -15,6 +16,7 @@ import { getViewer } from "@/lib/viewer";
 
 import { formatHeadline, formatMovementLine, Whiteboard, type WhiteboardWorkout } from "../(app)/programs/workouts/whiteboard";
 import { AthleteResultForm } from "./log/[workoutId]/result-form";
+import { AdjustWorkoutForm } from "./adjust-form";
 import { ScrollIntoView } from "./scroll-into-view";
 
 type TodayWorkout = WhiteboardWorkout & {
@@ -107,7 +109,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
   const { data: scalings } = todayWorkoutIds.length
     ? await supabase
         .from("athlete_workout_scalings")
-        .select("workout_id, modifications, details")
+        .select("workout_id, modifications, details, athlete_adjusted_at, coach_modifications")
         .eq("athlete_id", viewer.athleteId)
         .in("workout_id", todayWorkoutIds)
     : { data: [] };
@@ -138,6 +140,16 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
             const scaling = scalingByWorkout.get(workout.id);
             const scalingDetails = scaling ? scaleWorkoutDetailsSchema.safeParse(scaling.details) : null;
             const todayResult = todayResultForWorkout(workout);
+            const adjusted = Boolean(scaling?.athlete_adjusted_at);
+            const adjustedDetails = adjusted && scalingDetails?.success ? scalingDetails.data : null;
+            const adjustedHeadline = adjustedDetails
+              ? formatHeadline({
+                  workout_type: workout.workout_type,
+                  rounds: adjustedDetails.rounds === undefined ? workout.rounds : adjustedDetails.rounds,
+                  time_cap_seconds:
+                    adjustedDetails.time_cap_seconds === undefined ? workout.time_cap_seconds : adjustedDetails.time_cap_seconds,
+                })
+              : "";
 
             return (
               <div key={workout.id} className="grid gap-3">
@@ -146,10 +158,23 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                 {scaling && (
                   <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">Your scaling</CardTitle>
+                      <CardTitle className="text-sm">{adjusted ? "Your adjusted version" : "Your scaling"}</CardTitle>
+                      {adjusted && (
+                        <p className="text-xs text-muted-foreground">
+                          Adjusted by the AI for you today. Your coach has been told and can change or undo it.
+                        </p>
+                      )}
                     </CardHeader>
                     <CardContent className="grid gap-3 text-sm">
+                      {adjustedHeadline && adjustedHeadline !== formatHeadline(workout) && (
+                        <p className="font-medium">{adjustedHeadline}</p>
+                      )}
                       <p className="whitespace-pre-line">{scaling.modifications}</p>
+                      {adjustedDetails?.check_with_coach && (
+                        <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+                          {CHECK_WITH_COACH_MESSAGE}
+                        </p>
+                      )}
                       {scalingDetails?.success && (
                         <ul className="grid gap-2">
                           {scalingDetails.data.movements.map((movement, index) => (
@@ -169,6 +194,19 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                           ))}
                         </ul>
                       )}
+                      {adjusted && scaling.coach_modifications && (
+                        <p className="text-xs text-muted-foreground">Your coach&apos;s scaling was: {scaling.coach_modifications}</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+                {!todayResult && (
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">Not feeling 100%?</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <AdjustWorkoutForm workoutId={workout.id} adjusted={Boolean(scaling)} />
                     </CardContent>
                   </Card>
                 )}

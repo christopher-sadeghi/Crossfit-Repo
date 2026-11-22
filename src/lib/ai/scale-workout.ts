@@ -4,13 +4,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { WORKOUT_TYPES } from "@/app/(app)/programs/options";
 import { formatScore, fromKgPrecise, toKg, type Units } from "@/lib/units";
 import type { Database, Json, Tables } from "@/lib/supabase/database.types";
-import { today } from "@/lib/program-dates";
+import { getToday } from "@/lib/time-zone";
 
 import { ApprovalError } from "./errors";
 import { ageOn, loadWorkoutContext } from "./workout-context";
 import { movementIdSchema } from "./movement-schema";
 
-const scaleWorkoutChangeSchema = z.object({
+export const scaleWorkoutChangeSchema = z.object({
   original_movement_id: z.string(),
   movement_id: z.string(),
   sets: z.number().int().min(1).max(100).nullable(),
@@ -139,6 +139,10 @@ export const scaleWorkoutDetailsSchema = z.object({
       reason: z.string(),
     }),
   ),
+  requested_by: z.literal("athlete").optional(),
+  rounds: z.number().nullable().optional(),
+  time_cap_seconds: z.number().nullable().optional(),
+  check_with_coach: z.boolean().optional(),
 });
 
 const SCALE_WORKOUT_SYSTEM = `You help a CrossFit coach scale a WOD for one athlete. The coach reviews every suggestion before anything changes.
@@ -186,7 +190,7 @@ export async function buildScaleRequest(
   if (workoutError || !workout) throw workoutError ?? new Error("Workout not found.");
   if (resultsError) throw resultsError;
 
-  const asOf = today();
+  const asOf = await getToday();
   const athleteContext = {
     id: athlete.id,
     first_name: athlete.first_name,
@@ -311,6 +315,10 @@ export async function applyScaleSuggestion(
         athlete_id: suggestion.athlete_id,
         modifications: parsed.summary,
         details,
+        athlete_suggestion_id: null,
+        athlete_adjusted_at: null,
+        coach_modifications: null,
+        coach_details: null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "workout_id,athlete_id" },
