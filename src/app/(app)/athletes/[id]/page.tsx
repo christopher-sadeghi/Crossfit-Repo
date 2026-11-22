@@ -45,13 +45,14 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const coach = await getCoach();
   const units: Units = coach?.units ?? "lb";
 
-  const now = await getToday();
-  const sinceDate = new Date(`${now}T00:00:00Z`);
+  const today = await getToday();
+  const now = today;
+  const sinceDate = new Date(`${today}T00:00:00Z`);
   sinceDate.setUTCDate(sinceDate.getUTCDate() - 6);
   const since = sinceDate.toISOString().slice(0, 10);
-  const scheduleFromDate = new Date(`${now}T00:00:00Z`);
+  const scheduleFromDate = new Date(`${today}T00:00:00Z`);
   scheduleFromDate.setUTCDate(scheduleFromDate.getUTCDate() - 7);
-  const scheduleToDate = new Date(`${now}T00:00:00Z`);
+  const scheduleToDate = new Date(`${today}T00:00:00Z`);
   scheduleToDate.setUTCDate(scheduleToDate.getUTCDate() + 14);
   const scheduleFrom = scheduleFromDate.toISOString().slice(0, 10);
   const scheduleTo = scheduleToDate.toISOString().slice(0, 10);
@@ -68,6 +69,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
     groupProgramsRes,
     athleteAssignmentsRes,
     journalRes,
+    checkInsRes,
   ] = await Promise.all([
     supabase.from("athletes").select("*").eq("id", id).maybeSingle(),
     supabase.from("body_metrics").select("measured_on, weight_kg, body_fat_pct").eq("athlete_id", id).order("measured_on", { ascending: false }),
@@ -108,6 +110,13 @@ export default async function AthletePage({ params, searchParams }: Props) {
       .eq("athlete_id", id)
       .order("entry_on", { ascending: false })
       .limit(30),
+    supabase
+      .from("athlete_journal_entries")
+      .select(CHECK_IN_COLUMNS)
+      .eq("athlete_id", id)
+      .gte("entry_on", addDays(today, -55))
+      .lte("entry_on", today)
+      .order("entry_on", { ascending: false }),
   ]);
 
   const athlete = athleteRes.data;
@@ -116,12 +125,17 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const latestWeight = latestMetric(metrics, "weight_kg");
   const results = resultsRes.data ?? [];
   const prs = personalRecords(results);
-  const today = now;
-  const { data: checkIns, error: checkInsError } = await supabase.from("athlete_journal_entries").select(CHECK_IN_COLUMNS).eq("athlete_id", id).gte("entry_on", addDays(today, -55)).lte("entry_on", today).order("entry_on", { ascending: false });
-  if (checkInsError) throw checkInsError;
+  const checkIns = checkInsRes.data ?? [];
+  if (checkInsRes.error) throw checkInsRes.error;
   const workoutAttention = needsAttention(results, today);
-  const checkAttention = checkInAttention(checkIns ?? [], today);
-  const attention = { flagged: workoutAttention.flagged || checkAttention.flagged, reasons: [...workoutAttention.reasons, ...checkAttention.reasons.map((text) => ({ date: today, kind: "check-in" as const, text }))] };
+  const checkAttention = checkInAttention(checkIns, today);
+  const attention = {
+    flagged: workoutAttention.flagged || checkAttention.flagged,
+    reasons: [
+      ...workoutAttention.reasons,
+      ...checkAttention.reasons.map((text) => ({ date: today, kind: "check-in" as const, text })),
+    ],
+  };
   const target = targetRes.data;
   const invite = inviteRes.data;
   const inviteUrl = invite ? `${await getOrigin()}/join/${invite.token}` : null;
@@ -201,7 +215,8 @@ export default async function AthletePage({ params, searchParams }: Props) {
                     <li key={`${reason.date}-${reason.kind}-${index}`} className="flex flex-wrap gap-x-2">
                       <span className="font-medium">{formatDate(reason.date)}</span>
                       <span>
-                        {reason.kind === "pain" ? "Pain noted" : reason.kind === "check-in" ? "Check-in" : "High effort"}: {reason.text}
+                        {reason.kind === "pain" ? "Pain noted" : reason.kind === "check-in" ? "Check-in" : "High effort"}
+                        : {reason.text}
                       </span>
                     </li>
                   ))}
@@ -371,7 +386,9 @@ export default async function AthletePage({ params, searchParams }: Props) {
           </ListCard>
         </TabsContent>
 
-        <TabsContent value="check-ins"><CheckInsTab entries={checkIns ?? []} today={today} /></TabsContent>
+        <TabsContent value="check-ins">
+          <CheckInsTab entries={checkIns} today={today} />
+        </TabsContent>
         <TabsContent value="journal" className="grid gap-4">
           <ListCard title="Daily journal" empty="No journal entries yet. Athletes fill these in from their Journal tab." show={journal.length > 0}>
             <Table>

@@ -32,7 +32,7 @@ type Units = "lb" | "kg";
 const CHAT_SYSTEM = `You are the programming assistant for a CrossFit coach. You talk to the coach, not to athletes.
 
 Rules:
-- Use recent_check_ins: readiness, sleep, soreness areas, stress, energy and mood. Lower readiness or high soreness means scale down and avoid sore areas.
+- Use the tool outputs' last_7_days average_readiness, latest_readiness and needs_attention, plus recent_check_ins readiness, sleep, soreness areas, stress, energy and mood. Lower readiness or high soreness means scale down and avoid sore areas.
 - Only use real data from your tools. Never invent athletes, results, PRs, injuries, goals or workouts. If data is missing, say so.
 - Look data up before answering questions about athletes, programs or workouts.
 - Only use movements from the coach's movement library (listed below). Never suggest other movements.
@@ -72,7 +72,12 @@ async function listAthletes(supabase: Supabase, today: string) {
         .select("athlete_id, performed_on, rpe, energy, sleep_hours, soreness, pain_notes")
         .gte("performed_on", since)
         .lte("performed_on", today),
-      supabase.from("athlete_journal_entries").select("athlete_id, entry_on, sleep_hours, stress, soreness, readiness").gte("entry_on", since).lte("entry_on", today).order("entry_on", { ascending: false }),
+      supabase
+        .from("athlete_journal_entries")
+        .select("athlete_id, entry_on, sleep_hours, stress, soreness, readiness")
+        .gte("entry_on", since)
+        .lte("entry_on", today)
+        .order("entry_on", { ascending: false }),
     ]);
   if (error) throw error;
   if (resultsError) throw resultsError;
@@ -82,8 +87,15 @@ async function listAthletes(supabase: Supabase, today: string) {
     const days = (journal ?? []).filter((j) => j.athlete_id === athlete.id);
     // One sleep value per night: the journal entry if there is one, otherwise the first result that day.
     const sleepByNight = new Map<string, number | null>();
-    for (const j of days) if (j.sleep_hours != null) sleepByNight.set(j.entry_on, j.sleep_hours);
-    for (const r of week) if (r.sleep_hours != null && !sleepByNight.has(r.performed_on)) sleepByNight.set(r.performed_on, r.sleep_hours);
+    for (const entry of days) {
+      if (entry.sleep_hours != null) sleepByNight.set(entry.entry_on, entry.sleep_hours);
+    }
+    for (const result of week) {
+      if (result.sleep_hours != null && !sleepByNight.has(result.performed_on)) {
+        sleepByNight.set(result.performed_on, result.sleep_hours);
+      }
+    }
+    const soreness = [...week, ...days].flatMap((entry) => entry.soreness == null ? [] : [entry.soreness]);
     return {
       athlete_id: athlete.id,
       name: `${athlete.first_name} ${athlete.last_name}`,
@@ -97,7 +109,7 @@ async function listAthletes(supabase: Supabase, today: string) {
         max_rpe: week.length ? Math.max(...week.map((r) => r.rpe ?? 0)) || null : null,
         average_energy: average(week.map((r) => r.energy)),
         average_sleep_hours: average([...sleepByNight.values()]),
-        max_soreness: days.length ? Math.max(...days.map((r) => r.soreness ?? 0)) || null : null,
+        max_soreness: soreness.length ? Math.max(...soreness) : null,
         average_readiness: average(days.map((j) => j.readiness)),
         latest_readiness: days[0]?.readiness ?? null,
         needs_attention: checkInAttention(days, today).flagged,
@@ -115,6 +127,7 @@ async function getAthlete(supabase: Supabase, athleteId: string, today: string, 
     { data: goals },
     { data: results },
     { data: journal },
+    recentCheckIns,
   ] = await Promise.all([
     supabase
       .from("athletes")
@@ -140,10 +153,12 @@ async function getAthlete(supabase: Supabase, athleteId: string, today: string, 
       .order("performed_on", { ascending: false }),
     supabase
       .from("athlete_journal_entries")
-      .select("entry_on, sleep_hours, sleep_quality, alcohol, late_caffeine, stress, mobility, notes")
+      .select("entry_on, alcohol, late_caffeine, hit_water_goal, late_meal, screens_in_bed, mobility")
       .eq("athlete_id", athleteId)
       .gte("entry_on", addDays(today, -13))
+      .lte("entry_on", today)
       .order("entry_on", { ascending: false }),
+    loadRecentCheckIns(supabase, athleteId, today, 7),
   ]);
   if (error) throw error;
   if (!athlete) return { error: "Athlete not found." };
@@ -159,7 +174,7 @@ async function getAthlete(supabase: Supabase, athleteId: string, today: string, 
   const kgValue = (value: number | null, unit: string | null) => (unit === "kg" ? load(value, units) : value);
 
   return {
-    recent_check_ins: await loadRecentCheckIns(supabase, athleteId, today, 7),
+    recent_check_ins: recentCheckIns,
     athlete_id: athlete.id,
     name: `${athlete.first_name} ${athlete.last_name}`,
     experience_level: athlete.experience_level,

@@ -229,9 +229,9 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
   };
 }
 
-const WRITE_WORKOUT_SYSTEM = `- Use recent_check_ins: readiness, sleep, soreness areas, stress, energy and mood. Lower readiness or high soreness means scale down and avoid sore areas.
-You help a CrossFit coach program WODs. The coach reviews every suggestion before anything changes.
+const WRITE_WORKOUT_SYSTEM = `You help a CrossFit coach program WODs. The coach reviews every suggestion before anything changes.
 Rules:
+- Use recent_check_ins: readiness, sleep, soreness areas, stress, energy and mood. Lower readiness or high soreness means scale down and avoid sore areas.
 - Use ONLY movements from the provided library list, referenced by movement_id. Never invent movements.
 - Loads are in the coach's preferred units (<units>). Use realistic barbell, dumbbell, and kettlebell numbers (Rx loads for an intermediate athlete unless the request says otherwise).
 - Set fields that do not apply to null.

@@ -40,9 +40,9 @@ export const progressSummaryInputSchema = z.object({
   goals: z.array(z.object({ id: z.string(), title: z.string() })),
 });
 
-const SYSTEM = `- Use recent_check_ins: readiness, sleep, soreness areas, stress, energy and mood. Lower readiness or high soreness means scale down and avoid sore areas.
-You help a CrossFit coach write a short progress note about one athlete. The coach reviews the note before it is saved.
+const SYSTEM = `You help a CrossFit coach write a short progress note about one athlete. The coach reviews the note before it is saved.
 Rules:
+- Mention recovery trends from recent_check_ins and check-in averages: readiness, sleep, soreness, stress, energy and mood. Cite only the available data.
 - Use only the data provided. Do not invent numbers.
 - Return one entry per goal in the goals list, using its id. Status: "reached" if achieved or the target is met; "on_track" if the current value and pace look likely to hit the target by its date; "behind" if not; "no_data" if there is no current value or start value to judge from.
 - Each goal note is one plain-English sentence that cites the numbers (start, current, target, date) exactly as given. If a value is null, say it hasn't been logged yet; never write "null".
@@ -127,10 +127,15 @@ async function buildRequest(supabase: SupabaseClient<Database>, { athleteId }: {
   const trend = weightTrend(recentWeights);
 
   const recentCheckIns = await loadRecentCheckIns(supabase, athleteId, asOf, 28);
-  const checkInAverages = Object.fromEntries((["readiness", "sleep_hours", "soreness", "stress", "energy", "mood"] as const).map((key) => {
-    const values = recentCheckIns.flatMap((entry) => entry[key] == null ? [] : [Number(entry[key])]);
-    return [key, values.length ? Math.round(values.reduce((a, b) => a + b, 0) / values.length * 10) / 10 : null];
-  }));
+  const checkInAverages = Object.fromEntries(
+    (["readiness", "sleep_hours", "soreness", "stress", "energy", "mood"] as const).map((key) => {
+      const values = recentCheckIns.flatMap((entry) => entry[key] == null ? [] : [Number(entry[key])]);
+      const average = values.length
+        ? Math.round(values.reduce((a, b) => a + b, 0) / values.length * 10) / 10
+        : null;
+      return [key, average];
+    }),
+  );
   const promptData = {
     recent_check_ins: recentCheckIns.filter((entry) => entry.date >= addDays(asOf, -6)),
     check_in_averages_last_28_days: checkInAverages,

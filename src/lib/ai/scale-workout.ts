@@ -159,9 +159,9 @@ export const scaleWorkoutDetailsSchema = z.object({
   scheduled_on: z.string().optional(),
 });
 
-const SCALE_WORKOUT_SYSTEM = `- Use recent_check_ins: readiness, sleep, soreness areas, stress, energy and mood. Lower readiness or high soreness means scale down and avoid sore areas.
-You help a CrossFit coach scale a WOD for one athlete. The coach reviews every suggestion before anything changes.
+const SCALE_WORKOUT_SYSTEM = `You help a CrossFit coach scale a WOD for one athlete. The coach reviews every suggestion before anything changes.
 Rules:
+- Use recent_check_ins: readiness, sleep, soreness areas, stress, energy and mood. Lower readiness or high soreness means scale down and avoid sore areas.
 - Keep the WOD's stimulus and format.
 - Return exactly one change for each original movement, in the same order. Copy its original_movement_id exactly.
 - Use only movement IDs from the provided library. Keep the original movement by using the same movement_id; substitute only with a library movement.

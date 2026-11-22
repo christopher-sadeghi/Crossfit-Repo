@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
@@ -17,12 +17,44 @@ function load(relative, overrides = {}) {
     compilerOptions: { target: ts.ScriptTarget.ES2017, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
     fileName: filename,
   }).outputText;
-  const localRequire = (id) => overrides[id] ?? (id.startsWith("@/") ? load(`src/${id.slice(2)}.ts`, overrides) : require(id));
+  const localRequire = (id) => {
+    if (overrides[id]) return overrides[id];
+    if (!id.startsWith("@/")) return require(id);
+    const filename = `src/${id.slice(2)}`;
+    return load(existsSync(path.resolve(root, filename + ".ts")) ? filename + ".ts" : filename + ".tsx", overrides);
+  };
   new Function("require", "module", "exports", js)(localRequire, loaded, loaded.exports);
   return loaded.exports;
 }
 const { readinessScore, readinessLabel, checkInAttention, loadRecentCheckIns, loadCheckInAttention } = load("src/lib/check-in.ts");
 const sample = { sleep_hours: 7.5, sleep_quality: 4, soreness: 2, stress: 2, energy: 4, mood: 4 };
+test("coach check-in sections render empty states, readable dates and directional recovery trends", () => {
+  const { createElement } = require("react");
+  const { renderToStaticMarkup } = require("react-dom/server");
+  const { CheckInsTab } = load("src/app/(app)/athletes/[id]/check-ins-tab.tsx");
+  const empty = renderToStaticMarkup(createElement(CheckInsTab, { entries: [], today: "2026-03-01" }));
+  assert.match(empty, /No complete check-in yet/);
+  assert.match(empty, /No check-ins yet/);
+  assert.match(empty, /No comparison/);
+  const entry = (entry_on, values) => ({
+    athlete_id: "a", entry_on, ...sample, soreness_areas: ["quads"], readiness: 78, notes: null, ...values,
+  });
+  const html = renderToStaticMarkup(createElement(CheckInsTab, {
+    today: "2026-03-01",
+    entries: [
+      entry("2026-03-01", { soreness: 2, stress: 4, readiness: 30 }),
+      entry("2026-02-20", { soreness: 4, stress: 2, readiness: 70 }),
+    ],
+  }));
+  assert.match(html, /↓ Better vs 4/);
+  assert.match(html, /↑ Worse vs 2/);
+  assert.match(html, /↓ Worse vs 70/);
+  assert.match(html, /Needs attention/);
+  assert.match(html, /Sleep \(h\)/);
+  assert.match(html, /Sleep quality/);
+  const { formatDate } = load("src/lib/units.ts");
+  assert.ok(html.includes(formatDate("2026-03-01")));
+});
 test("readiness matches SQL sample, bounds, labels and incomplete cases", () => {
   assert.equal(readinessScore(sample), 78);
   for (const key of Object.keys(sample)) assert.equal(readinessScore({ ...sample, [key]: null }), null);
@@ -117,6 +149,12 @@ test("check-in and habit actions validate, isolate their payloads, use viewer-lo
     assert.ok((await saveCheckIn({}, data)).error, key);
   }
   assert.equal(writes.length, 1);
+  for (const [value, expected] of [["7.56", 7.6], [String(0.1 + 0.2), 0.3], ["0", 0]]) {
+    const data = form();
+    data.set("sleep_hours", value);
+    assert.equal((await saveCheckIn({}, data)).message, "Check-in saved.");
+    assert.equal(writes.at(-1).payload.sleep_hours, expected);
+  }
   dbError = { message: "database unavailable" };
   assert.match((await saveCheckIn({}, form())).error, /Couldn't save/);
   viewer = { kind: "coach" };
