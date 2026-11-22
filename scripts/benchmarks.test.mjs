@@ -17,7 +17,7 @@ function load(relative) {
     compilerOptions: { target: ts.ScriptTarget.ES2017, module: ts.ModuleKind.CommonJS, esModuleInterop: true },
     fileName: filename,
   }).outputText;
-  const localRequire = (id) => id.startsWith("@/") ? load(`src/${id.slice(2)}.ts`) : require(id);
+  const localRequire = (id) => id.startsWith("@/") ? load(`src/${id.slice(2)}.ts`) : id.startsWith(".") ? load(path.resolve(path.dirname(filename), `${id}.ts`)) : require(id);
   new Function("require", "module", "exports", js)(localRequire, loaded, loaded.exports);
   return loaded.exports;
 }
@@ -84,8 +84,39 @@ test("loaders handle empty history and propagate query errors", async () => {
   assert.equal(empty.best, null);
   assert.equal(empty.last, null);
   assert.equal(empty.retestDue, false);
-  for (const table of ["benchmarks", "benchmark_results", "workout_results"]) await assert.rejects(loadLiftMaxes(client({}, table), "a"), /query failed/);
+  for (const table of ["benchmarks", "benchmark_results", "workout_results", "athlete_workout_scalings"]) await assert.rejects(loadLiftMaxes(client({}, table), "a"), /query failed/);
   for (const table of ["athletes", "benchmark_settings"]) await assert.rejects(loadAthleteBenchmarks(client({}, table), "a", "2026-01-01"), /query failed/);
+});
+
+const scalingDetails = (movementId, reps) => ({ source: "ai", suggestion_id: "32000000-0000-4000-8000-000000000021", movements: [{ original_movement_id: "m", movement_id: movementId, movement_name: "Movement", sets: 3, reps, load_kg: 100, distance_m: null, calories: null, duration_seconds: null, reason: "Easier" }] });
+const scaling = (details, extra = {}) => ({ modifications: "Scaled", details, athlete_adjusted_at: null, coach_modifications: null, coach_details: null, ...extra });
+const strengthResult = (extra = {}) => scheduled("w", "2026-01-01", { workout_id: "workout", load_kg: 100, workouts: { title: "Strength", workout_type: "strength", workout_movements: [{ movement_id: "m", reps: 5 }] }, ...extra });
+
+test("scheduled lifts use effective coach scaling movements and reps, with original fallback for invalid details", () => {
+  const history = (value) => normalizeBenchmarkHistory(lift, [], [strengthResult({ scaling: value })]);
+  assert.equal(history(null)[0].rep_max, 5);
+  assert.equal(history(scaling(scalingDetails("m", 3)))[0].rep_max, 3);
+  assert.equal(history(scaling({}))[0].rep_max, 5);
+  assert.deepEqual(history(scaling(scalingDetails("substitute", 3))), []);
+  assert.equal(normalizeBenchmarkHistory({ ...lift, movement_id: "substitute" }, [], [strengthResult({ scaling: scaling(scalingDetails("substitute", 3)) })])[0].rep_max, 3);
+});
+
+test("athlete adjustments apply on the result's date, otherwise restoring coach scaling or original movements", () => {
+  const adjusted = scaling({ ...scalingDetails("substitute", 2), scheduled_on: "2026-01-01" }, { athlete_adjusted_at: "2026-01-01T12:00:00Z", coach_modifications: "Coach scaling", coach_details: scalingDetails("m", 3) });
+  assert.deepEqual(normalizeBenchmarkHistory(lift, [], [strengthResult({ scaling: adjusted })]), []);
+  const later = strengthResult({ performed_on: "2026-01-02", scaling: adjusted });
+  assert.equal(normalizeBenchmarkHistory(lift, [], [later])[0].rep_max, 3);
+  const noCoach = { ...adjusted, coach_modifications: null, coach_details: null };
+  assert.equal(normalizeBenchmarkHistory(lift, [], [{ ...later, scaling: noCoach }])[0].rep_max, 5);
+});
+
+test("lift loader joins this athlete's workout scaling before calculating maxes", async () => {
+  const db = client({ benchmarks: [lift], workout_results: [strengthResult()], athlete_workout_scalings: [{ workout_id: "workout", ...scaling(scalingDetails("m", 1)) }] });
+  const [max] = await loadLiftMaxes(db, "a");
+  assert.equal(max.actualOneRmKg, 100);
+  assert.equal(max.actualDate, "2026-01-01");
+  const substituted = client({ benchmarks: [lift], workout_results: [strengthResult()], athlete_workout_scalings: [{ workout_id: "workout", ...scaling(scalingDetails("substitute", 1)) }] });
+  assert.equal((await loadLiftMaxes(substituted, "a"))[0].oneRmKg, null);
 });
 
 test("AI lift context converts units and keeps the chosen max's source and date", () => {

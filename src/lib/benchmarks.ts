@@ -2,15 +2,20 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Tables } from "@/lib/supabase/database.types";
 import { compareScores, type Score } from "@/lib/results";
 import { addDays } from "@/lib/nutrition";
+import { effectiveScaling } from "@/lib/ai/athlete-adjust-schema";
+import { scaleWorkoutDetailsSchema } from "@/lib/ai/scale-workout";
 
 type Client = SupabaseClient<Database>;
 type Benchmark = Tables<"benchmarks">;
 type DirectResult = Tables<"benchmark_results">;
+type BenchmarkScaling = Pick<Tables<"athlete_workout_scalings">,
+  "modifications" | "details" | "athlete_adjusted_at" | "coach_modifications" | "coach_details">;
 export type ScheduledBenchmarkResult = Score & {
   id: string;
   performed_on: string;
   created_at: string;
   notes: string | null;
+  scaling?: BenchmarkScaling | null;
   workouts: {
     title: string;
     workout_type: Benchmark["workout_type"];
@@ -47,7 +52,10 @@ export function normalizeBenchmarkHistory(benchmark: Benchmark, direct: DirectRe
   for (const r of scheduled) {
     const w = r.workouts;
     if (!w) continue;
-    const movement = w.workout_movements.find((m) => m.movement_id === benchmark.movement_id);
+    const scaling = effectiveScaling(r.scaling, r.performed_on);
+    const details = scaling ? scaleWorkoutDetailsSchema.safeParse(scaling.details) : null;
+    const movements = details?.success ? details.data.movements : w.workout_movements;
+    const movement = movements.find((m) => m.movement_id === benchmark.movement_id);
     if (benchmark.kind === "lift" ? w.workout_type !== "strength" || !movement : w.workout_type !== benchmark.workout_type || w.title.trim().toLowerCase() !== benchmark.name.trim().toLowerCase()) continue;
     const reps = benchmark.kind === "lift" ? movement?.reps ?? r.reps ?? 1 : null;
     attempts.push({ ...r, source: "workout", rep_max: reps, estimatedOneRmKg: benchmark.kind === "lift" ? estimateOneRepMax(r.load_kg, reps) : null, isPr: false });
@@ -79,13 +87,15 @@ function summarize(benchmark: Benchmark, attempts: BenchmarkAttempt[], retestWee
 }
 
 async function loadHistory(supabase: Client, athleteId: string) {
-  const [benchmarks, direct, scheduled] = await Promise.all([
+  const [benchmarks, direct, scheduled, scalings] = await Promise.all([
     supabase.from("benchmarks").select("*").order("name"),
     supabase.from("benchmark_results").select("*").eq("athlete_id", athleteId),
-    supabase.from("workout_results").select("id, performed_on, created_at, time_seconds, rounds, reps, load_kg, is_rx, notes, workouts(title, workout_type, workout_movements(movement_id, reps))").eq("athlete_id", athleteId),
+    supabase.from("workout_results").select("id, workout_id, performed_on, created_at, time_seconds, rounds, reps, load_kg, is_rx, notes, workouts(title, workout_type, workout_movements(movement_id, reps))").eq("athlete_id", athleteId),
+    supabase.from("athlete_workout_scalings").select("workout_id, modifications, details, athlete_adjusted_at, coach_modifications, coach_details").eq("athlete_id", athleteId),
   ]);
-  for (const r of [benchmarks, direct, scheduled]) if (r.error) throw r.error;
-  return { benchmarks: benchmarks.data ?? [], direct: direct.data ?? [], scheduled: scheduled.data ?? [] };
+  for (const r of [benchmarks, direct, scheduled, scalings]) if (r.error) throw r.error;
+  const scalingByWorkout = new Map((scalings.data ?? []).map((s) => [s.workout_id, s]));
+  return { benchmarks: benchmarks.data ?? [], direct: direct.data ?? [], scheduled: (scheduled.data ?? []).map((r) => ({ ...r, scaling: scalingByWorkout.get(r.workout_id) ?? null })) };
 }
 
 export async function loadAthleteBenchmarks(supabase: Client, athleteId: string, today: string) {
