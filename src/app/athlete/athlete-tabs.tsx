@@ -14,6 +14,7 @@ const TABS = [
 
 export function AthleteTabs() {
   const pathname = usePathname();
+  if (pathname === "/athlete/onboarding") return null;
 
   return (
     <nav

@@ -29,6 +29,7 @@ import { suggestFoodEntry } from "./suggest-food";
 export { ApprovalError } from "./errors";
 
 export const SUGGESTION_LABELS: Record<Enums<"suggestion_type">, string> = {
+  draft_program: "Draft program",
   write_workout: "Write workout",
   scale_workout: "Scale workout",
   adjust_macros: "Adjust macros",
@@ -451,6 +452,7 @@ async function applyMacroSuggestion(
 }
 
 export const SUGGESTION_REGISTRY: Record<Enums<"suggestion_type">, SuggestionEntry> = {
+  draft_program: { label: SUGGESTION_LABELS.draft_program, proposalSchema: z.never() },
   movement_guide: movementGuideEntry,
   write_workout: {
     label: SUGGESTION_LABELS.write_workout,

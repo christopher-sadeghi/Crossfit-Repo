@@ -9,6 +9,15 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      athlete_intakes: {
+        Row: { id: string; athlete_id: string; coach_id: string; status: string; current_step: number; answers: Json; requested_at: string; completed_at: string | null; created_at: string; updated_at: string };
+        Insert: { id?: string; athlete_id: string; coach_id: string; status?: string; current_step?: number; answers?: Json; requested_at?: string; completed_at?: string | null; created_at?: string; updated_at?: string };
+        Update: { id?: string; athlete_id?: string; coach_id?: string; status?: string; current_step?: number; answers?: Json; requested_at?: string; completed_at?: string | null; created_at?: string; updated_at?: string };
+        Relationships: [
+          { foreignKeyName: "athlete_intakes_athlete_id_coach_id_fkey"; columns: ["athlete_id", "coach_id"]; isOneToOne: true; referencedRelation: "athletes"; referencedColumns: ["id", "coach_id"] },
+          { foreignKeyName: "athlete_intakes_coach_id_fkey"; columns: ["coach_id"]; isOneToOne: false; referencedRelation: "coaches"; referencedColumns: ["id"] },
+        ];
+      };
       athlete_workout_overrides: {
         Row: { id: string; coach_id: string; athlete_id: string; workout_id: string; replacement_workout_id: string | null; created_at: string; updated_at: string };
         Insert: { id?: string; coach_id?: string; athlete_id: string; workout_id: string; replacement_workout_id?: string | null; created_at?: string; updated_at?: string };
@@ -1339,6 +1348,8 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      save_athlete_intake_step: { Args: { p_athlete_id: string; p_step: number; p_data: Json; p_today: string }; Returns: undefined };
+      request_linked_athlete_intake: { Args: Record<PropertyKey, never>; Returns: unknown };
       copy_workout_for_athlete: { Args: { p_workout_id: string; p_athlete_id: string; p_scheduled_on: string }; Returns: string };
       override_workout_for_athlete: { Args: { p_workout_id: string; p_athlete_id: string; p_mode: string }; Returns: string | null };
       restore_workout_for_athlete: { Args: { p_workout_id: string; p_athlete_id: string }; Returns: undefined };
@@ -1427,7 +1438,8 @@ export type Database = {
         | "progress_summary"
         | "movement_guide"
         | "athlete_adjust_workout"
-        | "suggest_food";
+        | "suggest_food"
+        | "draft_program";
       weight_unit: "lb" | "kg";
       workout_type: "for_time" | "amrap" | "emom" | "strength" | "other";
     };
@@ -1586,6 +1598,7 @@ export const Constants = {
         "progress_summary",
         "athlete_adjust_workout",
         "suggest_food",
+        "draft_program",
       ],
       weight_unit: ["lb", "kg"],
       workout_type: ["for_time", "amrap", "emom", "strength", "other"],

@@ -39,6 +39,21 @@ export async function updateSession(request: NextRequest) {
   const isLoggedIn = Boolean(data?.claims);
   const path = request.nextUrl.pathname;
 
+  if (isLoggedIn && path.startsWith("/athlete") && !path.startsWith("/athletes") && path !== "/athlete/onboarding") {
+    const { data: athlete, error: athleteError } = await supabase.from("athletes").select("id").eq("user_id", String(data?.claims?.sub)).maybeSingle();
+    if (athleteError) throw athleteError;
+    if (athlete) {
+      const { data: intake, error } = await supabase.from("athlete_intakes").select("status").eq("athlete_id", athlete.id).maybeSingle();
+      if (error) throw error;
+      if (intake && ["requested", "in_progress"].includes(intake.status)) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/athlete/onboarding";
+        url.search = "";
+        return redirectWithCookies(url, response);
+      }
+    }
+  }
+
   if (!isLoggedIn && !matches(path, PUBLIC_PATHS)) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
