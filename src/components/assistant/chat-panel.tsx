@@ -51,7 +51,7 @@ export function ChatPanelShell({
         </Button>
       </header>
       <div className="flex-1 space-y-4 overflow-y-auto p-4">{children}</div>
-      <footer className="border-t p-3">{footer}</footer>
+      <footer className="border-t p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">{footer}</footer>
     </aside>
   );
 }
