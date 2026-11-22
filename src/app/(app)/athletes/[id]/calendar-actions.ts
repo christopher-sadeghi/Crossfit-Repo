@@ -7,8 +7,11 @@ import { z } from "zod";
 import { placeWorkout } from "@/app/(app)/programs/actions";
 import { runSuggestion } from "@/lib/ai/service";
 import { SUGGESTION_REGISTRY } from "@/lib/ai/suggestions";
+import { loadAthleteSchedule, SCHEDULE_LABEL } from "@/lib/athlete-schedule";
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { createClient } from "@/lib/supabase/server";
+
+import { addDays, monday } from "./calendar-dates";
 
 const ids = z.object({ athleteId: z.string().uuid(), workoutId: z.string().uuid() });
 const dateSchema = z.string().date("Choose a valid date.");
@@ -98,9 +101,18 @@ export async function requestAthleteDayWorkout(_: FormState, formData: FormData)
   const supabase = await createClient();
   let result: Awaited<ReturnType<typeof runSuggestion>>;
   try {
+    const weekStart = monday(date);
+    const weekEnd = addDays(weekStart, 6);
+    const schedule = await loadAthleteSchedule(supabase, athlete_id, { from: weekStart, to: weekEnd },
+      "id, source_workout_id, title, week_number, day_number, workout_type, time_cap_seconds, rounds, description, notes, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(name))");
+    const week = schedule.map((item) => ({
+      date: item.date,
+      label: item.overrides ? `Edited from ${SCHEDULE_LABEL({ source: item.overrides.source, programName: item.overrides.programName })}` : SCHEDULE_LABEL(item),
+      workout: item.workout,
+    }));
     const { schema: generationSchema, ...context } = await entry.buildRequest!(supabase, {
       athleteId: athlete_id, workoutId: null, scheduledOn: date,
-      request: request || `Write a WOD for this athlete on ${date} that fits their program week, goals and injuries.`,
+      request: `${request || `Write a WOD for this athlete on ${date} that fits their program week, goals and injuries.`}\n\nAthlete's scheduled WODs for ${weekStart} through ${weekEnd} (JSON; empty means no scheduled WODs):\n${JSON.stringify(week, null, 2)}\nPlan around these sessions to balance the week and avoid duplicating their movements or training stress.`,
     });
     result = await runSuggestion({ type: "write_workout", athleteId: athlete_id, ...context, schema: entry.proposalSchema, generationSchema, validate: entry.validate });
   } catch {
