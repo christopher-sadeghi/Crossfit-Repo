@@ -125,7 +125,10 @@ function fixture({ count = 0, reservedCount, settings = defaultAssistantSettings
       return { toUIMessageStreamResponse: (opts) => { responseOptions = opts; return Response.json({ stream: true }); } };
     } },
     "./chat": { FRIENDLY_ERROR: "Friendly error", resolveModel: () => model },
-    "./assistant-context": { getMyTraining: async (_, fixedViewer) => { assert.deepEqual(fixedViewer, viewer); return { own: true }; } },
+    "./assistant-context": { getMyTraining: async (_, fixedViewer, today, driftDays) => {
+      assert.deepEqual(fixedViewer, viewer); assert.equal(today, "2026-11-22");
+      assert.equal(driftDays, settings.drift_days); return { own: true };
+    } },
     "./activity-extraction": { extractActivityDraft: async () => ({ activity_type: "run", custom_label: null, duration_minutes: 30, rpe: 5, distance_m: null, performed_on: null }) },
     "./service-core": { aiLimitMessage: (n) => `Limit ${n}` },
     "@/lib/athlete-schedule": { loadAthleteSchedule: async (_, fixedId) => { assert.equal(fixedId, athleteId); return schedule; } },
@@ -264,6 +267,30 @@ test("shared athlete context omits coach notes only for athlete callers", async 
   assert.equal(coach.coach_notes, "private coach note");
 });
 
+test("athlete training context uses the configured inactivity threshold and defaults only when null", async () => {
+  for (const driftDays of [12, null]) {
+    const { getMyTraining } = load("src/lib/ai/assistant-context.ts", {
+      "./athlete-chat-context": { getAthleteContext: async (_, id, today, units, options) => {
+        assert.equal(id, athleteId); assert.equal(today, "2026-11-22"); assert.equal(units, "lb");
+        assert.deepEqual(options, { athleteFacing: true, driftDays: driftDays ?? 5 });
+        return { consistency: { drift_days: options.driftDays } };
+      } },
+      "@/lib/athlete-schedule": { loadAthleteSchedule: async () => [] },
+    });
+    const client = { from(table) {
+      assert.ok(["athlete_workout_scalings", "nutrition_targets", "athlete_food_preferences", "athlete_intakes"].includes(table));
+      const q = { select: () => q, eq: () => q, lte: () => q, or: () => q, order: () => q, limit: () => q,
+        maybeSingle: async () => ({ data: null, error: null }), then: (resolve) => resolve({ data: [], error: null }) };
+      return q;
+    } };
+    const context = await getMyTraining(client, viewer, "2026-11-22", driftDays);
+    assert.equal(context.profile.consistency.drift_days, driftDays ?? 5);
+    const f = fixture({ settings: { ...defaultAssistantSettings, drift_days: driftDays } });
+    await f.run();
+    await f.options.tools.get_my_training.execute({});
+  }
+});
+
 test("athlete scaling requests include schema-valid null notes without leaking coach-private notes", async () => {
   const workoutContext = load("src/lib/ai/workout-context.ts");
   const { buildScaleRequest, scaleWorkoutInputSchema } = load("src/lib/ai/scale-workout.ts", {
@@ -294,9 +321,9 @@ test("athlete scaling requests include schema-valid null notes without leaking c
 });
 
 test("edited coach draft uses FIT-29 first, then registry/reservation with own identity and sent source", async () => {
-  for (const mode of ["success", "coach", "invalid-link", "send-failed", "suggestion-failed", "already-sent", "missing-card"]) {
+  for (const mode of ["success", "coach", "invalid-link", "send-failed", "suggestion-failed", "already-sent", "missing-card", "fallback-drift"]) {
     const events = [];
-    const supabase = { rpc: async () => ({ data: [defaultAssistantSettings], error: null }),
+    const supabase = { rpc: async () => ({ data: [{ ...defaultAssistantSettings, drift_days: mode === "fallback-drift" ? null : 12 }], error: null }),
       auth: { getClaims: async () => ({ data: { claims: { sub: "signed-in-athlete" } }, error: null }) } };
     const { sendAssistantCoachMessage } = load("src/app/athlete/assistant/actions.ts", {
       "next/cache": { revalidatePath: () => {} },
@@ -311,7 +338,7 @@ test("edited coach draft uses FIT-29 first, then registry/reservation with own i
       "@/lib/messages": { validateMessageLink: async (_, id, link, isCoach) => { assert.equal(id, athleteId); assert.equal(isCoach, false); return mode !== "invalid-link"; } },
       "@/app/messages-actions": { sendMessage: async (id, _, form, identity) => { events.push("send"); assert.equal(id, athleteId); assert.equal(form.get("body"), "Edited request"); assert.equal(identity.cardIndex, 0); return mode === "send-failed" ? { error: "offline" } : { sentId: messageId, alreadyCompleted: mode === "already-sent" }; } },
       "@/lib/ai/suggestions": { SUGGESTION_REGISTRY: { scale_workout: { proposalSchema: "schema", buildRequest: async (_, params) => {
-        events.push("build"); assert.equal(params.athleteId, athleteId); assert.equal(params.session.units, "lb"); assert.equal(params.session.driftDays, 5);
+        events.push("build"); assert.equal(params.athleteId, athleteId); assert.equal(params.session.units, "lb"); assert.equal(params.session.driftDays, mode === "fallback-drift" ? 5 : 12);
         return { input: { workout_id: athleteId }, system: "system", prompt: "prompt" };
       } } } },
       "@/lib/ai/service-core": { runSuggestionWithClient: async (_, opts) => {
@@ -323,7 +350,7 @@ test("edited coach draft uses FIT-29 first, then registry/reservation with own i
     const result = await sendAssistantCoachMessage({ kind: "coach_message", body: "Edited request", change: {
       type: "scale_workout", workoutId: athleteId, note: "Make it easier",
     } }, { assistantMessageId: messageId, cardIndex: 0 });
-    if (mode === "success") { assert.deepEqual(events, ["send", "build", "reserve"]); assert.equal(result.suggestionId, "suggestion"); }
+    if (mode === "success" || mode === "fallback-drift") { assert.deepEqual(events, ["send", "build", "reserve"]); assert.equal(result.suggestionId, "suggestion"); }
     else if (mode === "suggestion-failed") { assert.equal(result.sentId, messageId); assert.match(result.warning, /Message sent/); }
     else if (mode === "already-sent") { assert.match(result.warning, /Already sent/); assert.deepEqual(events, ["send"]); }
     else { assert.ok(result.error); assert.ok(!events.includes("reserve")); }

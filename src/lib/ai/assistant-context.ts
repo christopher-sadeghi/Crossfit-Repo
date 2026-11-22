@@ -6,9 +6,9 @@ import type { AthleteViewer } from "@/lib/viewer";
 import { effectiveScaling } from "@/lib/workout-scaling";
 import { getAthleteContext } from "./athlete-chat-context";
 
-export async function getMyTraining(supabase: SupabaseClient<Database>, viewer: AthleteViewer, today: string) {
+export async function getMyTraining(supabase: SupabaseClient<Database>, viewer: AthleteViewer, today: string, driftDays: number | null = DEFAULT_DRIFT_DAYS) {
   const [profile, schedule, scalings, targets, preferences, intake] = await Promise.all([
-    getAthleteContext(supabase, viewer.athleteId, today, viewer.units, { athleteFacing: true, driftDays: DEFAULT_DRIFT_DAYS }),
+    getAthleteContext(supabase, viewer.athleteId, today, viewer.units, { athleteFacing: true, driftDays: driftDays ?? DEFAULT_DRIFT_DAYS }),
     loadAthleteSchedule(supabase, viewer.athleteId, { from: today, to: today },
       "id, source_workout_id, title, workout_type, time_cap_seconds, rounds, description, week_number, day_number, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(id, name))"),
     supabase.from("athlete_workout_scalings").select("workout_id, modifications, details, athlete_adjusted_at, coach_modifications, coach_details").eq("athlete_id", viewer.athleteId),

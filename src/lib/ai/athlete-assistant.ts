@@ -99,7 +99,7 @@ export async function streamAthleteAssistant(supabase: Client, viewer: AthleteVi
       description: "Look up my profile, goals/progress, today's WOD/personal versions/scalings, results, check-ins, benchmarks/lift maxes, nutrition/preferences, intake and training load.",
       inputSchema: z.object({}).strict(),
       execute: async () => {
-        const context = await getMyTraining(supabase, viewer, today);
+        const context = await getMyTraining(supabase, viewer, today, config.drift_days);
         return {
           ...context,
           ...(!config.assistant_nutrition ? { current_macros: null, food_preferences: null } : {}),

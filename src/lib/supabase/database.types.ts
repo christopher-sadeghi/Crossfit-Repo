@@ -1696,7 +1696,7 @@ export type Database = {
       complete_athlete_ai_card: { Args: { p_message_id: string; p_card_index: number; p_action: string; p_values: Json }; Returns: { ref_id: string; already_completed: boolean }[] };
       athlete_assistant_settings: {
         Args: Record<PropertyKey, never>;
-        Returns: { coach_rules: string | null; athlete_rules: string | null; assistant_training: boolean; assistant_nutrition: boolean; assistant_recovery: boolean; athlete_ai_daily_limit: number }[];
+        Returns: { coach_rules: string | null; athlete_rules: string | null; assistant_training: boolean; assistant_nutrition: boolean; assistant_recovery: boolean; athlete_ai_daily_limit: number; drift_days: number }[];
       };
       register_push_subscription: { Args: { p_endpoint: string; p_p256dh: string; p_auth: string; p_user_agent: string }; Returns: undefined };
       apply_draft_program: { Args: { p_athlete_id: string; p_program: Json; p_today: string }; Returns: string };

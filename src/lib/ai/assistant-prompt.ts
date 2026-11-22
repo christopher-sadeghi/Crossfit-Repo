@@ -5,10 +5,11 @@ export type AssistantSettings = {
   assistant_nutrition: boolean;
   assistant_recovery: boolean;
   athlete_ai_daily_limit: number;
+  drift_days: number | null;
 };
 export const defaultAssistantSettings: AssistantSettings = {
   coach_rules: null, athlete_rules: null, assistant_training: true,
-  assistant_nutrition: true, assistant_recovery: true, athlete_ai_daily_limit: 25,
+  assistant_nutrition: true, assistant_recovery: true, athlete_ai_daily_limit: 25, drift_days: 5,
 };
 
 export function buildAssistantPrompt(settings: AssistantSettings, today: string, safety: { flagged: boolean; urgent: boolean }) {

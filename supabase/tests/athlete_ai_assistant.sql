@@ -7,8 +7,8 @@ insert into auth.users(id,email,raw_user_meta_data) values
 insert into public.athletes(id,coach_id,user_id,first_name,last_name) values
 ('44000000-0000-0000-0000-000000000011','44000000-0000-0000-0000-000000000001','44000000-0000-0000-0000-000000000003','A1','Test'),
 ('44000000-0000-0000-0000-000000000012','44000000-0000-0000-0000-000000000001','44000000-0000-0000-0000-000000000004','A2','Test');
-update public.coaches set assistant_rules = 'Coach A', assistant_nutrition = false, athlete_ai_daily_limit = 17 where id = '44000000-0000-0000-0000-000000000001';
-update public.coaches set assistant_rules = 'Coach B' where id = '44000000-0000-0000-0000-000000000002';
+update public.coaches set assistant_rules = 'Coach A', assistant_nutrition = false, athlete_ai_daily_limit = 17, drift_days = 12 where id = '44000000-0000-0000-0000-000000000001';
+update public.coaches set assistant_rules = 'Coach B', drift_days = 9 where id = '44000000-0000-0000-0000-000000000002';
 update public.athletes set assistant_rules = 'Override A1' where id = '44000000-0000-0000-0000-000000000011';
 insert into public.messages(id,athlete_id,coach_id,sender_id,body) values
 ('44000000-0000-0000-0000-000000000021','44000000-0000-0000-0000-000000000011','44000000-0000-0000-0000-000000000001','44000000-0000-0000-0000-000000000003','My request'),
@@ -26,7 +26,7 @@ do $$ declare n integer; s record; v_id uuid; begin
   get diagnostics n = row_count; assert n = 0;
   select * into strict s from public.athlete_assistant_settings();
   assert s.coach_rules = 'Coach A' and s.athlete_rules = 'Override A1'
-    and not s.assistant_nutrition and s.assistant_training and s.assistant_recovery and s.athlete_ai_daily_limit = 17;
+    and not s.assistant_nutrition and s.assistant_training and s.assistant_recovery and s.athlete_ai_daily_limit = 17 and s.drift_days = 12;
   begin insert into public.athlete_ai_messages(athlete_id,coach_id,role,content) values ('44000000-0000-0000-0000-000000000012','44000000-0000-0000-0000-000000000001','user','Other'); raise exception 'unauthorized write succeeded'; exception when insufficient_privilege then null; end;
   begin
     insert into public.athlete_ai_messages(athlete_id,coach_id,role,content) values ('44000000-0000-0000-0000-000000000011','44000000-0000-0000-0000-000000000001','user','');
@@ -74,7 +74,7 @@ select set_config('request.jwt.claims','{"sub":"44000000-0000-0000-0000-00000000
 do $$ begin
   assert not exists(select 1 from public.athlete_ai_messages);
   assert not exists(select 1 from public.ai_suggestions);
-  assert (select athlete_rules is null and coach_rules = 'Coach A' from public.athlete_assistant_settings());
+  assert (select athlete_rules is null and coach_rules = 'Coach A' and drift_days = 12 from public.athlete_assistant_settings());
   raise notice 'PASS: athlete A2 cannot see A1 chat or suggestions; own settings only';
 end $$;
 select set_config('request.jwt.claims','{"sub":"44000000-0000-0000-0000-000000000002","role":"authenticated"}',true);

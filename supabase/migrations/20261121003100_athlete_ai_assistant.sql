@@ -12,12 +12,12 @@ alter table public.athletes
 create function public.athlete_assistant_settings()
 returns table (
   coach_rules text, athlete_rules text, assistant_training boolean,
-  assistant_nutrition boolean, assistant_recovery boolean, athlete_ai_daily_limit integer
+  assistant_nutrition boolean, assistant_recovery boolean, athlete_ai_daily_limit integer, drift_days integer
 )
 language sql stable security definer set search_path = ''
 as $$
   select c.assistant_rules, a.assistant_rules, c.assistant_training,
-    c.assistant_nutrition, c.assistant_recovery, c.athlete_ai_daily_limit
+    c.assistant_nutrition, c.assistant_recovery, c.athlete_ai_daily_limit, coalesce(c.drift_days, 5)
   from public.athletes a join public.coaches c on c.id = a.coach_id
   where a.user_id = (select auth.uid()) and a.status = 'active';
 $$;

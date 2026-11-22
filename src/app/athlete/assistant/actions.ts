@@ -48,7 +48,7 @@ export async function sendAssistantCoachMessage(input: unknown, identity: Assist
       const request = await entry.buildRequest(supabase, {
         athleteId: viewer.athleteId, workoutId: change.workoutId,
         scheduledOn: change.scheduledOn, request: change.note,
-        session: { units: viewer.units, driftDays: DEFAULT_DRIFT_DAYS, athleteFacing: true },
+        session: { units: viewer.units, driftDays: settings[0].drift_days ?? DEFAULT_DRIFT_DAYS, athleteFacing: true },
       });
       if (!request.input || typeof request.input !== "object" || Array.isArray(request.input)) throw new Error("Invalid suggestion input.");
       const result = await runSuggestionWithClient(supabase, {
