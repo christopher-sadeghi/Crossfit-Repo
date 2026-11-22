@@ -9,6 +9,7 @@ import {
   Salad,
   Settings,
   Users,
+  Video,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
@@ -25,6 +26,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/programs", label: "Programs", icon: CalendarDays },
   { href: "/benchmarks", label: "Benchmarks", icon: Trophy },
   { href: "/nutrition", label: "Nutrition", icon: Salad },
+  { href: "/form-checks", label: "Form checks", icon: Video },
   { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

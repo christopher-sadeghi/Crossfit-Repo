@@ -14,6 +14,8 @@ export async function loadDemoDataWithClipCleanup(supabase, reset) {
 
     const photoError = await removeProgressPhotos(supabase, coachId);
     if (photoError) return { data: null, error: photoError, clipError: null };
+    const videoError = await removeFormVideos(supabase, coachId);
+    if (videoError) return { data: null, error: videoError, clipError: null };
 
     for (let offset = 0; ; offset += PAGE_SIZE) {
       const { data: guides, error } = await supabase.from("movement_guides")
@@ -46,8 +48,27 @@ export async function loadDemoDataWithClipCleanup(supabase, reset) {
  * @param {import("@supabase/supabase-js").SupabaseClient<import("./supabase/database.types").Database>} supabase
  * @param {string} coachId
  */
-export async function removeProgressPhotos(supabase, coachId) {
-  const bucket = supabase.storage.from("progress-photos");
+export function removeProgressPhotos(supabase, coachId) {
+  return removeCoachFiles(supabase, coachId, "progress-photos", "progress_photos");
+}
+
+/**
+ * @param {import("@supabase/supabase-js").SupabaseClient<import("./supabase/database.types").Database>} supabase
+ * @param {string} coachId
+ */
+export function removeFormVideos(supabase, coachId) {
+  return removeCoachFiles(supabase, coachId, "form-videos", "form_reviews");
+}
+
+/**
+ * Files first, then rows: database cascades never remove Storage objects.
+ * @param {import("@supabase/supabase-js").SupabaseClient<import("./supabase/database.types").Database>} supabase
+ * @param {string} coachId
+ * @param {"progress-photos" | "form-videos"} bucketId
+ * @param {"progress_photos" | "form_reviews"} table
+ */
+async function removeCoachFiles(supabase, coachId, bucketId, table) {
+  const bucket = supabase.storage.from(bucketId);
   /** @type {string[]} */
   const prefixes = [];
   for (let offset = 0; ; offset += PAGE_SIZE) {
@@ -76,6 +97,6 @@ export async function removeProgressPhotos(supabase, coachId) {
     const { error } = await bucket.remove(paths.slice(offset, offset + PAGE_SIZE));
     if (error) return error;
   }
-  const { error } = await supabase.from("progress_photos").delete().eq("coach_id", coachId);
+  const { error } = await supabase.from(table).delete().eq("coach_id", coachId);
   return error;
 }
