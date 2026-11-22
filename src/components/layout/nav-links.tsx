@@ -2,6 +2,7 @@
 
 import {
   CalendarDays,
+  ClipboardCheck,
   Trophy,
   LayoutDashboard,
   Salad,
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils";
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/athletes", label: "Athletes", icon: Users },
+  { href: "/attendance", label: "Attendance", icon: ClipboardCheck },
   { href: "/programs", label: "Programs", icon: CalendarDays },
   { href: "/benchmarks", label: "Benchmarks", icon: Trophy },
   { href: "/nutrition", label: "Nutrition", icon: Salad },

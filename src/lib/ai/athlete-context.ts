@@ -1,11 +1,37 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { drifting } from "@/lib/consistency";
+import { loadConsistency } from "@/lib/consistency-data";
 import { addDays, totals } from "@/lib/nutrition";
 import type { Database } from "@/lib/supabase/database.types";
 
 export const TRAINING_DAYS = 28;
 
 type FoodRow = Parameters<typeof totals>[0][number];
+
+/** Compact, RLS-scoped attendance and scheduled-day consistency for AI prompts. */
+export async function consistencyContext(supabase: SupabaseClient<Database>, athleteId: string, asOf: string) {
+  const { data: athlete, error: athleteError } = await supabase.from("athletes").select("coach_id").eq("id", athleteId).single();
+  if (athleteError || !athlete) throw athleteError ?? new Error("Athlete not found.");
+  const [{ stats, attendance }, { data: coach, error: coachError }] = await Promise.all([
+    loadConsistency(supabase, athleteId, asOf),
+    supabase.from("coaches").select("drift_days").eq("id", athlete.coach_id).single(),
+  ]);
+  if (coachError || !coach) throw coachError ?? new Error("Coach not found.");
+  const drift = drifting(stats, { driftDays: coach.drift_days });
+  return {
+    as_of: asOf,
+    windows: stats.windows,
+    current_streak: stats.currentStreak,
+    best_streak: stats.bestStreak,
+    days_since_activity: stats.daysSinceActivity,
+    last_activity_date: stats.lastActivityDate,
+    attendance_count_last_30_days: attendance.filter((row) => row.attended_on >= addDays(asOf, -29) && row.attended_on <= asOf).length,
+    drift_days: coach.drift_days,
+    drifting: drift.drifting,
+    reasons: drift.reasons,
+  };
+}
 
 /** Average daily intake over the days that have any food logged. */
 export function foodAverages(food: FoodRow[]) {

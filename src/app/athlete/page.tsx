@@ -21,6 +21,7 @@ import { AthleteResultForm } from "./log/[workoutId]/result-form";
 import { AdjustWorkoutForm } from "./adjust-form";
 import { CheckInForm } from "./check-in/check-in-form";
 import { ScrollIntoView } from "./scroll-into-view";
+import { AthleteConsistencyCard } from "./consistency-card";
 
 type TodayWorkout = WhiteboardWorkout & {
   id: string;
@@ -129,6 +130,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
   return (
     <div className="grid gap-6">
       <CheckInForm key={currentDate} entry={todayJournal} today={currentDate} />
+      <AthleteConsistencyCard athleteId={viewer.athleteId} compact />
       <section className="grid gap-3">
         <h1 className="text-xl font-semibold tracking-tight">Today&apos;s WOD</h1>
         {todayWods.length ? (

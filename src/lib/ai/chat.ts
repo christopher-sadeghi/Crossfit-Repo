@@ -15,6 +15,7 @@ import type { Database, Json } from "@/lib/supabase/database.types";
 import { aiDailyLimit, aiLimitMessage, countAiUsageToday, runSuggestionWithClient } from "./service-core";
 import { SUGGESTION_REGISTRY } from "./suggestions";
 import { formatLiftMaxes, LIFT_LOAD_RULE } from "./lift-context";
+import { consistencyContext } from "./athlete-context";
 
 export const chatContextSchema = z.object({
   athleteId: z.string().uuid().optional(),
@@ -34,6 +35,7 @@ type Units = "lb" | "kg";
 const CHAT_SYSTEM = `You are the programming assistant for a CrossFit coach. You talk to the coach, not to athletes.
 
 Rules:
+- Use get_athlete consistency for completion and attendance; mention low completion or drifting and keep plans realistic, treating missing rates as unknown.
 - ${LIFT_LOAD_RULE}
 - Use the tool outputs' last_7_days average_readiness, latest_readiness and needs_attention, plus recent_check_ins readiness, sleep, soreness areas, stress, energy and mood. Lower readiness or high soreness means scale down and avoid sore areas.
 - Only use real data from your tools. Never invent athletes, results, PRs, injuries, goals or workouts. If data is missing, say so.
@@ -136,6 +138,7 @@ async function getAthlete(supabase: Supabase, athleteId: string, today: string, 
     { data: results },
     { data: journal },
     recentCheckIns,
+    consistency,
   ] = await Promise.all([
     loadAthleteBenchmarks(supabase, athleteId, today),
     loadLiftMaxes(supabase, athleteId),
@@ -169,6 +172,7 @@ async function getAthlete(supabase: Supabase, athleteId: string, today: string, 
       .lte("entry_on", today)
       .order("entry_on", { ascending: false }),
     loadRecentCheckIns(supabase, athleteId, today, 7),
+    consistencyContext(supabase, athleteId, today),
   ]);
   if (error) throw error;
   if (!athlete) return { error: "Athlete not found." };
@@ -185,6 +189,7 @@ async function getAthlete(supabase: Supabase, athleteId: string, today: string, 
 
   return {
     recent_check_ins: recentCheckIns,
+    consistency,
     lift_maxes: formatLiftMaxes(liftMaxes, units),
     benchmark_bests: benchmarks.flatMap((b) => b.best ? [{
       name: b.name, workout_type: b.workout_type, date: b.best.performed_on,
@@ -480,7 +485,7 @@ export async function runChatWithClient(supabase: Supabase, opts: ChatOptions): 
     }),
     get_athlete: tool({
       description:
-        "Full detail for one athlete: profile, injuries, goals and progress, PRs, recent results with feedback (RPE, energy, sleep, soreness, pain), recovery journal, and schedule for the last 7 and next 14 days.",
+        "Full detail for one athlete: profile, injuries, goals and progress, PRs, recent results with feedback, consistency (7/30/90-day completion, streaks, coach-marked attendance and drifting), recovery journal, and schedule for the last 7 and next 14 days.",
       inputSchema: z.object({ athlete_id: z.string().uuid() }),
       execute: safe(async ({ athlete_id }: { athlete_id: string }) => getAthlete(supabase, athlete_id, opts.today, units)),
     }),
