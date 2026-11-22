@@ -154,6 +154,10 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
 
   return (
     <div className="grid gap-6">
+      <Link href="/athlete/assistant" className="rounded-lg border bg-card p-4 hover:bg-muted">
+        <span className="font-semibold">Ask AI</span>
+        <p className="mt-1 text-sm text-muted-foreground">Questions about training or recovery? Your coach can see this chat.</p>
+      </Link>
       <details id="log-activity" key={`log-activity-${activityDay}`} open={activityDate != null} className="rounded-lg border bg-card p-4">
         <summary className="w-fit cursor-pointer font-semibold">Log activity</summary>
         <div className="mt-4 grid gap-4">
@@ -259,7 +263,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                   </Card>
                 )}
                 {!todayResult && (
-                  <Card>
+                  <Card id={`adjust-${workout.id}`} className="scroll-mt-4">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm">Not feeling 100%?</CardTitle>
                     </CardHeader>

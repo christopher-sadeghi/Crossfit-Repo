@@ -10,6 +10,7 @@ import { DEFAULT_LOAD_WARNING_RATIO } from "@/lib/training-load";
 import { DemoDataCard } from "./demo-data-card";
 
 import { SettingsForm } from "./settings-form";
+import { AssistantSettings } from "./assistant-settings";
 
 export default async function SettingsPage() {
   const coach = await getCoach();
@@ -32,6 +33,7 @@ export default async function SettingsPage() {
           />
         </CardContent>
       </Card>
+      <AssistantSettings />
       <div className="mt-6"><NotificationSettings /></div>
       <Card className="mt-6">
         <CardContent>
