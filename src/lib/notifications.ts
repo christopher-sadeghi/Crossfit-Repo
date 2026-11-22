@@ -38,10 +38,20 @@ export async function notify(supabase: Client, input: NotificationInput): Promis
     else {
       try {
         after(async () => {
-          try {
-            const { pushNewNotifications } = await import("@/lib/push/send");
-            await pushNewNotifications({ athleteId: input.athleteId, kind: input.kind });
-          } catch { console.error("Push scheduling failed"); }
+          await Promise.all([
+            (async () => {
+              try {
+                const { pushNewNotifications } = await import("@/lib/push/send");
+                await pushNewNotifications({ athleteId: input.athleteId, kind: input.kind });
+              } catch { console.error("Push scheduling failed"); }
+            })(),
+            (async () => {
+              try {
+                const { emailNewNotifications } = await import("@/lib/email/notifications");
+                await emailNewNotifications({ athleteId: input.athleteId, kind: input.kind });
+              } catch { console.error("Email scheduling failed"); }
+            })(),
+          ]);
         });
       } catch { /* Outside a request, notification creation still succeeds. */ }
     }

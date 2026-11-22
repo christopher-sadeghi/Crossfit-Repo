@@ -136,9 +136,9 @@ export type Database = {
         Relationships: [];
       };
       notifications: {
-        Row: { id: string; recipient_id: string; athlete_id: string | null; kind: string; title: string; body: string | null; link: string | null; dedupe_key: string | null; pushed_at: string | null; read_at: string | null; created_at: string };
-        Insert: { id?: string; recipient_id: string; athlete_id?: string | null; kind: string; title: string; body?: string | null; link?: string | null; dedupe_key?: string | null; pushed_at?: string | null; read_at?: string | null; created_at?: string };
-        Update: { id?: string; recipient_id?: string; athlete_id?: string | null; kind?: string; title?: string; body?: string | null; link?: string | null; dedupe_key?: string | null; pushed_at?: string | null; read_at?: string | null; created_at?: string };
+        Row: { id: string; recipient_id: string; athlete_id: string | null; kind: string; title: string; body: string | null; link: string | null; dedupe_key: string | null; pushed_at: string | null; emailed_at: string | null; read_at: string | null; created_at: string };
+        Insert: { id?: string; recipient_id: string; athlete_id?: string | null; kind: string; title: string; body?: string | null; link?: string | null; dedupe_key?: string | null; pushed_at?: string | null; emailed_at?: string | null; read_at?: string | null; created_at?: string };
+        Update: { id?: string; recipient_id?: string; athlete_id?: string | null; kind?: string; title?: string; body?: string | null; link?: string | null; dedupe_key?: string | null; pushed_at?: string | null; emailed_at?: string | null; read_at?: string | null; created_at?: string };
         Relationships: [
           { foreignKeyName: "notifications_athlete_id_fkey"; columns: ["athlete_id"]; isOneToOne: false; referencedRelation: "athletes"; referencedColumns: ["id"] }
         ];

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import { CHECK_IN_COLUMNS, isCheckIn } from "@/lib/check-in";
 import { checkInReminderDecision, reminderDue } from "@/lib/check-in-reminders";
+import { emailNewNotifications } from "@/lib/email/notifications";
 import { pushNewNotifications } from "@/lib/push/send";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -78,7 +79,12 @@ export async function POST(request: Request) {
           throw notifications.error;
         }
         counts.sent += recipients.length;
-        await Promise.all(recipients.map((row) => pushNewNotifications({ athleteId: row.athlete_id, kind: "check_in_reminder" })));
+        await Promise.all(recipients.map((row) => Promise.all([
+          pushNewNotifications({ athleteId: row.athlete_id, kind: "check_in_reminder" }),
+          emailNewNotifications({ athleteId: row.athlete_id, kind: "check_in_reminder" }).catch(() => {
+            console.error("Check-in reminder email dispatch failed");
+          }),
+        ])));
       }
       if (rows.length < pageSize) break;
     }

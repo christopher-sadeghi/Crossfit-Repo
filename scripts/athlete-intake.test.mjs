@@ -306,6 +306,32 @@ test("gate redirects requested/in-progress intakes only, permits onboarding and 
   }
 });
 
+test("unauthenticated deep links preserve their query through login and safeNextPath", async () => {
+  const cookies = { getAll: () => [], set() {} };
+  const { updateSession } = load("src/lib/supabase/middleware.ts", {
+    "@supabase/ssr": { createServerClient: () => ({ auth: { getClaims: async () => ({ data: { claims: null } }) } }) },
+    "next/server": { NextResponse: { next: () => ({ cookies }), redirect: (url) => ({ kind: "redirect", url, cookies }) } },
+  });
+  const { safeNextPath } = load("src/lib/auth/redirect.ts", {
+    "next/headers": { headers: async () => new Headers() },
+  });
+  async function redirectedUrl(path) {
+    const url = new URL(`http://localhost${path}`);
+    url.clone = () => new URL(url);
+    const response = await updateSession({ nextUrl: url, cookies });
+    assert.equal(response.kind, "redirect");
+    return response.url;
+  }
+
+  const deepLink = "/athletes/123?tab=progress&range=90";
+  const loginUrl = await redirectedUrl(deepLink);
+  assert.equal(loginUrl.pathname, "/login");
+  const next = loginUrl.searchParams.get("next");
+  assert.equal(next, deepLink);
+  assert.equal(safeNextPath(next), deepLink);
+  assert.equal((await redirectedUrl("/")).search, "");
+});
+
 test("gate logs lookup errors and rejected queries but allows athlete pages through", async (t) => {
   const log = t.mock.method(console, "error", () => {});
   for (const rejects of [false, true]) {
