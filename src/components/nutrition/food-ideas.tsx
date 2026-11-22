@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { selectClass } from "@/app/(app)/programs/options";
 import { addFoodIdea, deleteOwnFood, requestFoodIdeas, saveFoodPreferences } from "@/lib/ai/food-idea-actions";
+import { ideaText, matchedAllergies } from "@/lib/ai/food-safety";
 import type { FoodIdeas } from "@/lib/ai/suggest-food";
 import type { FormState } from "@/lib/auth/form-state";
 import { COOKING_OPTIONS, DIET_TYPES, type FoodPreferences } from "@/lib/food-preferences";
@@ -114,12 +115,26 @@ function AddIdeaButton({ suggestionId, index, name, added }: { suggestionId: str
   );
 }
 
-export function FoodIdeaList({ id, ideas, addedNames }: { id: string; ideas: FoodIdeas; addedNames: string[] }) {
+export function FoodIdeaList({
+  id,
+  ideas,
+  addedNames,
+  allergies = [],
+}: {
+  id: string;
+  ideas: FoodIdeas;
+  addedNames: string[];
+  allergies?: string[];
+}) {
+  // Ideas made before the allergy list changed are re-checked and hidden if they now match.
+  const outdated = ideas.ideas.map((idea) => matchedAllergies(ideaText(idea), allergies));
+  const hiddenAllergies = [...new Set(outdated.flat())];
+  const hiddenCount = outdated.filter((hits) => hits.length).length;
   return (
     <div className="grid gap-3">
       {ideas.note && <p className="text-sm">{ideas.note}</p>}
       <ul className="grid gap-3">
-        {ideas.ideas.map((idea, index) => (
+        {ideas.ideas.map((idea, index) => outdated[index].length ? null : (
           <li key={`${index}-${idea.name}`} className="grid gap-2 rounded-lg border p-3">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <p className="min-w-0 font-medium break-words">{idea.name}</p>
@@ -136,6 +151,11 @@ export function FoodIdeaList({ id, ideas, addedNames }: { id: string; ideas: Foo
           </li>
         ))}
       </ul>
+      {hiddenCount ? (
+        <p className="text-xs text-muted-foreground">
+          {hiddenCount} idea{hiddenCount === 1 ? " is" : "s are"} hidden because {hiddenCount === 1 ? "it matches" : "they match"} the current allergy list ({hiddenAllergies.join(", ")}).
+        </p>
+      ) : null}
       {ideas.removed?.length ? (
         <p className="text-xs text-muted-foreground">
           Safety check: {ideas.removed.length} idea{ideas.removed.length === 1 ? " was" : "s were"} removed because{" "}

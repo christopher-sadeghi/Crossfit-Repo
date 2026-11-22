@@ -134,7 +134,7 @@ export default async function AthleteNutritionPage({ params, searchParams }: Pro
           </CardHeader>
           <CardContent className="grid gap-4">
             <SuggestFoodForm athleteId={athlete.id} date={date} />
-            {ideas && <FoodIdeaList id={ideas.id} ideas={ideas.ideas} addedNames={ideas.addedNames} />}
+            {ideas && <FoodIdeaList id={ideas.id} ideas={ideas.ideas} addedNames={ideas.addedNames} allergies={prefs.allergies} />}
             <p className="text-xs text-muted-foreground">{FOOD_DISCLAIMER}</p>
           </CardContent>
         </Card>

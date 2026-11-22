@@ -29,6 +29,7 @@ import { scaleWorkoutInputSchema, scaleWorkoutSchema } from "@/lib/ai/scale-work
 import { FoodIdeaList } from "@/components/nutrition/food-ideas";
 import { FOOD_DISCLAIMER, foodIdeasInputSchema, foodIdeasSchema } from "@/lib/ai/suggest-food";
 import { addedIdeaNames } from "@/lib/food-ideas";
+import { readPreferences } from "@/lib/food-preferences";
 
 type Props = { params: Promise<{ id: string }> };
 type MacroKey = "calories" | "protein_g" | "carbs_g" | "fat_g";
@@ -58,7 +59,17 @@ export default async function SuggestionPage({ params }: Props) {
   const foodType = suggestion.suggestion_type === "suggest_food";
   const foodIdeas = foodType ? foodIdeasSchema.safeParse(suggestion.proposal) : null;
   const foodInput = foodType ? foodIdeasInputSchema.safeParse(suggestion.input) : null;
-  const foodAdded = foodIdeas?.success ? await addedIdeaNames(supabase, suggestion.id) : [];
+  const [foodAdded, foodPrefs] = foodIdeas?.success && suggestion.athlete_id
+    ? await Promise.all([
+        addedIdeaNames(supabase, suggestion.id),
+        supabase
+          .from("athlete_food_preferences")
+          .select("diet_type, allergies, dislikes, cooking_minutes")
+          .eq("athlete_id", suggestion.athlete_id)
+          .maybeSingle()
+          .then(({ data }) => readPreferences(data)),
+      ])
+    : [[], readPreferences(null)];
   const decided = suggestion.status === "approved" || suggestion.status === "edited";
   const summaryParsed = summaryType ? progressSummarySchema.safeParse(decided ? suggestion.final : suggestion.proposal) : null;
   const shownSummary = summaryParsed?.success ? summaryParsed.data : null;
@@ -366,7 +377,7 @@ export default async function SuggestionPage({ params }: Props) {
             )}
           </CardHeader>
           <CardContent className="grid gap-4">
-            <FoodIdeaList id={suggestion.id} ideas={foodIdeas.data} addedNames={foodAdded} />
+            <FoodIdeaList id={suggestion.id} ideas={foodIdeas.data} addedNames={foodAdded} allergies={foodPrefs.allergies} />
             <p className="text-xs text-muted-foreground">{FOOD_DISCLAIMER}</p>
           </CardContent>
         </Card>
