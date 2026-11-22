@@ -6,12 +6,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { COOKING_OPTIONS, DIET_TYPES } from "@/lib/food-preferences";
-import { EQUIPMENT, GOAL_CATEGORIES, INTAKE_STEPS, type IntakeFormValues } from "@/lib/athlete-intake";
+import { EQUIPMENT, GOAL_CATEGORIES, GOAL_OPTIONS, INTAKE_STEPS, type IntakeFormValues } from "@/lib/athlete-intake";
 import type { Units } from "@/lib/units";
 import { saveIntakeStep } from "./actions";
 
 type Row = Record<string, string | number>;
 type Benchmark = { id: string; name: string; kind: string; workout_type: string };
+const CUSTOM_GOAL = "__custom_goal__";
+
+function selectedGoalChoice(goal: Row, options: readonly string[]) {
+  const target = String(goal.target ?? "");
+  if (options.includes(target)) return target;
+  if (target || goal.specific_goal_choice === CUSTOM_GOAL) return CUSTOM_GOAL;
+  return "";
+}
 
 export function IntakeForm({ step, values, benchmarks, units }: { step: number; values: IntakeFormValues; benchmarks: Benchmark[]; units: Units }) {
   const [form, setForm] = useState(values);
@@ -25,18 +33,57 @@ export function IntakeForm({ step, values, benchmarks, units }: { step: number; 
   const select = (name: string, label: string, options: readonly (readonly [string, string])[]) => <label className="grid gap-2 text-sm">{label}<select className="h-11 rounded-md border bg-background px-3" value={String(form[name] ?? "")} onChange={(e) => set(name, e.target.value)}>{options.map(([value, title]) => <option value={value} key={value}>{title}</option>)}</select></label>;
   const remove = (name: string, index: number) => <Button type="button" variant="ghost" onClick={() => set(name, rows(name).filter((_, i) => i !== index))}>Remove</Button>;
   const rowInput = (name: string, index: number, key: string, label: string, type = "text") => <label className="grid gap-1 text-sm">{label}<Input type={type} step={type === "number" ? "any" : undefined} value={rows(name)[index][key]} onChange={(e) => updateRow(name, index, key, e.target.value)} /></label>;
+  const setGoalChoice = (index: number, choice: string) => set("goals", rows("goals").map((goal, i) => i === index
+    ? { ...goal, specific_goal_choice: choice, target: choice === CUSTOM_GOAL ? String(goal.target ?? "") : choice }
+    : goal));
+  const setGoalCategory = (index: number, category: string) => set("goals", rows("goals").map((goal, i) => i === index
+    ? { ...goal, category, specific_goal_choice: "", target: "" }
+    : goal));
 
   return <section className="space-y-5">
     <div><p className="text-sm text-muted-foreground">Your starting point · Step {step} of 7</p><h1 className="text-2xl font-semibold">{INTAKE_STEPS[step - 1]}</h1><p className="mt-2 text-sm text-muted-foreground">Help your coach tailor your training. Each step saves when you continue; come back anytime.</p></div>
     <progress className="h-2 w-full" value={step} max={7} aria-label="Questionnaire progress" />
-    <form className="grid gap-5" onSubmit={(e) => { e.preventDefault(); setError(""); startTransition(async () => { const input = step === 3 ? { ...form, goals: rows("goals").map((g) => g.status === "achieved" ? { id: g.id, status: "achieved" } : g) } : form; const result = await saveIntakeStep(step, input); if (result) setError(result.error); }); }}>
+    <form className="grid gap-5" onSubmit={(e) => { e.preventDefault(); setError(""); startTransition(async () => { const input = step === 3 ? { ...form, goals: rows("goals").map((g) => g.status === "achieved" ? { id: g.id, status: "achieved" } : Object.fromEntries(Object.entries(g).filter(([key]) => key !== "specific_goal_choice"))) } : form; const result = await saveIntakeStep(step, input); if (result) setError(result.error); }); }}>
       <fieldset disabled={pending} className="grid min-w-0 gap-5">
       {step === 1 && <>{field("birth_date", "Birth date", "date")}{select("sex", "Sex (optional)", [["", "Prefer not to say"], ["female", "Female"], ["male", "Male"], ["other", "Other"]])}<div className="grid grid-cols-2 gap-3">{field("height_ft", "Height (feet)", "number")}{field("height_in", "Inches", "number")}</div>{field("weight", `Current weight (${units})`, "number")}</>}
       {step === 2 && <>{select("experience_level", "CrossFit experience", [["beginner", "Beginner"], ["intermediate", "Intermediate"], ["advanced", "Advanced"], ["competitor", "Competitor"]])}{area("crossfit_detail", "Tell us about your CrossFit experience (optional)")}{field("years_training", "Years training", "number")}{area("sports_background", "Sports background (optional)")}<h2 className="font-medium">Known 1RMs & benchmarks (optional)</h2><p className="text-sm text-muted-foreground">Leave out results you don’t know. Loads are in {units}; times are in seconds.</p>{rows("benchmarks").map((r, i) => {
         const b = benchmarks.find((b) => b.id === r.benchmark_id);
         return <div key={i} className="grid gap-3 rounded-lg border p-3"><label className="grid gap-1 text-sm">Benchmark<select className="h-11 w-full rounded border bg-background" value={r.benchmark_id} onChange={(e) => updateRow("benchmarks", i, "benchmark_id", e.target.value)}><option value="">Choose a benchmark</option>{benchmarks.map((b) => <option key={b.id} value={b.id}>{b.name}{b.kind === "lift" ? " (1RM)" : ""}</option>)}</select></label>{b?.kind === "lift" ? rowInput("benchmarks", i, "load", `1RM (${units})`, "number") : b?.workout_type === "for_time" ? rowInput("benchmarks", i, "time_seconds", "Time (seconds)", "number") : <>{rowInput("benchmarks", i, "rounds", "Rounds", "number")}{rowInput("benchmarks", i, "reps", "Reps", "number")}</>}{remove("benchmarks", i)}</div>;
       })}<Button type="button" variant="outline" disabled={rows("benchmarks").length >= 30} onClick={() => set("benchmarks", [...rows("benchmarks"), { benchmark_id: "", load: "", time_seconds: "", rounds: "", reps: "" }])}>Add a known result</Button></>}
-      {step === 3 && <><p className="text-sm">Choose 1–3 priorities. Targets and dates are optional. Achieved goals are read-only and count toward your three priorities.</p>{rows("goals").map((r, i) => r.status === "achieved" ? <div key={i} className="grid gap-2 rounded-lg border p-3"><p className="font-medium">{r.category}{r.target ? `: ${r.target}` : ""} · Achieved</p><p className="text-sm text-muted-foreground">Target: {r.target_value || "—"} · Date: {r.target_date || "—"}</p></div> : <div key={i} className="grid gap-3 rounded-lg border p-3"><label className="grid gap-1 text-sm">Priority<select className="h-11 rounded border bg-background" value={r.category} onChange={(e) => updateRow("goals", i, "category", e.target.value)}>{GOAL_CATEGORIES.map((g) => <option key={g}>{g}</option>)}</select></label>{rowInput("goals", i, "target", "Target / skill / competition")}{rowInput("goals", i, "target_value", "Target value (include units in target text)", "number")}{rowInput("goals", i, "target_date", "Target date", "date")}{remove("goals", i)}</div>)}<Button type="button" variant="outline" disabled={rows("goals").length >= 3} onClick={() => set("goals", [...rows("goals"), { category: GOAL_CATEGORIES.find((c) => !rows("goals").some((g) => g.category === c)) ?? "Strength", target: "", target_value: "", target_date: "" }])}>Add goal</Button></>}
+      {step === 3 && <>
+        <p className="text-sm">Choose up to 6 goals. Pick a type, then a specific goal or write your own. Targets and dates are optional. Achieved goals are read-only and count toward your six.</p>
+        {rows("goals").map((r, i) => {
+          if (r.status === "achieved") {
+            return <div key={r.id ?? i} className="grid gap-2 rounded-lg border p-3">
+              <p className="font-medium">{r.category}{r.target ? `: ${r.target}` : ""} · Achieved</p>
+              <p className="text-sm text-muted-foreground">Target: {r.target_value || "—"} · Date: {r.target_date || "—"}</p>
+            </div>;
+          }
+          const options = GOAL_OPTIONS[String(r.category) as keyof typeof GOAL_OPTIONS] ?? [];
+          const choice = selectedGoalChoice(r, options);
+          return <div key={r.id ?? i} className="grid gap-3 rounded-lg border p-3">
+            <label className="grid gap-1 text-sm">
+              Goal type
+              <select className="h-11 rounded border bg-background" value={String(r.category ?? "")} onChange={(e) => setGoalCategory(i, e.target.value)}>
+                {GOAL_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              Specific goal
+              <select className="h-11 rounded border bg-background" value={choice} onChange={(e) => setGoalChoice(i, e.target.value)}>
+                <option value="">Choose a specific goal</option>
+                {options.map((option) => <option key={option} value={option}>{option}</option>)}
+                <option value={CUSTOM_GOAL}>Something else (write your own)</option>
+              </select>
+            </label>
+            {choice === CUSTOM_GOAL && rowInput("goals", i, "target", "Your goal")}
+            {rowInput("goals", i, "target_value", "Target value (include units in target text)", "number")}
+            {rowInput("goals", i, "target_date", "Target date", "date")}
+            {remove("goals", i)}
+          </div>;
+        })}
+        <Button type="button" variant="outline" disabled={rows("goals").length >= 6} onClick={() => set("goals", [...rows("goals"), { category: "Strength", target: "", specific_goal_choice: "", target_value: "", target_date: "" }])}>Add goal</Button>
+      </>}
       {step === 4 && <><p className="text-sm text-muted-foreground">Include anything that affects training. Review any existing notes and confirm the severity.</p><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.no_injuries === true} onChange={(e) => setForm((v) => ({ ...v, no_injuries: e.target.checked, injury_list: e.target.checked ? [] : v.injury_list }))} />I have no injuries or limitations.</label>{rows("injury_list").map((r, i) => <div key={i} className="grid gap-3 rounded-lg border p-3">{rowInput("injury_list", i, "area", "Area / limitation")}<label className="grid gap-1 text-sm">Severity<select className="h-11 rounded border bg-background" value={r.severity} onChange={(e) => updateRow("injury_list", i, "severity", e.target.value)}>{["mild", "moderate", "severe"].map((s) => <option key={s}>{s}</option>)}</select></label>{rowInput("injury_list", i, "notes", "Notes (optional)")}{remove("injury_list", i)}</div>)}<Button type="button" variant="outline" disabled={rows("injury_list").length >= 20} onClick={() => setForm((v) => ({ ...v, no_injuries: false, injury_list: [...rows("injury_list"), { area: "", severity: "mild", notes: "" }] }))}>Add injury or limitation</Button></>}
       {step === 5 && <>{field("days_per_week", "Training days per week (1–7)", "number")}{field("session_minutes", "Session length (minutes)", "number")}{select("location", "Training location", [["gym", "Gym"], ["home", "Home"], ["travel", "Travel"]])}<fieldset className="grid grid-cols-2 gap-3"><legend className="mb-3 text-sm font-medium">Available equipment</legend>{EQUIPMENT.map((item) => <label key={item} className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" checked={(form.equipment as string[]).includes(item)} onChange={(e) => set("equipment", e.target.checked ? [...form.equipment as string[], item] : (form.equipment as string[]).filter((v) => v !== item))} />{item}</label>)}</fieldset></>}
       {step === 6 && <>{select("diet_type", "Diet", DIET_TYPES)}{field("allergies", "Allergies (comma separated)", "text", false)}{field("dislikes", "Foods you dislike (comma separated)", "text", false)}{select("cooking_minutes", "Time available to cook", COOKING_OPTIONS)}{area("eating_habits", "Current eating habits (optional)")}</>}

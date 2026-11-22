@@ -142,7 +142,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
 
   return (
     <div className="grid gap-6">
-      <CheckInForm key={currentDate} entry={todayJournal} today={currentDate} />
+      <CheckInForm key={currentDate} entry={todayJournal} today={currentDate} athleteId={viewer.athleteId} />
       <AthleteConsistencyCard athleteId={viewer.athleteId} compact />
       <section className="grid gap-3">
         <h1 className="text-xl font-semibold tracking-tight">Today&apos;s WOD</h1>

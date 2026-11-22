@@ -15,7 +15,7 @@ function load(relative, overrides = {}) {
   new Function("require", "module", "exports", js)(localRequire, loaded, loaded.exports);
   return loaded.exports;
 }
-const { intakeSchemas: schemas } = load("src/lib/athlete-intake.ts");
+const { intakeSchemas: schemas, GOAL_OPTIONS } = load("src/lib/athlete-intake.ts");
 const valid = [
   { birth_date: "1995-01-01", height_ft: 5, height_in: 10, weight: 180, sex: "" },
   { experience_level: "beginner", years_training: 0, crossfit_detail: "", sports_background: "", benchmarks: [] },
@@ -94,8 +94,31 @@ test("invalid height, score, goals, injuries, schedule, nutrition and lifestyle 
   schemas.forEach((schema, i) => assert.equal(schema.safeParse(invalid[i]).success, false));
   assert.equal(schemas[1].safeParse({ ...valid[1], years_training: "" }).success, false);
   assert.equal(schemas[6].safeParse({ ...valid[6], sleep_hours: "" }).success, false);
-  assert.equal(schemas[2].safeParse({ goals: [valid[2].goals[0], valid[2].goals[0]] }).success, false);
   assert.equal(schemas[4].safeParse({ ...valid[4], equipment: ["None", "Barbell"] }).success, false);
+});
+test("goal choices accept six goals and repeated categories but reject seven and exact duplicates", () => {
+  const makeGoal = (category, target) => ({ category, target, target_value: "", target_date: "" });
+  const six = [
+    makeGoal("Strength", "Raise back squat 1RM"),
+    makeGoal("Strength", "Raise deadlift 1RM"),
+    makeGoal("Conditioning", "Faster 5k run"),
+    makeGoal("Body composition", "Build muscle"),
+    makeGoal("Specific skill", "First strict pull-up"),
+    makeGoal("Competition", "Do my first local competition"),
+  ];
+  assert.equal(schemas[2].safeParse({ goals: six }).success, true);
+  assert.equal(schemas[2].safeParse({ goals: [...six, makeGoal("Strength", "Get stronger overall")] }).success, false);
+  assert.equal(schemas[2].safeParse({ goals: six.slice(0, 2) }).success, true);
+  const duplicate = schemas[2].safeParse({ goals: [makeGoal("Strength", "Raise back squat 1RM"), makeGoal("Strength", "RAISE BACK SQUAT 1RM")] });
+  assert.equal(duplicate.success, false);
+  assert.equal(duplicate.error.issues[0].message, "You've added that goal twice.");
+  assert.deepEqual(GOAL_OPTIONS, {
+    Strength: ["Raise back squat 1RM", "Raise front squat 1RM", "Raise deadlift 1RM", "Raise strict press 1RM", "Raise bench press 1RM", "Raise clean & jerk 1RM", "Raise snatch 1RM", "Get stronger overall"],
+    Conditioning: ["Faster 5k run", "Faster 2k row", "Faster benchmark WOD time (e.g. Fran, Helen)", "Better engine for long WODs (20+ min)", "Recover faster between rounds"],
+    "Body composition": ["Lose body fat", "Build muscle", "Reach a target body weight", "Keep my weight while getting stronger"],
+    "Specific skill": ["First strict pull-up", "First kipping or butterfly pull-up", "First chest-to-bar pull-up", "First toes-to-bar", "First double-unders", "First handstand push-up", "First handstand walk", "First bar muscle-up", "First ring muscle-up", "First pistol squat", "First rope climb"],
+    Competition: ["Do my first local competition", "Move up to the Rx division", "Improve my CrossFit Open ranking", "Qualify for the next stage after the Open", "Peak for a specific event date"],
+  });
 });
 
 function actionHarness({ kind = "athlete", dbError = null, notificationError = null, notificationThrows = false } = {}) {
@@ -141,7 +164,8 @@ test("completed intake notifies the coach only after saving, links intake, and t
   assert.deepEqual(partial.writes.map((write) => write.name), ["save_athlete_intake_step"]);
 });
 test("achieved goals render without edit controls, occupy picks and submit identity only", async () => {
-  const goals = [1, 2, 3].map((n) => ({ id: `35000000-0000-4000-8000-00000000000${n}`, status: "achieved", category: "Strength", target: "Squat", target_value: 100, target_date: "2026-01-01" }));
+  const goalIds = ["35000000-0000-0000-0000-000000000001", "35000000-0000-0000-0000-000000000002", "35000000-0000-0000-0000-000000000003", "35000000-0000-0000-0000-000000000004", "35000000-0000-0000-0000-000000000005", "35000000-0000-0000-0000-000000000006"];
+  const goals = goalIds.map((id) => ({ id, status: "achieved", category: "Strength", target: "Squat", target_value: 100, target_date: "2026-01-01" }));
   let submission;
   let pending;
   const { IntakeForm } = load("src/app/athlete/onboarding/intake-form.tsx", {
@@ -170,6 +194,45 @@ test("achieved goals render without edit controls, occupy picks and submit ident
   const { saveIntakeStep, writes } = actionHarness();
   await assert.rejects(saveIntakeStep(3, submission.input), /REDIRECT/);
   assert.deepEqual(writes[0].p_data.goals, goals.map(({ id }) => ({ id })));
+});
+test("goal editor offers category-specific options and keeps unknown saved targets custom", () => {
+  let formState = {
+    goals: [
+      { category: "Strength", target: "Raise back squat 1RM", target_value: "", target_date: "" },
+      { category: "Strength", target: "Work toward a strict ring dip", target_value: "", target_date: "" },
+    ],
+  };
+  let stateCalls = 0;
+  const { IntakeForm } = load("src/app/athlete/onboarding/intake-form.tsx", {
+    react: {
+      useState(initial) {
+        stateCalls += 1;
+        if (stateCalls === 1) return [formState, (next) => { formState = typeof next === "function" ? next(formState) : next; }];
+        return [initial, () => {}];
+      },
+      useTransition: () => [false, () => {}],
+    },
+    "next/link": "a",
+    "@/components/ui/button": { Button: "button" },
+    "@/components/ui/input": { Input: "input" },
+    "@/components/ui/textarea": { Textarea: "textarea" },
+    "./actions": { saveIntakeStep: async () => ({}) },
+  });
+  function elements(node, type) {
+    if (!node || typeof node !== "object") return [];
+    return [...(node.type === type ? [node] : []), ...[node.props?.children].flat(Infinity).flatMap((child) => elements(child, type))];
+  }
+  const tree = IntakeForm({ step: 3, values: formState, benchmarks: [], units: "kg" });
+  const selects = elements(tree, "select");
+  assert.equal(selects.length, 4);
+  assert.equal(selects[0].props.value, "Strength");
+  assert.equal(selects[1].props.value, "Raise back squat 1RM");
+  assert.equal(selects[2].props.value, "Strength");
+  assert.equal(selects[3].props.value, "__custom_goal__");
+  assert.match(JSON.stringify(selects[1]), /Something else \(write your own\)/);
+  assert.equal(elements(tree, "input").some((input) => input.props.value === "Work toward a strict ring dip"), true);
+  selects[0].props.onChange({ target: { value: "Conditioning" } });
+  assert.deepEqual(formState.goals[0], { category: "Conditioning", target: "", target_value: "", target_date: "", specific_goal_choice: "" });
 });
 test("canonical coach goal edits survive resend and unchanged saves submit no field edits", async () => {
   const { goalPrefill } = load("src/lib/athlete-intake.ts");
