@@ -146,6 +146,34 @@ do $$ begin
  raise notice 'PASS: athlete B sees only own untouched intake';
 end $$;
 reset role;
+savepoint six_goal_limit_check;
+set local role authenticated;
+select set_config('request.jwt.claims','{"sub":"35000000-0000-0000-0000-000000000003","role":"authenticated"}',true);
+select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',3,
+ jsonb_build_object('goals',jsonb_build_array(
+   jsonb_build_object('title','Limit test goal 1','goal_type','performance','category','Strength'),
+   jsonb_build_object('title','Limit test goal 2','goal_type','performance','category','Strength'),
+   jsonb_build_object('title','Limit test goal 3','goal_type','performance','category','Conditioning'),
+   jsonb_build_object('title','Limit test goal 4','goal_type','performance','category','Body composition'),
+   jsonb_build_object('title','Limit test goal 5','goal_type','skill','category','Specific skill'),
+   jsonb_build_object('title','Limit test goal 6','goal_type','performance','category','Competition'))),'2026-11-21');
+do $$ declare rejected boolean := false; begin
+ assert (select jsonb_array_length(answers->'goal_ids') = 6 from public.athlete_intakes where athlete_id = '35000000-0000-0000-0000-000000000011');
+ assert (select count(*) = 6 from public.goals where athlete_id = '35000000-0000-0000-0000-000000000011' and title like 'Limit test goal %');
+ begin
+   perform public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',3,
+     '{"goals":[{"title":"Seven goal 1","goal_type":"performance"},{"title":"Seven goal 2","goal_type":"performance"},{"title":"Seven goal 3","goal_type":"performance"},{"title":"Seven goal 4","goal_type":"performance"},{"title":"Seven goal 5","goal_type":"performance"},{"title":"Seven goal 6","goal_type":"performance"},{"title":"Seven goal 7","goal_type":"performance"}]}','2026-11-21');
+   raise exception 'Seven goals unexpectedly accepted';
+ exception when others then
+   if sqlerrm = 'Seven goals unexpectedly accepted' then raise; end if;
+   if sqlerrm <> 'Choose 1–6 goals' then raise; end if;
+   rejected := true;
+ end;
+ assert rejected;
+ raise notice 'PASS: intake RPC accepts six goals, including repeated categories, and rejects seven';
+end $$;
+reset role;
+rollback to savepoint six_goal_limit_check;
 update public.athletes set status = 'archived' where id = '35000000-0000-0000-0000-000000000011';
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"35000000-0000-0000-0000-000000000003","role":"authenticated"}',true);

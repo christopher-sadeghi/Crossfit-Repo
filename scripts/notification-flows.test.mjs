@@ -194,7 +194,7 @@ function actionHarness(tables = {}, options = {}, overrides = {}) {
     "@/lib/supabase/server": { createClient: async () => client },
     "@/lib/viewer": { getViewer: async () => options.viewer ?? { kind: "athlete", athleteId, coachId: userId, units: "kg" } },
     "@/lib/time-zone": { getToday: async () => date },
-    "@/lib/activity-training-warning": { checkTrainingLoad: async () => {} },
+    "@/lib/activity-training-warning": { checkTrainingLoad: async (_client, id, today) => events.push(["trainingLoad", id, today]) },
     "@/lib/notifications": Object.fromEntries(["notifyResultLogged", "notifyLowReadiness", "notifyWorkoutAdjusted", "notifyScheduleChanged", "notifySuggestionApproved"].map((name) => [name, notify(name)])),
     "@/lib/ai/service": {}, "@/lib/ai/suggestions": { SUGGESTION_REGISTRY: {} },
     "@/app/(app)/programs/actions": { placeWorkout: async () => { events.push(["place"]); return options.placementError ? { error: "Failed" } : {}; } },
@@ -221,16 +221,28 @@ test("result inserts notify after success; edits and failed/invalid inserts do n
   }
 });
 
-test("check-in notifies only after successful low-readiness saves using the local day", async () => {
+test("check-in notifications and training warnings require successful full low-readiness saves", async () => {
   const healthy = { sleep_hours: 8, sleep_quality: 5, soreness: 1, stress: 1, energy: 5, mood: 5 };
   const low = { sleep_hours: 0, sleep_quality: 1, soreness: 5, stress: 5, energy: 1, mood: 1 };
   for (const [ratings, options, expected] of [[low, {}, 1], [healthy, {}, 0], [low, { writeError: new Error("denied") }, 0], [{}, {}, 0]]) {
     const { load, events } = actionHarness({}, options);
-    await load("src/app/athlete/check-in/actions.ts").saveCheckIn({}, form({ ...ratings, notes: "", expected_date: date }));
+    const result = await load("src/app/athlete/check-in/actions.ts").saveCheckIn({}, form({ ...ratings, notes: "", expected_date: date }));
     const notifications = events.filter(([kind]) => kind === "notification");
+    const trainingWarnings = events.filter(([kind]) => kind === "trainingLoad");
     assert.equal(notifications.length, expected);
-    if (expected) { assert.equal(events[0][0], "upsert"); assert.deepEqual(notifications[0], ["notification", "notifyLowReadiness", athleteId, date]); }
+    assert.equal(trainingWarnings.length, expected);
+    if (expected) {
+      assert.equal(events[0][0], "upsert");
+      assert.deepEqual(notifications[0], ["notification", "notifyLowReadiness", athleteId, date]);
+      assert.deepEqual(trainingWarnings[0], ["trainingLoad", athleteId, date]);
+    }
+    if (Object.keys(ratings).length === 0) assert.equal(result.error, "Fill in at least one answer, or tap Skip today.");
   }
+  const { load, events } = actionHarness();
+  const partial = await load("src/app/athlete/check-in/actions.ts").saveCheckIn({}, form({ sleep_hours: 8, notes: "", expected_date: date }));
+  assert.equal(partial.message, "Check-in saved.");
+  assert.equal(events.some(([kind]) => kind === "upsert"), true);
+  assert.equal(events.filter(([kind]) => kind === "notification" || kind === "trainingLoad").length, 0);
 });
 
 test("AI adjustment notifies for applied and persisted pain paths, not unpersisted/ordinary failures", async () => {

@@ -30,12 +30,14 @@ export const CHECK_IN_COLUMNS =
   "athlete_id, entry_on, sleep_hours, sleep_quality, soreness, soreness_areas, stress, energy, mood, readiness, notes";
 
 const CHECK_IN_FIELDS = ["sleep_hours", "sleep_quality", "soreness", "stress", "energy", "mood", "notes"] as const;
-export const CHECK_IN_FILTER = CHECK_IN_FIELDS
-  .map((field) => field === "notes" ? "notes.neq." : `${field}.not.is.null`)
-  .join(",");
+export const CHECK_IN_FILTER = [
+  ...CHECK_IN_FIELDS.map((field) => field === "notes" ? "notes.neq." : `${field}.not.is.null`),
+  "soreness_areas.neq.{}",
+].join(",");
 
-export function isCheckIn(entry: Partial<Pick<CheckIn, (typeof CHECK_IN_FIELDS)[number]>>) {
-  return CHECK_IN_FIELDS.some((field) => field === "notes" ? Boolean(entry.notes?.trim()) : entry[field] != null);
+export function isCheckIn(entry: Partial<Pick<CheckIn, (typeof CHECK_IN_FIELDS)[number] | "soreness_areas">>) {
+  return Boolean(entry.soreness_areas?.length) ||
+    CHECK_IN_FIELDS.some((field) => field === "notes" ? Boolean(entry.notes?.trim()) : entry[field] != null);
 }
 
 export type CheckIn = Pick<
