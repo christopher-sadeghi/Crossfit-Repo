@@ -27,6 +27,19 @@ const context = { units: "lb", days_per_week: 1, library: [{ id: movementId, nam
 function proposal() {
   return { name: "First four weeks", rationale: "Build gradually.", start_date: "2026-11-23", weeks: [1, 2, 3, 4].map((week_number) => ({ week_number, workouts: [{ day_number: 1, title: "Strength", workout_type: "strength", time_cap_minutes: 30, rounds: null, description: "Warm up, then squat.", notes: null, movements: [{ movement_id: movementId, sets: 3, reps: 5, load: 100, distance_m: null, calories: null, duration_seconds: null, notes: "Conservative load." }] }] })) };
 }
+test("inline previews show workout prescriptions and scheduled program days", () => {
+  const inline = createLoader({ "server-only": {} })("src/lib/ai/inline-suggestion.ts").inlineSuggestion;
+  const program = proposal();
+  const workout = { ...program.weeks[0].workouts[0], workout_type: "amrap", rounds: 3, notes: "Pace the first round.", rationale: "Build gradually." };
+  const preview = inline({
+    status: "pending", suggestion_type: "write_workout", proposal: workout,
+    input: { ...context, mode: "write", request: "Write a workout", library: [{ ...context.library[0], category: "weightlifting", measure: "reps" }] },
+  });
+  assert.deepEqual([preview.format, preview.rounds, preview.timeCapMinutes, preview.notes], ["AMRAP", 3, 30, workout.notes]);
+  assert.deepEqual(preview.movements, ["Squat · 3 sets · 5 reps · 100 lb · Conservative load."]);
+  const schedule = inline({ status: "pending", suggestion_type: "draft_program", proposal: { ...program, weeks: [...program.weeks].reverse() } });
+  assert.deepEqual(schedule.workouts, [1, 2, 3, 4].map((week) => ({ week, day: 1, title: "Strength" })));
+});
 test("draft validation accepts four weeks and rejects empty, unknown movements, too many/few days, wrong weeks and duplicate placement", () => {
   validateDraftProgram(proposal(), context);
   assert.equal(draftProgramSchema.safeParse({}).success, false);

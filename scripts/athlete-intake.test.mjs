@@ -52,7 +52,7 @@ test("coach intake summary renders goal titles then categories, never bookkeepin
       "@/lib/coach": {},
       "@/components/ui/button": { Button: "button" },
       "@/components/ui/card": { Card: "section", CardContent: "div", CardHeader: "header", CardTitle: "h2" },
-      "@/components/suggestions/suggestion-forms": { RequestIntakeAiForm: "form" },
+      "@/components/suggestions/request-forms": { RequestIntakeAiForm: "form" },
     });
     const rendered = text(await IntakeTab({ athleteId: "athlete", units: "lb" }));
     assert.ok(rendered.includes(expected));

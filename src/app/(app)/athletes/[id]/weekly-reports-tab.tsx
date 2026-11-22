@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { RequestWeeklyReportForm } from "@/components/suggestions/suggestion-forms";
+import { RequestWeeklyReportForm } from "@/components/suggestions/request-forms";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/units";

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { COACH_SESSION_ERROR } from "@/lib/ai/coach-session";
 import { requestRegisteredSuggestion } from "@/lib/ai/request";
 import { aiDailyLimit, aiLimitMessage } from "@/lib/ai/service-core";
 import { createClient } from "@/lib/supabase/server";
@@ -12,7 +13,7 @@ import { completedReportWeek } from "@/lib/weekly-report";
 
 export async function loadWeeklyReportBatch() {
   const viewer = await getViewer();
-  if (viewer?.kind !== "coach") return { error: "Only a coach can draft weekly reports." };
+  if (viewer?.kind !== "coach") return { error: COACH_SESSION_ERROR };
   const [supabase, today] = await Promise.all([createClient(), getToday()]);
   const athleteIds: string[] = [];
   const pageSize = 500;
@@ -32,10 +33,10 @@ type BatchResult =
 
 // A separate request per athlete keeps a long batch within the normal server request timeout.
 export async function generateWeeklyReportInBatch(athleteId: string, startOn: string): Promise<BatchResult> {
+  const viewer = await getViewer();
+  if (viewer?.kind !== "coach") return { outcome: "stopped", message: COACH_SESSION_ERROR };
   const id = z.uuid().safeParse(athleteId);
   if (!id.success) return { outcome: "failed" };
-  const viewer = await getViewer();
-  if (viewer?.kind !== "coach") return { outcome: "stopped", message: "Sign in as a coach to continue." };
   const today = await getToday();
   if (completedReportWeek(today).start_on !== startOn) {
     return { outcome: "stopped", message: "The report week changed. Start a new batch to continue." };
@@ -51,7 +52,7 @@ export async function generateWeeklyReportInBatch(athleteId: string, startOn: st
   if (!athlete.data || alreadyDrafted.data) return { outcome: "skipped" };
 
   const result = await requestRegisteredSuggestion(supabase, "weekly_report", { athleteId: id.data });
-  revalidatePath("/suggestions");
+  revalidatePath("/settings/ai-history");
   revalidatePath(`/athletes/${id.data}`);
   if ("id" in result) return { outcome: "drafted" };
   return result.error === aiLimitMessage(aiDailyLimit())

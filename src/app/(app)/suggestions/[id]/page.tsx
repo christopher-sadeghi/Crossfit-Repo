@@ -20,6 +20,7 @@ import {
   writeWorkoutInputSchema,
   writeWorkoutSchema,
 } from "@/lib/ai/suggestions";
+import { getViewer } from "@/lib/viewer";
 import { createClient } from "@/lib/supabase/server";
 import { getToday } from "@/lib/time-zone";
 import { formatDate, toKg, type Units } from "@/lib/units";
@@ -28,6 +29,7 @@ import { AthleteAdjustmentReview } from "@/components/suggestions/athlete-adjust
 import { ScaleWorkoutReview } from "@/components/suggestions/scale-workout-review";
 import { WeeklyReportReview } from "@/components/suggestions/weekly-report-review";
 import { scaleWorkoutInputSchema, scaleWorkoutSchema } from "@/lib/ai/scale-workout";
+import { scaleReviewMovements } from "@/lib/ai/scale-review";
 import { FoodIdeaList } from "@/components/nutrition/food-ideas";
 import { FOOD_DISCLAIMER, foodIdeasInputSchema, foodIdeasSchema } from "@/lib/ai/suggest-food";
 import { addedIdeaNames } from "@/lib/food-ideas";
@@ -44,6 +46,7 @@ const MACROS: { key: MacroKey; label: string; unit: string }[] = [
 ];
 
 export default async function SuggestionPage({ params }: Props) {
+  if ((await getViewer())?.kind !== "coach") notFound();
   const { id } = await params;
   const supabase = await createClient();
   const { data: suggestion } = await supabase.from("ai_suggestions").select("*").eq("id", id).maybeSingle();
@@ -154,37 +157,7 @@ export default async function SuggestionPage({ params }: Props) {
           .eq("athlete_id", suggestion.athlete_id)
           .maybeSingle()
       : { data: null };
-  const scaleNames = new Map((scaleContext?.library ?? []).map(({ id, name }) => [id, name]));
-  const reviewedMovements = shownScale?.changes.map((change, index) => {
-    const original = scaleContext?.workout.movements[index];
-    const toWhiteboardMovement = (movement: typeof change, name: string) => ({
-      name,
-      sets: movement.sets,
-      reps: movement.reps,
-      load_kg: movement.load == null ? null : toKg(movement.load, scaleUnits),
-      distance_m: movement.distance_m,
-      calories: movement.calories,
-      duration_seconds: movement.duration_seconds,
-      notes: null,
-    });
-    return {
-      original: original
-        ? {
-            name: original.name,
-            sets: original.sets,
-            reps: original.reps,
-            load_kg: original.load == null ? null : toKg(original.load, scaleUnits),
-            distance_m: original.distance_m,
-            calories: original.calories,
-            duration_seconds: original.duration_seconds,
-            notes: original.notes,
-          }
-        : toWhiteboardMovement(change, "Original movement"),
-      scaled: toWhiteboardMovement(change, scaleNames.get(change.movement_id) ?? "Unknown movement"),
-      load: change.load,
-      reason: change.reason,
-    };
-  }) ?? [];
+  const reviewedMovements = scaleReviewMovements(shownScale, scaleContext);
   const resultCount =
     workoutContext?.mode === "adjust" && workoutContext.workout_id
       ? ((await supabase
@@ -198,7 +171,7 @@ export default async function SuggestionPage({ params }: Props) {
   return (
     <>
       <Button variant="ghost" size="sm" asChild className="mb-4">
-        <Link href="/suggestions">← All suggestions</Link>
+        <Link href="/settings/ai-history">← AI history</Link>
       </Button>
       <div className="mb-6">
         {suggestion.athlete_id && <Link href={`/messages/${suggestion.athlete_id}?link=suggestion:${suggestion.id}`} className="mb-2 inline-block text-sm underline underline-offset-4">Discuss with athlete</Link>}

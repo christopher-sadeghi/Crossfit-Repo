@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Bot, CalendarDays, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 
+import { InlineSuggestionCard } from "@/components/suggestions/inline-suggestion-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -37,10 +38,18 @@ function Status({ state }: { state: FormState }) {
   return <>{state.error && <p role="alert" className="text-sm text-destructive">{state.error}</p>}{state.message && <p role="status" className="text-sm">{state.message}</p>}</>;
 }
 
-function DayMenu({ athleteId, date, weekStart, alignEnd }: { athleteId: string; date: string; weekStart: string; alignEnd: boolean }) {
-  const [state, action, pending] = useActionState(requestAthleteDayWorkout, {});
+function DayMenu({ athleteId, date, weekStart, alignEnd, onSuggestion }: { athleteId: string; date: string; weekStart: string; alignEnd: boolean; onSuggestion: (id: string) => void }) {
+  const menu = useRef<HTMLDetailsElement>(null);
+  const [state, action, pending] = useActionState(async (previous: FormState, formData: FormData) => {
+    const result = await requestAthleteDayWorkout(previous, formData);
+    if (result.suggestionId) {
+      onSuggestion(result.suggestionId);
+      if (menu.current) menu.current.open = false;
+    }
+    return result;
+  }, {});
   return (
-    <details className="relative">
+    <details ref={menu} className="relative">
       <summary aria-label={`Add WOD on ${date}`} title="Add WOD on this day" className="cursor-pointer list-none rounded p-1 hover:bg-muted"><Plus className="size-3.5" /></summary>
       <div className={`absolute z-20 grid w-64 gap-3 rounded-lg border bg-background p-3 text-foreground shadow-lg ${alignEnd ? "right-0" : "left-0"}`}>
         <Link className="hover:underline" href={`/programs/workouts/new?athlete=${athleteId}&date=${date}`}>New WOD for this day</Link>
@@ -51,7 +60,7 @@ function DayMenu({ athleteId, date, weekStart, alignEnd }: { athleteId: string; 
           <label htmlFor={`ai-request-${date}`} className="font-medium">Ask AI to write one</label>
           <Textarea id={`ai-request-${date}`} name="request" placeholder="Optional instructions" maxLength={500} />
           <Button size="sm" disabled={pending}>{pending ? "Requesting…" : "Ask AI to write one"}</Button>
-          <p className="text-xs text-muted-foreground">It&apos;ll wait for your approval in Suggestions.</p>
+          <p className="text-xs text-muted-foreground">Review the draft here before anything changes.</p>
           <Status state={state} />
         </form>
       </div>
@@ -145,6 +154,7 @@ function AddExistingForm({ athleteId, firstName, library, programs, selectedDate
 
 export function AthleteCalendar(props: Props) {
   const { athleteId, firstName, today, weekStart, items, activities, results } = props;
+  const [suggestionIds, setSuggestionIds] = useState<string[]>([]);
   const isLogged = scheduledWorkoutResultMatcher(results);
   const weekLink = (date: string) => `?tab=workouts&week=${date}`;
   return <section aria-label="Athlete training calendar" className="grid min-w-0 gap-4">
@@ -166,7 +176,7 @@ export function AthleteCalendar(props: Props) {
           return <div key={date} className={`flex min-h-44 flex-col gap-2 rounded-lg border bg-card p-2 text-xs ${date === today ? "border-primary ring-1 ring-primary" : ""}`}>
             <div className="flex items-center justify-between text-muted-foreground">
               <time dateTime={date} aria-current={date === today ? "date" : undefined}>{new Intl.DateTimeFormat("en", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`))}</time>
-              <DayMenu athleteId={athleteId} date={date} weekStart={weekStart} alignEnd={index > 3} />
+              <DayMenu athleteId={athleteId} date={date} weekStart={weekStart} alignEnd={index > 3} onSuggestion={(id) => setSuggestionIds((ids) => [...ids, id])} />
             </div>
             {dayItems.map((item) => <WorkoutChip key={`${item.workout.id}-${item.date}`} item={item} athleteId={athleteId} today={today} logged={isLogged(item)} />)}
             {activities.filter((activity) => activity.performed_on === date).map((activity) => (
@@ -181,5 +191,6 @@ export function AthleteCalendar(props: Props) {
         })}
       </div>
     </div>
+    {suggestionIds.map((id) => <InlineSuggestionCard key={id} id={id} />)}
   </section>;
 }

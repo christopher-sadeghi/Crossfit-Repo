@@ -17,7 +17,7 @@ const uuid = z.string().uuid();
 function refresh(id: string) {
   revalidatePath(`/programs/movements/${id}`);
   revalidatePath(`/athlete/movements/${id}`);
-  revalidatePath("/suggestions");
+  revalidatePath("/settings/ai-history");
 }
 
 export async function requestMovementGuide(_: FormState, form: FormData): Promise<FormState> {

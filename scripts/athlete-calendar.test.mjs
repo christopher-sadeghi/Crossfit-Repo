@@ -79,6 +79,7 @@ function dayRequestHarness(data = fixtures, options = {}) {
     "next/cache": { revalidatePath: (value) => calls.revalidated.push(value) },
     "next/navigation": { redirect: (value) => { throw new Error(`redirect:${value}`); } },
     "@/app/(app)/programs/actions": { placeWorkout: () => assert.fail("must not place a workout") },
+    "@/lib/viewer": { getViewer: async () => ({ kind: options.viewer ?? "coach" }) },
     "@/lib/supabase/server": { createClient: async () => scheduleClient(data, options.scheduleError, calls.queries) },
     "@/lib/ai/suggestions": { SUGGESTION_REGISTRY: { write_workout: {
       buildRequest: async (_, params) => { calls.builds.push(params); return { input: params, prompt: params.request, system: "existing builder", schema: "generation schema" }; },
@@ -107,7 +108,7 @@ test("day AI request passes the requested week's labeled, override-aware WODs to
     oneOffs: [...fixtures.oneOffs, { ...workout("Extra session", null), scheduled_on: "2026-12-04" }],
   };
   const { submit, calls } = dayRequestHarness(data);
-  await assert.rejects(submit("More strength please"), /redirect:\/suggestions\/pending-suggestion/);
+  assert.deepEqual(await submit("More strength please"), { suggestionId: "pending-suggestion" });
   assert.equal(calls.builds.length, 1);
   const input = calls.builds[0];
   assert.equal(input.athleteId, athleteId);
@@ -134,12 +135,15 @@ test("day AI request passes the requested week's labeled, override-aware WODs to
 
 test("day AI request handles an empty week and default instructions", async () => {
   const { submit, calls } = dayRequestHarness({ assignments: [], overrides: [], oneOffs: [] });
-  await assert.rejects(submit(), /redirect:\/suggestions\/pending-suggestion/);
+  assert.deepEqual(await submit(), { suggestionId: "pending-suggestion" });
   assert.match(calls.builds[0].request, /^Write a WOD for this athlete on 2026-12-06/);
   assert.match(calls.builds[0].request, /empty means no scheduled WODs\):\n\[\]/);
 });
 
 test("invalid input, schedule errors and generator errors return errors rather than applying or redirecting", async () => {
+  const athleteSession = dayRequestHarness(fixtures, { viewer: "athlete" });
+  assert.match((await athleteSession.submit()).error, /signed in as an athlete in this browser/);
+  assert.equal(athleteSession.calls.builds.length, 0);
   const invalid = dayRequestHarness();
   assert.ok((await invalid.submit("", "not-a-date")).error);
   assert.equal(invalid.calls.builds.length, 0);
@@ -159,7 +163,7 @@ test("calendar renders Logged for matching results on any date, including today'
     "addExistingWorkoutForAthlete", "deleteAthleteWorkout", "editWorkoutForAthlete", "moveAthleteWorkout",
     "removeWorkoutForAthlete", "requestAthleteDayWorkout", "restoreWorkoutForAthlete",
   ].map((name) => [name, async () => ({})]));
-  const { AthleteCalendar } = createLoader({ "./calendar-actions": actions })("src/app/(app)/athletes/[id]/athlete-calendar.tsx");
+  const { AthleteCalendar } = createLoader({ "./calendar-actions": actions, "@/components/suggestions/inline-suggestion-card": { InlineSuggestionCard: "inline-suggestion" } })("src/app/(app)/athletes/[id]/athlete-calendar.tsx");
   const today = "2026-12-02";
   const render = (date, results, removed = false) => renderToStaticMarkup(createElement(AthleteCalendar, {
     athleteId, firstName: "Alex", today, weekStart: "2026-11-30", selectedDate: today,

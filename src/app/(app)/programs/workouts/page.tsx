@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Plus, Search } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
-import { RequestWorkoutSuggestionForm } from "@/components/suggestions/suggestion-forms";
+import { RequestWorkoutSuggestionForm } from "@/components/suggestions/request-forms";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
