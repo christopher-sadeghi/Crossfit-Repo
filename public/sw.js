@@ -34,12 +34,14 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const link = safeLink(event.notification.data?.link);
   event.waitUntil((async () => {
-    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const windows = await self.clients.matchAll({ type: "window" });
     for (const client of windows) {
       if (new URL(client.url).origin === self.location.origin) {
-        await client.navigate(link);
-        await client.focus();
-        return;
+        try {
+          await client.focus();
+          if (await client.navigate(link)) return;
+        } catch {}
+        break;
       }
     }
     await self.clients.openWindow(link);

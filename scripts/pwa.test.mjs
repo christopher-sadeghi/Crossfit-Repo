@@ -16,7 +16,7 @@ test("public PWA assets bypass auth middleware but private routes remain protect
 function fixture({ offline = false, windows = [] } = {}) {
   const listeners = {}, calls = [], notifications = [];
   const cache = { add: async (url) => calls.push(["add", url]), match: async (url) => { calls.push(["match", url]); return "offline"; } };
-  const self = { location: { origin: "https://fit.test" }, addEventListener: (name, callback) => { listeners[name] = callback; }, registration: { showNotification: async (...args) => notifications.push(args) }, clients: { claim: async () => {}, matchAll: async () => windows, openWindow: async (url) => calls.push(["open", url]) } };
+  const self = { location: { origin: "https://fit.test" }, addEventListener: (name, callback) => { listeners[name] = callback; }, registration: { showNotification: async (...args) => notifications.push(args) }, clients: { claim: async () => {}, matchAll: async (options) => windows.filter((client) => options.includeUncontrolled || client.controlled !== false), openWindow: async (url) => calls.push(["open", url]) } };
   vm.runInNewContext(readFileSync(new URL("../public/sw.js", import.meta.url), "utf8"), { self, URL, caches: { open: async () => cache, keys: async () => ["fitcoach-offline-v0", "fitcoach-offline-v1", "unrelated"], delete: async (name) => calls.push(["delete", name]) }, fetch: async () => { if (offline) throw new Error("offline"); return "network"; } });
   async function dispatch(name, props = {}) {
     let promise;
@@ -47,8 +47,18 @@ test("notification clicks reuse same-origin clients or open a sanitized window",
   const calls = [];
   const f = fixture({ windows: [{ url: "https://fit.test/athlete", navigate: async (url) => calls.push(["navigate", url]), focus: async () => calls.push(["focus"]) }] });
   await f.dispatch("notificationclick", { notification: { close() {}, data: { link: "/athlete/messages" } } });
-  assert.deepEqual(calls, [["navigate", "https://fit.test/athlete/messages"], ["focus"]]);
+  assert.deepEqual(calls, [["focus"], ["navigate", "https://fit.test/athlete/messages"]]);
+  assert.deepEqual(f.calls, []);
   const empty = fixture();
   await empty.dispatch("notificationclick", { notification: { close() {}, data: { link: "//evil.test" } } });
   assert.deepEqual(empty.calls, [["open", "https://fit.test/"]]);
+});
+test("notification clicks open a window when navigation rejects, returns null or no controlled client exists", async () => {
+  for (const mode of ["reject", "null", "uncontrolled"]) {
+    const calls = [];
+    const f = fixture({ windows: [{ url: "https://fit.test/athlete", controlled: mode !== "uncontrolled", focus: async () => calls.push("focus"), navigate: async () => { calls.push("navigate"); if (mode === "reject") throw new Error("not controlled"); return null; } }] });
+    await f.dispatch("notificationclick", { notification: { close() {}, data: { link: "/athlete/messages" } } });
+    assert.deepEqual(calls, mode === "uncontrolled" ? [] : ["focus", "navigate"]);
+    assert.deepEqual(f.calls, [["open", "https://fit.test/athlete/messages"]]);
+  }
 });
