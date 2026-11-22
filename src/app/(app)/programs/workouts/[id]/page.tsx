@@ -38,7 +38,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
     supabase.from("athletes").select("id, first_name, last_name").eq("status", "active").order("first_name").order("last_name"),
     supabase
       .from("athlete_workout_scalings")
-      .select("id, athlete_id, modifications, details")
+      .select("id, athlete_id, modifications, details, athlete_suggestion_id, athlete_adjusted_at")
       .eq("workout_id", id)
       .order("updated_at", { ascending: false }),
   ]);
@@ -213,11 +213,16 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
             return (
               <div key={scaling.id} className="flex flex-wrap items-start justify-between gap-4 border-b pb-4 last:border-0 last:pb-0">
                 <div className="grid gap-1">
-                  <Link href={`/athletes/${scaling.athlete_id}`} className="font-medium hover:underline">{athleteName}</Link>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link href={`/athletes/${scaling.athlete_id}`} className="font-medium hover:underline">{athleteName}</Link>
+                    {scaling.athlete_adjusted_at && <Badge variant="secondary">Adjusted by athlete</Badge>}
+                  </div>
                   <p className="whitespace-pre-line text-sm text-muted-foreground">{scaling.modifications}</p>
-                  {suggestionId && <Link href={`/suggestions/${suggestionId}`} className="text-sm underline">View AI suggestion</Link>}
+                  {scaling.athlete_suggestion_id ? (
+                    <Link href={`/suggestions/${scaling.athlete_suggestion_id}`} className="text-sm underline">Review, edit, or undo the athlete&apos;s change</Link>
+                  ) : suggestionId && <Link href={`/suggestions/${suggestionId}`} className="text-sm underline">View AI suggestion</Link>}
                 </div>
-                <RemoveWorkoutScalingForm id={scaling.id} />
+                {!scaling.athlete_adjusted_at && <RemoveWorkoutScalingForm id={scaling.id} />}
               </div>
             );
           }) : <p className="text-sm text-muted-foreground">No scaled versions yet.</p>}

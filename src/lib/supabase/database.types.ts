@@ -55,6 +55,7 @@ export type Database = {
         Row: {
           athlete_id: string | null;
           coach_id: string;
+          coach_reviewed_at: string | null;
           created_at: string;
           decided_at: string | null;
           error: string | null;
@@ -73,6 +74,7 @@ export type Database = {
         Insert: {
           athlete_id?: string | null;
           coach_id?: string;
+          coach_reviewed_at?: string | null;
           created_at?: string;
           decided_at?: string | null;
           error?: string | null;
@@ -90,6 +92,7 @@ export type Database = {
         Update: {
           athlete_id?: string | null;
           coach_id?: string;
+          coach_reviewed_at?: string | null;
           created_at?: string;
           decided_at?: string | null;
           error?: string | null;
@@ -294,8 +297,12 @@ export type Database = {
       };
       athlete_workout_scalings: {
         Row: {
+          athlete_adjusted_at: string | null;
           athlete_id: string;
+          athlete_suggestion_id: string | null;
+          coach_details: Json | null;
           coach_id: string;
+          coach_modifications: string | null;
           created_at: string;
           details: Json | null;
           id: string;
@@ -305,8 +312,12 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          athlete_adjusted_at?: string | null;
           athlete_id: string;
+          athlete_suggestion_id?: string | null;
+          coach_details?: Json | null;
           coach_id?: string;
+          coach_modifications?: string | null;
           created_at?: string;
           details?: Json | null;
           id?: string;
@@ -315,8 +326,12 @@ export type Database = {
           workout_id: string;
         };
         Update: {
+          athlete_adjusted_at?: string | null;
           athlete_id?: string;
+          athlete_suggestion_id?: string | null;
+          coach_details?: Json | null;
           coach_id?: string;
+          coach_modifications?: string | null;
           created_at?: string;
           details?: Json | null;
           id?: string;
@@ -402,6 +417,13 @@ export type Database = {
           user_id?: string | null;
         };
         Relationships: [
+          {
+            foreignKeyName: "athlete_workout_scalings_athlete_suggestion_id_fkey";
+            columns: ["athlete_suggestion_id"];
+            isOneToOne: false;
+            referencedRelation: "ai_suggestions";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "athletes_coach_id_fkey";
             columns: ["coach_id"];
@@ -1135,9 +1157,21 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      apply_athlete_workout_adjustment: {
+        Args: { p_details: Json; p_modifications: string; p_proposal: Json; p_suggestion_id: string };
+        Returns: string;
+      };
       athlete_can_view_workout: {
         Args: { p_workout_id: string };
         Returns: boolean;
+      };
+      start_athlete_workout_adjustment: {
+        Args: { p_input: Json; p_model: string; p_workout_id: string };
+        Returns: string;
+      };
+      fail_athlete_workout_adjustment: {
+        Args: { p_error: string; p_proposal?: Json; p_suggestion_id: string };
+        Returns: undefined;
       };
       copy_program_for_athlete: {
         Args: {
@@ -1205,6 +1239,7 @@ export type Database = {
         | "adjust_macros"
         | "progress_summary"
         | "movement_guide"
+        | "athlete_adjust_workout"
         | "suggest_food";
       weight_unit: "lb" | "kg";
       workout_type: "for_time" | "amrap" | "emom" | "strength" | "other";
@@ -1361,6 +1396,7 @@ export const Constants = {
         "scale_workout",
         "adjust_macros",
         "progress_summary",
+        "athlete_adjust_workout",
         "suggest_food",
       ],
       weight_unit: ["lb", "kg"],
