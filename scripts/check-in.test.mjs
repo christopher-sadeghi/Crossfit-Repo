@@ -179,6 +179,7 @@ test("check-in and habit actions validate, isolate their payloads, use viewer-lo
   let dbError = null;
   const writes = [], paths = [];
   const overrides = {
+    "@/lib/notifications": { notifyLowReadiness: async () => {} },
     "next/cache": { revalidatePath: (path) => paths.push(path) },
     "@/lib/viewer": { getViewer: async () => viewer },
     "@/lib/time-zone": { getToday: async () => "2026-03-01" },

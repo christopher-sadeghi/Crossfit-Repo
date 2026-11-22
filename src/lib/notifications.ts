@@ -39,27 +39,48 @@ export async function notify(supabase: Client, input: NotificationInput): Promis
 }
 
 export function notifyResultLogged(supabase: Client, athleteId: string, resultId: string) {
-  return notify(supabase, { athleteId, kind: "result_logged", title: "New workout result", body: "Your athlete logged a workout result.", link: `/athletes/${athleteId}`, dedupeKey: `result:${resultId}` });
+  return notify(supabase, { athleteId, kind: "result_logged", title: "New workout result", body: "Your athlete logged a workout result.", link: `/athletes/${athleteId}?tab=workouts`, dedupeKey: `result:${resultId}` });
 }
 
-export function notifyWorkoutAdjusted(supabase: Client, athleteId: string, suggestionId: string) {
-  return notify(supabase, { athleteId, kind: "workout_adjusted", title: "Workout adjusted with AI", body: "Your athlete adjusted today's WOD with AI.", link: `/suggestions/${suggestionId}`, dedupeKey: `adjustment:${suggestionId}` });
+export function notifyWorkoutAdjusted(supabase: Client, athleteId: string, suggestionId: string, options?: { applied: boolean; checkWithCoach: boolean }) {
+  return notify(supabase, { athleteId, kind: "workout_adjusted", title: options?.checkWithCoach ? "Pain reported — check with athlete" : "Workout adjusted with AI", body: options?.checkWithCoach ? `Your athlete reported pain while asking for an AI adjustment. ${options.applied ? "The WOD was adjusted." : "No adjustment was applied."} Please follow up.` : "Your athlete adjusted today's WOD with AI.", link: `/suggestions/${suggestionId}`, dedupeKey: `adjustment:${suggestionId}` });
 }
 
 export function notifyLowReadiness(supabase: Client, athleteId: string, entryOn: string) {
-  return notify(supabase, { athleteId, kind: "low_readiness", title: "Low readiness check-in", body: "Your athlete may need a lighter training day. Review their latest check-in.", link: `/athletes/${athleteId}`, dedupeKey: `readiness:${athleteId}:${entryOn}` });
+  return notify(supabase, { athleteId, kind: "low_readiness", title: "Low readiness check-in", body: "Your athlete may need a lighter training day. Review their latest check-in.", link: `/athletes/${athleteId}?tab=check-ins`, dedupeKey: `readiness:${athleteId}:${entryOn}` });
 }
 
 export function notifyMessage(supabase: Client, athleteId: string, messageId: string, sender: "coach" | "athlete") {
   return notify(supabase, { athleteId, kind: sender === "coach" ? "coach_message" : "message", title: sender === "coach" ? "New message from your coach" : "New athlete message", body: "You have a new message.", link: sender === "coach" ? "/athlete/messages" : `/messages/${athleteId}`, dedupeKey: `message:${messageId}` });
 }
 
-export function notifyScheduleChanged(supabase: Client, athleteId: string, changeId?: string) {
-  return notify(supabase, { athleteId, kind: "schedule_changed", title: "Training schedule updated", body: "Your coach changed your training schedule. Take a look at your upcoming workouts.", link: "/athlete", dedupeKey: changeId ? `schedule:${athleteId}:${changeId}` : undefined });
+export function notifyScheduleChanged(supabase: Client, athleteId: string, change?: string | { action: "updated" | "removed" | "restored" | "moved" | "added"; date?: string }) {
+  const details = typeof change === "object" ? change : null;
+  return notify(supabase, { athleteId, kind: "schedule_changed", title: "Training schedule updated", body: details ? `Your coach ${details.action} a WOD${details.date ? ` on ${details.date}` : " in your schedule"}. Take a look at your workouts.` : "Your coach changed your training schedule. Take a look at your upcoming workouts.", link: "/athlete", dedupeKey: typeof change === "string" ? `schedule:${athleteId}:${change}` : undefined });
 }
 
-export function notifySuggestionApproved(supabase: Client, athleteId: string, suggestionId: string) {
-  return notify(supabase, { athleteId, kind: "suggestion_approved", title: "Coach approved an update", body: "Your coach approved a nutrition or workout update for you.", link: "/athlete", dedupeKey: `approved:${suggestionId}` });
+export async function notifySuggestionApproved(supabase: Client, athleteId: string, suggestionId: string): Promise<void> {
+  try {
+    const { data: suggestion, error } = await supabase.from("ai_suggestions").select("suggestion_type, athlete_id, coach_id, status, final").eq("id", suggestionId).eq("athlete_id", athleteId).maybeSingle();
+    if (error) throw error;
+    if (!suggestion || !["approved", "edited"].includes(suggestion.status)) return;
+    if (suggestion.suggestion_type === "progress_summary") {
+      const final = suggestion.final;
+      if (!final || typeof final !== "object" || Array.isArray(final) || typeof final.summary !== "string" || !final.summary.trim() || final.summary.length > 2000) throw new Error("Progress summary text is unavailable.");
+      const { error: messageError } = await supabase.from("messages").insert({ id: suggestionId, athlete_id: athleteId, coach_id: suggestion.coach_id, body: final.summary });
+      if (messageError) {
+        if (messageError.code !== "23505") throw messageError;
+        const { data: existing, error: existingError } = await supabase.from("messages").select("id").eq("id", suggestionId).eq("athlete_id", athleteId).eq("sender_id", suggestion.coach_id).maybeSingle();
+        if (existingError || !existing) throw existingError ?? messageError;
+      }
+      await notifyProgressReport(supabase, athleteId, suggestionId);
+      return;
+    }
+    const isNutrition = suggestion.suggestion_type === "adjust_macros" || suggestion.suggestion_type === "suggest_food";
+    await notify(supabase, { athleteId, kind: "suggestion_approved", title: "Coach approved an update", body: isNutrition ? "Your coach approved a nutrition update for you." : "Your coach approved a workout update for you.", link: isNutrition ? "/athlete/nutrition" : "/athlete", dedupeKey: `approved:${suggestionId}` });
+  } catch (error) {
+    console.error("Approval notification failed:", error);
+  }
 }
 
 export function notifyProgressReport(supabase: Client, athleteId: string, reportId: string) {

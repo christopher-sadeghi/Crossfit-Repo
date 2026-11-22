@@ -187,8 +187,8 @@ export async function buildAthleteAdjustRequest(
 }
 
 export type AthleteAdjustResult =
-  | { ok: true; summary: string; checkWithCoach: boolean }
-  | { ok: false; error: string; checkWithCoach: boolean };
+  | { ok: true; summary: string; checkWithCoach: boolean; suggestionId: string }
+  | { ok: false; error: string; checkWithCoach: boolean; suggestionId?: string };
 
 const RPC_ERRORS: Record<string, string> = {
   daily_limit: "You've asked for 5 adjustments in the last day. Talk to your coach or try again tomorrow.",
@@ -211,7 +211,7 @@ export async function runAthleteAdjustment(
   modelOverride?: LanguageModel,
 ): Promise<AthleteAdjustResult> {
   const checkWithCoach = request.input.mentions_pain;
-  const fail = (error: string) => ({ ok: false as const, error, checkWithCoach });
+  const fail = (error: string, suggestionId?: string) => ({ ok: false as const, error, checkWithCoach, suggestionId });
   if (!modelOverride && !process.env.OPENAI_API_KEY) return fail(friendlySuggestionError(null));
   const model = modelOverride ?? openai(process.env.OPENAI_MODEL ?? "gpt-5.4-mini");
   const modelName = typeof model === "string" ? model : model.modelId;
@@ -250,7 +250,7 @@ export async function runAthleteAdjustment(
     console.error("Athlete adjustment AI call failed:", error);
     const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
     await record(message);
-    return fail(friendlySuggestionError(message));
+    return fail(friendlySuggestionError(message), suggestionId);
   }
 
   let final: ReturnType<typeof normalizeAthleteAdjustment>;
@@ -259,7 +259,7 @@ export async function runAthleteAdjustment(
   } catch (error) {
     const known = error instanceof HarderChangeError || error instanceof NoChangeError;
     await record(known ? `${error.name}: ${error.message}` : String(error), proposal);
-    return fail(known ? error.message : "The AI couldn't make a safe adjustment. Please try again.");
+    return fail(known ? error.message : "The AI couldn't make a safe adjustment. Please try again.", suggestionId);
   }
 
   const input: AthleteAdjustInput = request.input;
@@ -288,9 +288,9 @@ export async function runAthleteAdjustment(
   if (applyError) {
     console.error("Could not apply athlete adjustment:", applyError);
     await record(`apply: ${applyError.message}`, final);
-    return fail(rpcMessage(applyError) ?? "Couldn't save your adjusted WOD. Please try again.");
+    return fail(rpcMessage(applyError) ?? "Couldn't save your adjusted WOD. Please try again.", suggestionId);
   }
-  return { ok: true, summary, checkWithCoach };
+  return { ok: true, summary, checkWithCoach, suggestionId };
 }
 
 export { CHECK_WITH_COACH_MESSAGE };

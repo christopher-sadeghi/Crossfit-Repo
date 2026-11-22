@@ -10,6 +10,7 @@ import { progressSummarySchema } from "@/lib/ai/progress-summary";
 import { SUGGESTION_REGISTRY } from "@/lib/ai/suggestions";
 import type { SuggestionApplyOptions } from "@/lib/ai/suggestions";
 import { failure, type FormState } from "@/lib/auth/form-state";
+import { notifySuggestionApproved } from "@/lib/notifications";
 import type { Enums } from "@/lib/supabase/database.types";
 import { createClient } from "@/lib/supabase/server";
 
@@ -141,6 +142,7 @@ export async function approveSuggestion(_: FormState, formData: FormData): Promi
 
   const result = await approveSuggestionWithClient(supabase, suggestion, finalInput, applyOptions);
   if ("error" in result) return failure(formData, result.error);
+  if (suggestion.athlete_id) await notifySuggestionApproved(supabase, suggestion.athlete_id, suggestion.id);
 
   revalidateSuggestion(suggestion.id, suggestion.athlete_id);
   if (isWorkout) {

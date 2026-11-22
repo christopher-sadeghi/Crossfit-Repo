@@ -8,10 +8,11 @@ const source = ts.transpileModule(readFileSync(new URL("../src/lib/notifications
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 
-function fixture({ athletes = [], schedules = {}, results = [], rpcError, queryError, thrown = false } = {}) {
+function fixture({ athletes = [], schedules = {}, results = [], suggestion = { suggestion_type: "scale_workout", status: "approved" }, messageError, existingMessage = null, rpcError, queryError, thrown = false } = {}) {
   const calls = [];
   const errors = [];
   const queries = [];
+  const messages = [];
   const exports = {};
   const client = {
     rpc: async (name, args) => {
@@ -23,7 +24,8 @@ function fixture({ athletes = [], schedules = {}, results = [], rpcError, queryE
       queries.push(table);
       const builder = {
         select: () => builder, eq: () => builder, not: () => builder, in: () => builder,
-        maybeSingle: async () => ({ data: athletes[0] ?? null, error: queryError }),
+        insert: async (value) => { messages.push(value); return { error: messageError }; },
+        maybeSingle: async () => ({ data: table === "ai_suggestions" ? suggestion : table === "messages" ? existingMessage : athletes[0] ?? null, error: queryError }),
         then: (resolve) => resolve({ data: table === "athletes" ? athletes : results, error: queryError }),
       };
       return builder;
@@ -46,7 +48,7 @@ function fixture({ athletes = [], schedules = {}, results = [], rpcError, queryE
       throw new Error(`Unexpected import ${name}`);
     },
   });
-  return { helpers: exports, client, calls, errors, queries };
+  return { helpers: exports, client, calls, errors, queries, messages };
 }
 
 test("notify sends RPC parameters and null optional values", async () => {
@@ -91,7 +93,67 @@ test("wrappers use the appropriate audience and kinds", async () => {
   assert.equal(calls[1].args.p_link, "/messages/a");
   assert.equal(calls[1].args.p_kind, "message");
   assert.equal(calls[4].args.p_dedupe_key, null);
+  assert.equal(calls[3].args.p_link, "/athletes/a?tab=check-ins");
   assert.deepEqual(calls.slice(2).map(({ args }) => args.p_kind), ["workout_adjusted", "low_readiness", "schedule_changed", "suggestion_approved", "progress_report"]);
+});
+
+test("approval notifications use recipient-openable nutrition/workout links and require a decided suggestion", async () => {
+  for (const [type, link] of [["adjust_macros", "/athlete/nutrition"], ["write_workout", "/athlete"], ["scale_workout", "/athlete"]]) {
+    const { helpers, client, calls } = fixture({ suggestion: { suggestion_type: type, status: "edited" } });
+    await helpers.notifySuggestionApproved(client, "a", "s");
+    assert.equal(calls[0].args.p_link, link);
+    assert.equal(calls[0].args.p_dedupe_key, "approved:s");
+  }
+  for (const suggestion of [null, { status: "pending" }, { status: "rejected" }]) {
+    const { helpers, client, calls } = fixture({ suggestion });
+    await helpers.notifySuggestionApproved(client, "a", "s");
+    assert.equal(calls.length, 0);
+  }
+});
+
+test("approved progress summary is posted unlinked to messages before notifying, with safe retries", async () => {
+  for (const retry of [false, true]) {
+    const { helpers, client, calls, messages, errors } = fixture({
+      suggestion: { suggestion_type: "progress_summary", status: "approved", coach_id: "c", final: { summary: "Edited progress report" } },
+      ...(retry ? { messageError: { code: "23505" }, existingMessage: { id: "s" } } : {}),
+    });
+    await helpers.notifySuggestionApproved(client, "a", "s");
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].id, "s");
+    assert.equal(messages[0].body, "Edited progress report");
+    assert.equal(messages[0].coach_id, "c");
+    assert.equal(messages[0].athlete_id, "a");
+    assert.equal(messages[0].link_id, undefined);
+    assert.equal(calls[0].args.p_kind, "progress_report");
+    assert.equal(calls[0].args.p_link, "/athlete/messages");
+    assert.equal(errors.length, 0);
+  }
+});
+
+test("failed/malformed report delivery and approval queries never throw or send a broken report link", async () => {
+  const suggestion = { suggestion_type: "progress_summary", status: "approved", coach_id: "c", final: { summary: "Report" } };
+  for (const options of [
+    { queryError: new Error("offline") },
+    { suggestion, messageError: new Error("denied") },
+    { suggestion, messageError: { code: "23505" } },
+    { suggestion: { ...suggestion, final: null } },
+    { suggestion: { ...suggestion, final: { summary: "" } } },
+  ]) {
+    const { helpers, client, calls, errors } = fixture(options);
+    await helpers.notifySuggestionApproved(client, "a", "s");
+    assert.equal(calls.length, 0);
+    assert.equal(errors.length, 1);
+  }
+});
+
+test("schedule dates and pain notifications include actionable details", async () => {
+  const { helpers, client, calls } = fixture();
+  await helpers.notifyScheduleChanged(client, "a", { action: "moved", date: "2026-11-22" });
+  await helpers.notifyWorkoutAdjusted(client, "a", "s", { applied: false, checkWithCoach: true });
+  assert.match(calls[0].args.p_body, /moved.*2026-11-22/);
+  assert.equal(calls[0].args.p_dedupe_key, null);
+  assert.match(calls[1].args.p_body, /reported pain.*No adjustment was applied/);
+  assert.equal(calls[1].args.p_link, "/suggestions/s");
 });
 
 const items = [18, 19, 20].map((day) => ({ date: `2026-11-${day}`, workout: { id: `w${day}`, source_workout_id: null } }));

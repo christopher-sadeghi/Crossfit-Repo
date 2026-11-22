@@ -2,6 +2,9 @@ import { Dumbbell, LogOut } from "lucide-react";
 import { redirect } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/notifications/bell";
+import { getNotifications } from "@/app/notification-actions";
+import { getTimeZone } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
 import { getViewer } from "@/lib/viewer";
 
@@ -19,6 +22,7 @@ export default async function AthleteLayout({
   if (viewer.kind === "none") redirect("/no-access");
 
   const supabase = await createClient();
+  const [notifications, timeZone] = await Promise.all([getNotifications(), getTimeZone()]);
   const { count: unreadMessages } = await supabase.from("messages").select("id", { count: "exact", head: true })
     .eq("athlete_id", viewer.athleteId).eq("sender_id", viewer.coachId).is("read_at", null);
   const { data: coach } = await supabase
@@ -38,12 +42,14 @@ export default async function AthleteLayout({
             </div>
             <p className="mt-1 text-sm text-muted-foreground">{viewer.firstName}</p>
           </div>
+          <div className="flex shrink-0 items-center gap-2"><NotificationBell initial={notifications} timeZone={timeZone} />
           <form action={logout}>
             <Button type="submit" variant="ghost" size="sm">
               <LogOut className="size-4" />
               Log out
             </Button>
           </form>
+          </div>
         </header>
         {children}
       </main>

@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { failure, type FormState } from "@/lib/auth/form-state";
-import { SORENESS_AREAS } from "@/lib/check-in";
+import { LOW_READINESS, readinessScore, SORENESS_AREAS } from "@/lib/check-in";
+import { notifyLowReadiness } from "@/lib/notifications";
 import { createClient } from "@/lib/supabase/server";
 import { getToday } from "@/lib/time-zone";
 import { getViewer } from "@/lib/viewer";
@@ -51,6 +52,7 @@ export async function saveCheckIn(_: FormState, data: FormData): Promise<FormSta
       { onConflict: "athlete_id,entry_on" },
     );
   if (error) return failure(data, "Couldn't save your check-in. Please try again.");
+  if ((readinessScore(parsed.data) ?? 100) < LOW_READINESS) await notifyLowReadiness(supabase, viewer.athleteId, entry_on);
 
   revalidatePath("/athlete");
   revalidatePath("/athlete/journal");

@@ -3,9 +3,12 @@ import { redirect } from "next/navigation";
 
 import { CoachChat } from "@/components/assistant/coach-chat";
 import { NavLinks } from "@/components/layout/nav-links";
+import { NotificationBell } from "@/components/notifications/bell";
+import { getNotifications } from "@/app/notification-actions";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { getViewer } from "@/lib/viewer";
+import { getTimeZone } from "@/lib/time-zone";
 
 import { logout } from "../(auth)/actions";
 
@@ -16,6 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (viewer.kind === "none") redirect("/no-access");
   const coach = viewer;
   const supabase = await createClient();
+  const [notifications, timeZone] = await Promise.all([getNotifications(), getTimeZone()]);
   const { count: unreadMessages } = await supabase.from("messages").select("id", { count: "exact", head: true })
     .eq("coach_id", coach.id).neq("sender_id", coach.id).is("read_at", null);
   const { count: athleteChanges } = await supabase
@@ -33,6 +37,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           FitCoach AI
         </div>
         <NavLinks badges={{ "/suggestions": athleteChanges ?? 0, "/messages": unreadMessages ?? 0 }} />
+        <div className="mt-3"><NotificationBell initial={notifications} timeZone={timeZone} align="start" /></div>
         <div className="mt-auto grid gap-3 border-t pt-4">
           <div className="px-3 text-sm">
             <div className="truncate font-medium">{coach.fullName || coach.email}</div>
