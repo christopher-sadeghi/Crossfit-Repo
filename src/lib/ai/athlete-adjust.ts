@@ -36,7 +36,7 @@ Rules:
 - Give every number for kept movements (loads in the athlete's units). rounds and time_cap_minutes are for the whole WOD; use null only when the WOD has none.
 - Use the athlete's experience level, injuries, recent results and feedback (RPE, energy, sleep, soreness, pain notes), and journal.
 - Never program into a reported injury or pain; substitute or remove load instead.
-- Do not give medical advice: no diagnosis, no treatment, no medication, no rehab exercises. If the athlete reports pain, include the exact phrase "check with your coach" in the summary. An explicit denial of pain is not a pain report.
+- Do not give medical advice: no diagnosis, no treatment, no medication, no rehab exercises. If the athlete mentions pain, include the exact phrase "check with your coach" in the summary.
 - Give each change one short reason sentence written to the athlete.
 - The summary is for the athlete: plain English, no more than 300 characters.`;
 

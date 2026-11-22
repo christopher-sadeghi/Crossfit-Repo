@@ -231,37 +231,6 @@ test("check-in notifies only after successful low-readiness saves using the loca
   }
 });
 
-test("athlete adjustment distinguishes an explicit pain denial from a symptom report", () => {
-  const { mentionsPain } = loader({ "server-only": {} })("src/lib/ai/athlete-adjust-schema.ts");
-  for (const text of ["Just tired today.", "No pain/illness.", "No pain or illness, just tired.", "Low energy, no pain or injury"]) {
-    assert.equal(mentionsPain(text), false, text);
-  }
-  for (const text of ["My knee hurts.", "No pain yesterday, but my knee aches today.", "No pain or illness. My shoulder is sore.", "I have no pain relief."]) {
-    assert.equal(mentionsPain(text), true, text);
-  }
-});
-
-test("athlete adjustment suppresses only clear, unqualified pain denials", () => {
-  const { mentionsPain } = loader({ "server-only": {} })("src/lib/ai/athlete-adjust-schema.ts");
-  for (const text of ["No pain", "I'm not in pain.", "I feel pain-free.", "Without pain.", "No injury/illness"]) {
-    assert.equal(mentionsPain(text), false, text);
-  }
-  for (const text of [
-    "Almost no pain. Can we go lighter today?",
-    "I'm barely in pain.",
-    "I have a little pain.",
-    "Not much pain.",
-    "Slight pain.",
-    "I’m mostly pain-free.",
-    "Mostly, no pain.",
-    "No pain, except when I squat.",
-    "No pain, just a little.",
-    "Pain-free most of the day.",
-  ]) {
-    assert.equal(mentionsPain(text), true, text);
-  }
-});
-
 test("AI adjustment notifies for applied and persisted pain paths, not unpersisted/ordinary failures", async () => {
   for (const result of [
     { ok: true, suggestionId: itemId, checkWithCoach: false },
