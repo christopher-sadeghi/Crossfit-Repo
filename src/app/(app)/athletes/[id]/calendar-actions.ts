@@ -9,6 +9,7 @@ import { runSuggestion } from "@/lib/ai/service";
 import { SUGGESTION_REGISTRY } from "@/lib/ai/suggestions";
 import { loadAthleteSchedule, SCHEDULE_LABEL } from "@/lib/athlete-schedule";
 import { failure, type FormState } from "@/lib/auth/form-state";
+import { notifyScheduleChanged } from "@/lib/notifications";
 import { createClient } from "@/lib/supabase/server";
 
 import { addDays, monday } from "./calendar-dates";
@@ -23,6 +24,7 @@ async function override(athleteId: string, workoutId: string, mode: "edit" | "re
     p_athlete_id: athleteId, p_workout_id: workoutId, p_mode: mode,
   });
   if (error) return { error: error.message };
+  if (mode === "remove") await notifyScheduleChanged(supabase, athleteId, { action: "removed" });
   revalidatePath(`/athletes/${athleteId}`);
   if (mode === "edit" && data) redirect(`/programs/workouts/${data}/edit`);
   return { message: "WOD removed for this athlete." };
@@ -41,6 +43,7 @@ export async function restoreWorkoutForAthlete(athleteId: string, workoutId: str
   const supabase = await createClient();
   const { error } = await supabase.rpc("restore_workout_for_athlete", { p_athlete_id: athleteId, p_workout_id: workoutId });
   if (error) return { error: error.message };
+  await notifyScheduleChanged(supabase, athleteId, { action: "restored" });
   revalidatePath(`/athletes/${athleteId}`);
   return { message: "Program WOD restored." };
 }
@@ -51,6 +54,7 @@ export async function moveAthleteWorkout(athleteId: string, workoutId: string, d
   const { data, error } = await supabase.from("workouts").update({ scheduled_on: date })
     .eq("id", workoutId).eq("athlete_id", athleteId).is("program_id", null).select("id").maybeSingle();
   if (error || !data) return { error: "Couldn't move that athlete's WOD." };
+  await notifyScheduleChanged(supabase, athleteId, { action: "moved", date });
   revalidatePath(`/athletes/${athleteId}`);
   return { message: "WOD moved." };
 }
@@ -60,6 +64,7 @@ export async function deleteAthleteWorkout(athleteId: string, workoutId: string)
   const supabase = await createClient();
   const { error } = await supabase.rpc("delete_athlete_workout", { p_workout_id: workoutId, p_athlete_id: athleteId });
   if (error) return { error: error.message };
+  await notifyScheduleChanged(supabase, athleteId, { action: "removed" });
   revalidatePath(`/athletes/${athleteId}`);
   return { message: "WOD deleted." };
 }
@@ -74,6 +79,7 @@ export async function addExistingWorkoutForAthlete(_: FormState, formData: FormD
   if (destination === "athlete") {
     const { error } = await supabase.rpc("copy_workout_for_athlete", { p_workout_id: workout_id, p_athlete_id: athlete_id, p_scheduled_on: date });
     if (error) return failure(formData, error.message);
+    await notifyScheduleChanged(supabase, athlete_id, { action: "added", date });
   } else {
     const { data: assignment } = await supabase.from("program_assignments").select("start_date, programs(weeks, athlete_id)").eq("athlete_id", athlete_id).eq("program_id", destination).maybeSingle();
     if (!assignment?.programs) return failure(formData, "Choose one of this athlete's assigned programs.");
@@ -86,6 +92,7 @@ export async function addExistingWorkoutForAthlete(_: FormState, formData: FormD
     placement.set("day_number", String(offset % 7 + 1));
     const result = await placeWorkout({}, placement);
     if (result.error) return result;
+    if (assignment.programs.athlete_id === athlete_id) await notifyScheduleChanged(supabase, athlete_id, { action: "added", date });
     revalidatePath(`/athletes/${athlete_id}`);
     return { message: assignment.programs.athlete_id ? "WOD added to their personal program." : "WOD added to the group program. This affects everyone on that program." };
   }

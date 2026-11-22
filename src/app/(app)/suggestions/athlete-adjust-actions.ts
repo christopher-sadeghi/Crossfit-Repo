@@ -7,6 +7,7 @@ import { z } from "zod";
 import { athleteAdjustInputSchema, athleteAdjustSchema } from "@/lib/ai/athlete-adjust-schema";
 import { scaleWorkoutDetailsSchema } from "@/lib/ai/scale-workout";
 import { failure, type FormState } from "@/lib/auth/form-state";
+import { notifyScheduleChanged } from "@/lib/notifications";
 import type { Database, Json } from "@/lib/supabase/database.types";
 import { createClient } from "@/lib/supabase/server";
 import { toKg, type Units } from "@/lib/units";
@@ -109,6 +110,7 @@ export async function editAthleteAdjustment(_: FormState, formData: FormData): P
     })
     .eq("id", id.data);
   if (suggestionError) console.error("Could not log coach edit of athlete adjustment:", suggestionError);
+  await notifyScheduleChanged(supabase, scaling.athlete_id, { action: "updated", date: input.data.scheduled_on });
   revalidateAdjustment(id.data, scaling.workout_id, scaling.athlete_id);
   return { message: "Saved. The athlete now sees your edited version." };
 }
@@ -157,6 +159,7 @@ export async function undoAthleteAdjustment(_: FormState, formData: FormData): P
     .update({ status: "rejected", coach_reviewed_at: new Date().toISOString() })
     .eq("id", id.data);
   if (suggestionError) console.error("Could not log undo of athlete adjustment:", suggestionError);
+  await notifyScheduleChanged(supabase, scaling.athlete_id, { action: "restored" });
   revalidateAdjustment(id.data, scaling.workout_id, scaling.athlete_id);
   return {
     message: restore
