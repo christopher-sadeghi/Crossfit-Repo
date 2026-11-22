@@ -8,7 +8,7 @@ import ts from "typescript";
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, "..");
 const cache = new Map();
-function load(relative) {
+function load(relative, mocks = {}) {
   const filename = path.resolve(root, relative);
   if (cache.has(filename)) return cache.get(filename).exports;
   const loaded = { exports: {} };
@@ -17,7 +17,7 @@ function load(relative) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
     fileName: filename,
   }).outputText;
-  const localRequire = (id) => id.startsWith("@/") ? load(`src/${id.slice(2)}.ts`) : require(id);
+  const localRequire = (id) => id in mocks ? mocks[id] : id.startsWith("@/") ? load(`src/${id.slice(2)}.ts`) : require(id);
   new Function("require", "module", "exports", js)(localRequire, loaded, loaded.exports);
   return loaded.exports;
 }
@@ -68,6 +68,42 @@ test("new demos have 3–5 cues and coaches can save non-cue edits to older AI g
   assert.equal(canSaveDemoCues(cues), false);
   assert.equal(canSaveDemoCues(cues, cues), true);
   assert.equal(canSaveDemoCues(["Changed.", ...cues.slice(1)], cues), false);
+});
+
+test("deleting a custom movement removes its clip only after the movement was deleted", async () => {
+  const calls = [];
+  const id = "00000000-0000-4000-8000-000000000001";
+  const clip = `coach/${id}/clip.mp4`;
+  let deleteError = null;
+  const { deleteMovement } = load("src/app/(app)/programs/movements/actions.ts", {
+    "next/cache": { revalidatePath: () => {} },
+    "@/lib/viewer": { getViewer: async () => ({ kind: "coach", id: "coach" }) },
+    "../options": { CATEGORIES: ["other"], MEASURES: ["reps"] },
+    "@/lib/supabase/server": { createClient: async () => ({
+      from: (table) => table === "movement_guides" ? {
+        select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => {
+          calls.push("read clip");
+          return { data: { clip_path: clip } };
+        } }) }) }),
+      } : {
+        delete: () => ({ eq: () => ({ eq: async () => {
+          calls.push("delete movement");
+          return { count: deleteError ? 0 : 1, error: deleteError };
+        } }) }),
+      },
+      storage: { from: (bucket) => ({ remove: async (paths) => {
+        calls.push([bucket, ...paths]);
+        return { error: null };
+      } }) },
+    }) },
+  });
+  deleteError = { code: "23503" };
+  assert.match((await deleteMovement(id)).error, /used in a WOD/);
+  assert.deepEqual(calls, ["read clip", "delete movement"]);
+  calls.length = 0;
+  deleteError = null;
+  assert.deepEqual(await deleteMovement(id), {});
+  assert.deepEqual(calls, ["read clip", "delete movement", ["movement-demos", clip]]);
 });
 
 test("YouTube and Vimeo URLs embed safely; unrelated and unsafe URLs do not", () => {
