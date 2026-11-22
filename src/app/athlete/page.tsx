@@ -169,6 +169,9 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                       {adjustedHeadline && adjustedHeadline !== formatHeadline(workout) && (
                         <p className="font-medium">{adjustedHeadline}</p>
                       )}
+                      {adjustedDetails?.time_cap_seconds && adjustedDetails.time_cap_seconds !== workout.time_cap_seconds && workout.workout_type === "for_time" ? (
+                        <p className="font-medium">Time cap: {Math.round((adjustedDetails.time_cap_seconds / 60) * 10) / 10} min</p>
+                      ) : null}
                       <p className="whitespace-pre-line">{scaling.modifications}</p>
                       {adjustedDetails?.check_with_coach && (
                         <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">

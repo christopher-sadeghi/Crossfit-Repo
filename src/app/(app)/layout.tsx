@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { CoachChat } from "@/components/assistant/coach-chat";
 import { NavLinks } from "@/components/layout/nav-links";
 import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/server";
 import { getViewer } from "@/lib/viewer";
 
 import { logout } from "../(auth)/actions";
@@ -14,6 +15,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (viewer.kind === "athlete") redirect("/athlete");
   if (viewer.kind === "none") redirect("/no-access");
   const coach = viewer;
+  const supabase = await createClient();
+  const { count: athleteChanges } = await supabase
+    .from("ai_suggestions")
+    .select("id", { count: "exact", head: true })
+    .eq("suggestion_type", "athlete_adjust_workout")
+    .in("status", ["approved", "edited"])
+    .is("coach_reviewed_at", null);
 
   return (
     <div className="flex min-h-screen">
@@ -22,7 +30,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Dumbbell className="size-5" />
           FitCoach AI
         </div>
-        <NavLinks />
+        <NavLinks badges={{ "/suggestions": athleteChanges ?? 0 }} />
         <div className="mt-auto grid gap-3 border-t pt-4">
           <div className="px-3 text-sm">
             <div className="truncate font-medium">{coach.fullName || coach.email}</div>

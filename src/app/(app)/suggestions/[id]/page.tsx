@@ -24,6 +24,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getToday } from "@/lib/time-zone";
 import { formatDate, toKg, type Units } from "@/lib/units";
 import { Whiteboard } from "@/app/(app)/programs/workouts/whiteboard";
+import { AthleteAdjustmentReview } from "@/components/suggestions/athlete-adjustment-review";
 import { ScaleWorkoutReview } from "@/components/suggestions/scale-workout-review";
 import { scaleWorkoutInputSchema, scaleWorkoutSchema } from "@/lib/ai/scale-workout";
 
@@ -41,6 +42,7 @@ export default async function SuggestionPage({ params }: Props) {
   const supabase = await createClient();
   const { data: suggestion } = await supabase.from("ai_suggestions").select("*").eq("id", id).maybeSingle();
   if (!suggestion) notFound();
+  if (suggestion.suggestion_type === "athlete_adjust_workout") return <AthleteAdjustmentReview suggestion={suggestion} />;
 
   const macrosType = suggestion.suggestion_type === "adjust_macros";
   const workoutType = suggestion.suggestion_type === "write_workout";

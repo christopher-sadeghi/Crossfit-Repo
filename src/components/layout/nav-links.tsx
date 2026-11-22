@@ -22,7 +22,7 @@ const NAV_ITEMS = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function NavLinks() {
+export function NavLinks({ badges = {} }: { badges?: Record<string, number> }) {
   const pathname = usePathname();
 
   return (
@@ -43,6 +43,14 @@ export function NavLinks() {
           >
             <Icon className="size-4" />
             {label}
+            {badges[href] ? (
+              <span
+                className="ml-auto rounded-full bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white"
+                aria-label={`${badges[href]} athlete change${badges[href] === 1 ? "" : "s"} to review`}
+              >
+                {badges[href]}
+              </span>
+            ) : null}
           </Link>
         );
       })}

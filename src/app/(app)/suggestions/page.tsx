@@ -6,11 +6,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SUGGESTION_LABELS, writeWorkoutInputSchema } from "@/lib/ai/suggestions";
 import { PageHeader } from "@/components/layout/page-header";
+import { athleteAdjustmentStatus } from "@/components/suggestions/athlete-adjustment-review";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/units";
 
 const FILTERS = [
   { value: "pending", label: "Pending" },
+  { value: "athlete", label: "Athlete changes" },
   { value: "decided", label: "Decided" },
   { value: "failed", label: "Failed" },
 ] as const;
@@ -22,14 +24,21 @@ export default async function Page({ searchParams }: Props) {
   const { status: requestedStatus } = await searchParams;
   const status: Filter = FILTERS.some((filter) => filter.value === requestedStatus) ? (requestedStatus as Filter) : "pending";
   const supabase = await createClient();
-  const [{ count }, suggestionsResult] = await Promise.all([
+  const [{ count }, { count: athleteCount }, suggestionsResult] = await Promise.all([
     supabase.from("ai_suggestions").select("id", { count: "exact", head: true }).eq("status", "pending"),
+    supabase
+      .from("ai_suggestions")
+      .select("id", { count: "exact", head: true })
+      .eq("suggestion_type", "athlete_adjust_workout")
+      .in("status", ["approved", "edited"])
+      .is("coach_reviewed_at", null),
     (() => {
       let query = supabase
         .from("ai_suggestions")
-        .select("id, suggestion_type, status, athlete_id, created_at, input")
+        .select("id, suggestion_type, status, athlete_id, created_at, input, coach_reviewed_at")
         .order("created_at", { ascending: false });
       if (status === "pending") query = query.eq("status", "pending");
+      else if (status === "athlete") query = query.eq("suggestion_type", "athlete_adjust_workout");
       else if (status === "failed") query = query.eq("status", "failed");
       else query = query.in("status", ["approved", "edited", "rejected"]);
       return query;
@@ -41,11 +50,11 @@ export default async function Page({ searchParams }: Props) {
     ? await supabase.from("athletes").select("id, first_name, last_name").in("id", athleteIds)
     : { data: [] };
   const athleteNames = new Map((athletes ?? []).map((athlete) => [athlete.id, `${athlete.first_name} ${athlete.last_name}`]));
-  const emptyMessage = status === "pending" ? "There are no pending suggestions." : status === "failed" ? "There are no failed suggestions." : "There are no decided suggestions.";
+  const emptyMessage = status === "pending" ? "There are no pending suggestions." : status === "athlete" ? "No athlete has adjusted a WOD yet." : status === "failed" ? "There are no failed suggestions." : "There are no decided suggestions.";
 
   return (
     <>
-      <PageHeader title="AI Suggestions" description={`${count ?? 0} pending suggestion${count === 1 ? "" : "s"} to review.`} />
+      <PageHeader title="AI Suggestions" description={`${count ?? 0} pending suggestion${count === 1 ? "" : "s"} to review.${athleteCount ? ` ${athleteCount} athlete change${athleteCount === 1 ? "" : "s"} to review.` : ""}`} />
       <div className="mb-4 flex flex-wrap gap-2" aria-label="Filter suggestions">
         {FILTERS.map((filter) => (
           <Button key={filter.value} variant={filter.value === status ? "default" : "outline"} size="sm" asChild>
@@ -77,6 +86,8 @@ export default async function Page({ searchParams }: Props) {
                     workoutInput?.success && workoutInput.data.mode === "adjust"
                       ? "Adjust workout"
                       : SUGGESTION_LABELS[suggestion.suggestion_type];
+                  const athleteStatus =
+                    suggestion.suggestion_type === "athlete_adjust_workout" ? athleteAdjustmentStatus(suggestion) : null;
                   return (
                     <TableRow key={suggestion.id}>
                       <TableCell className="pl-4 font-medium">
@@ -91,9 +102,13 @@ export default async function Page({ searchParams }: Props) {
                       </TableCell>
                       <TableCell>{formatDate(suggestion.created_at.slice(0, 10))}</TableCell>
                       <TableCell>
-                        <Badge variant={suggestion.status === "failed" ? "destructive" : suggestion.status === "pending" ? "secondary" : "outline"}>
-                          {suggestion.status}
-                        </Badge>
+                        {athleteStatus ? (
+                          <Badge variant={athleteStatus.variant}>{athleteStatus.label}</Badge>
+                        ) : (
+                          <Badge variant={suggestion.status === "failed" ? "destructive" : suggestion.status === "pending" ? "secondary" : "outline"}>
+                            {suggestion.status}
+                          </Badge>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
