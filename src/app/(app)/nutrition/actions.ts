@@ -59,9 +59,15 @@ export async function saveFood(_: FormState, formData: FormData): Promise<FormSt
   if (!parsed.success) return failure(formData, parsed.error.issues[0]?.message ?? "Please check the form.");
   const { id, ...food } = parsed.data;
   const supabase = await createClient();
+  let clearIngredients = false;
+  if (id) {
+    const { data: existing, error } = await supabase.from("food_logs").select("food_name").eq("id", id).single();
+    if (error || !existing) return failure(formData, "Couldn't load the entry. Please try again.");
+    clearIngredients = existing.food_name !== food.food_name;
+  }
 
   const { error } = id
-    ? await supabase.from("food_logs").update({ ...food, ingredients: null }).eq("id", id).select("id").single()
+    ? await supabase.from("food_logs").update({ ...food, ...(clearIngredients ? { ingredients: null } : {}) }).eq("id", id).select("id").single()
     : await supabase.from("food_logs").insert(food);
   if (error) return failure(formData, "Couldn't save the entry. Please try again.");
 
