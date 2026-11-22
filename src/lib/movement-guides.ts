@@ -9,6 +9,15 @@ export const guideSections = [
 
 export type GuideText = Record<(typeof guideSections)[number][0], string[]>;
 
+export const MIN_DEMO_CUES = 3;
+export const MAX_DEMO_CUES = 5;
+
+export function canSaveDemoCues(cues: string[], published: string[] = []) {
+  return (cues.length >= MIN_DEMO_CUES && cues.length <= MAX_DEMO_CUES) ||
+    (cues.length > MAX_DEMO_CUES && cues.length === published.length &&
+     cues.every((cue, i) => cue === published[i].trim()));
+}
+
 export const MOVEMENT_DEMO_BUCKET = "movement-demos";
 export const MAX_DEMO_CLIP_BYTES = 20 * 1024 * 1024;
 export const DEMO_CLIP_FORMATS: Record<string, string> = { "video/mp4": "mp4", "video/webm": "webm" };

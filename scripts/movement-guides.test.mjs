@@ -21,8 +21,8 @@ function load(relative) {
   new Function("require", "module", "exports", js)(localRequire, loaded, loaded.exports);
   return loaded.exports;
 }
-const { movementGuideSchema, movementGuideEntry } = load("src/lib/ai/movement-guides.ts");
-const { demoEmbedUrl, videoUrlSchema, hasGuideText, readGuideText, editedGuideSchema } = load("src/lib/movement-guides.ts");
+const { movementGuideSchema, movementGuideEntry, newMovementGuideSchema } = load("src/lib/ai/movement-guides.ts");
+const { canSaveDemoCues, demoEmbedUrl, videoUrlSchema, hasGuideText, readGuideText, editedGuideSchema } = load("src/lib/movement-guides.ts");
 const { HowTo } = load("src/components/movements/how-to.tsx");
 const { renderToStaticMarkup } = require("react-dom/server");
 const { createElement } = require("react");
@@ -57,6 +57,17 @@ test("coach edits permit empty sections and form lines are normalized", () => {
   const form = new FormData();
   form.set("cues", " Brace.\r\n\n Stand. ");
   assert.deepEqual(readGuideText(form), { ...empty, cues: ["Brace.", "Stand."] });
+});
+
+test("new demos have 3–5 cues and coaches can save non-cue edits to older AI guides", () => {
+  const cues = ["Stand tall.", "Brace.", "Move with control.", "Relax.", "Breathe.", "Reset."];
+  assert.equal(newMovementGuideSchema.safeParse({ ...valid, cues: cues.slice(0, 5) }).success, true);
+  assert.equal(newMovementGuideSchema.safeParse({ ...valid, cues }).success, false);
+  assert.equal(movementGuideSchema.safeParse({ ...valid, cues }).success, true);
+  assert.equal(canSaveDemoCues(cues.slice(0, 3)), true);
+  assert.equal(canSaveDemoCues(cues), false);
+  assert.equal(canSaveDemoCues(cues, cues), true);
+  assert.equal(canSaveDemoCues(["Changed.", ...cues.slice(1)], cues), false);
 });
 
 test("YouTube and Vimeo URLs embed safely; unrelated and unsafe URLs do not", () => {

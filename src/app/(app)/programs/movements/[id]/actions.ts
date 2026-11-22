@@ -4,11 +4,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { approveSuggestionWithClient, rejectSuggestionWithClient } from "@/lib/ai/decisions";
-import { movementGuideEntry, movementGuideSchema } from "@/lib/ai/movement-guides";
+import { movementGuideEntry, movementGuideSchema, newMovementGuideSchema } from "@/lib/ai/movement-guides";
 import { runSuggestion } from "@/lib/ai/service";
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { loadMovementDemoSource } from "@/lib/movement-demos";
-import { demoEmbedUrl, editedGuideSchema, hasGuideText, MOVEMENT_DEMO_BUCKET, readGuideText } from "@/lib/movement-guides";
+import { canSaveDemoCues, demoEmbedUrl, editedGuideSchema, hasGuideText, MOVEMENT_DEMO_BUCKET, readGuideText } from "@/lib/movement-guides";
 import { createClient } from "@/lib/supabase/server";
 import { getViewer } from "@/lib/viewer";
 
@@ -34,7 +34,7 @@ export async function requestMovementGuide(_: FormState, form: FormData): Promis
   if (hasGuideText(guide.data) || pending.data?.length) return { error: "This movement already has a how-to or a pending suggestion. Review or edit it below." };
   try {
     const request = await movementGuideEntry.buildRequest(supabase, { athleteId: null, movementId: id.data });
-    const result = await runSuggestion({ type: "movement_guide", athleteId: null, ...request, schema: movementGuideSchema });
+    const result = await runSuggestion({ type: "movement_guide", athleteId: null, ...request, schema: newMovementGuideSchema });
     if ("error" in result) return { error: result.error };
     refresh(id.data);
     return { message: "How-to suggested. Review and approve it below before it is published." };
@@ -50,7 +50,6 @@ export async function saveMovementGuide(_: FormState, form: FormData): Promise<F
   const rawVideo = String(form.get("video_url") ?? "").trim();
   const text = editedGuideSchema.safeParse(readGuideText(form));
   if (!text.success) return failure(form, "Use up to 20 items per section, each up to 200 characters.");
-  if (text.data.cues.length < 3 || text.data.cues.length > 5) return failure(form, "Enter 3–5 coaching cues.");
   const easier = uuid.nullable().safeParse(form.get("easier_movement_id") || null);
   const harder = uuid.nullable().safeParse(form.get("harder_movement_id") || null);
   if (!easier.success || !harder.success) return failure(form, "Choose a movement from your library.");
@@ -58,6 +57,7 @@ export async function saveMovementGuide(_: FormState, form: FormData): Promise<F
   const source = await loadMovementDemoSource(supabase, id.data, viewer.id).catch(() => null);
   if (!source) return failure(form, "Couldn't find this movement.");
   const { movement, guide } = source;
+  if (!canSaveDemoCues(text.data.cues, guide?.cues)) return failure(form, "Enter 3–5 coaching cues or leave your existing cues unchanged.");
   const easierId = easier.data ?? movement.easier_movement_id;
   const harderId = harder.data ?? movement.harder_movement_id;
   if (easierId === id.data || harderId === id.data || (easierId && easierId === harderId)) {
