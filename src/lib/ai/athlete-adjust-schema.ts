@@ -50,10 +50,13 @@ export { CHECK_WITH_COACH_MESSAGE } from "./athlete-adjust-copy";
 const PAIN_PATTERN =
   /\b(pain\w*|hurts?|hurting|hurt|aches?|aching|achy|sore|soreness|injur\w*|tweak\w*|strain\w*|sprain\w*|swollen|swelling|numb\w*|tingl\w*|throbb\w*|twinge\w*|pinch\w*)\b/i;
 const EXPLICIT_NO_PAIN =
-  /\bno\s+pain(?:\s*(?:\/|or\b|and\b)\s*(?:illness|injur(?:y|ies)))?(?=\s*(?:[.!;]|$|,\s*just\b))/gi;
+  /(^\s*|[.!;,]\s*)(?:i(?:\s+(?:am|feel|have)|['’]m)\s+)?(?:no\s+(?:pain|injur(?:y|ies)|illness)(?:\s*(?:\/|or\b|and\b)\s*(?:pain|injur(?:y|ies)|illness))*|not\s+in\s+pain|pain[- ]free|without\s+pain)(?=\s*(?:[.!;]|$|,\s*just\s+(?:tired|fatigued|low energy)\b))/gi;
+const PAIN_QUALIFIER = /\b(?:almost|barely|mostly|slight(?:ly)?|not much|a little)\s*$/i;
 
 export function mentionsPain(text: string) {
-  return PAIN_PATTERN.test(text.replace(EXPLICIT_NO_PAIN, ""));
+  const remaining = text.replace(EXPLICIT_NO_PAIN, (denial, boundary: string, offset: number) =>
+    boundary.startsWith(",") && PAIN_QUALIFIER.test(text.slice(0, offset)) ? denial : boundary);
+  return PAIN_PATTERN.test(remaining);
 }
 
 // The AI must not diagnose or suggest treatment; anything like this is thrown away.
