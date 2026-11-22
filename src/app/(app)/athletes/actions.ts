@@ -14,6 +14,7 @@ const optional = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? null : v), schema.nullable());
 
 const HEIGHT_RANGE_ERROR = "Height must be between 3 ft 4 in and 8 ft 2 in.";
+const HEIGHT_ROUNDING_TOLERANCE_CM = 1.27;
 const heightPart = z.preprocess(
   (value) => (value == null || (typeof value === "string" && value.trim() === "") ? null : value),
   z.coerce.number().nullable(),
@@ -55,14 +56,20 @@ const athleteSchema = z
 
     if (height_ft != null) {
       const heightCm = ftInToCm(height_ft, height_in ?? 0);
-      if (heightCm < 100 || heightCm > 250) {
+      if (
+        heightCm < 100 - HEIGHT_ROUNDING_TOLERANCE_CM ||
+        heightCm > 250 + HEIGHT_ROUNDING_TOLERANCE_CM
+      ) {
         ctx.addIssue({ code: "custom", path: ["height_ft"], message: HEIGHT_RANGE_ERROR });
       }
     }
   })
   .transform(({ height_ft, height_in, ...athlete }) => ({
     ...athlete,
-    height_cm: height_ft == null ? null : ftInToCm(height_ft, height_in ?? 0),
+    height_cm:
+      height_ft == null
+        ? null
+        : Math.max(100, Math.min(250, ftInToCm(height_ft, height_in ?? 0))),
   }));
 
 export async function saveAthlete(_: FormState, formData: FormData): Promise<FormState> {
