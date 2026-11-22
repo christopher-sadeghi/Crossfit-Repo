@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
+import { RequestProgressSummaryForm } from "@/components/suggestions/suggestion-forms";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -132,6 +133,17 @@ export default async function AthleteProgressPage({ params }: Props) {
 
       <section aria-label="Goals" className="mb-6 grid gap-4">
         <h2 className="text-lg font-semibold">Goals</h2>
+        <Card>
+          <CardHeader>
+            <CardTitle>AI progress summary</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              A short note on how {athlete.first_name} is tracking toward each goal. You review it, then choose whether to save it to their notes.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <RequestProgressSummaryForm athleteId={athlete.id} />
+          </CardContent>
+        </Card>
         {goals.length === 0 && <p className="text-sm text-muted-foreground">No goals yet. Add one below.</p>}
         <div className="grid gap-4 lg:grid-cols-2">
           {goals.map((g) => {
