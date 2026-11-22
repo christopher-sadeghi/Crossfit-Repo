@@ -23,8 +23,22 @@ export const benchmarkInputSchema = z.object({
 });
 export const goalInputSchema = z.union([
   z.object({ id: z.string().uuid(), status: z.literal("achieved") }),
-  z.object({ id: z.string().uuid().optional(), category: z.enum(GOAL_CATEGORIES), target: z.string().trim().max(200), target_value: optionalNumber, target_date: z.union([z.literal(""), z.string().date()]) }),
+  z.object({ id: z.string().uuid().optional(), category: z.enum(GOAL_CATEGORIES), target: z.string().trim().max(200), target_value: optionalNumber, target_date: z.union([z.literal(""), z.string().date()]), original: z.object({ title: z.string(), goal_type: z.string(), target_value: z.number().nullable(), target_date: z.string().nullable() }).optional() }),
 ]);
+export function goalPrefill(goal: { id: string; status: string; title: string; goal_type: string; target_value: number | null; target_date: string | null }) {
+  return { id: goal.id, status: goal.status,
+    category: goal.goal_type === "body_composition" ? "Body composition" : goal.goal_type === "skill" ? "Specific skill" : GOAL_CATEGORIES.find((c) => c !== "Body composition" && c !== "Specific skill" && (goal.title === c || goal.title.startsWith(`${c}:`))) ?? "Strength",
+    target: goal.title, target_value: goal.target_value ?? "", target_date: goal.target_date ?? "",
+    original: { title: goal.title, goal_type: goal.goal_type, target_value: goal.target_value, target_date: goal.target_date },
+  };
+}
+export function goalPayload(goal: z.infer<typeof goalInputSchema>) {
+  if ("status" in goal) return { id: goal.id };
+  const title = goal.id ? goal.target || goal.category : `${goal.category}${goal.target ? `: ${goal.target}` : ""}`;
+  const goal_type = goal.category === "Body composition" ? "body_composition" : goal.category === "Specific skill" ? "skill" : "performance";
+  const fields = { title, goal_type, target_value: goal.target_value, target_date: goal.target_date || null };
+  return { id: goal.id, ...Object.fromEntries(Object.entries(fields).filter(([key, value]) => !goal.id || !goal.original || value !== goal.original[key as keyof typeof fields])) };
+}
 export const intakeSchemas = [
   z.object({ birth_date: z.string().date(), sex: z.enum(["", "female", "male", "other"]), height_ft: z.coerce.number().int().min(3).max(8), height_in: z.coerce.number().min(0).lt(12), weight: z.coerce.number().positive().max(2000) })
     .refine((v) => { const cm = ftInToCm(v.height_ft, v.height_in); return cm >= 98.73 && cm <= 251.27; }, "Height must be between 3 ft 4 in and 8 ft 2 in."),

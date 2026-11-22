@@ -81,6 +81,23 @@ do $$ declare g uuid; begin
  assert (select status = 'achieved' and achieved_at = '2026-01-02'::timestamptz from public.goals where title = 'Specific skill');
  raise notice 'PASS: goal ids remain stable, coach fields survive, only removed unfinished intake goals deleted';
 end $$;
+reset role;
+update public.goals set title = 'Coach approved squat 205 lb', target_value = 205, target_date = '2027-01-01'
+ where title = 'Strength: squat' and athlete_id = '35000000-0000-0000-0000-000000000011';
+update public.athlete_intakes set status = 'requested', requested_at = now() where athlete_id = '35000000-0000-0000-0000-000000000011';
+set local role authenticated;
+do $$ declare g uuid; before_goal jsonb; begin
+ select (answers->'goal_ids'->>0)::uuid into g from public.athlete_intakes;
+ select to_jsonb(goals) into before_goal from public.goals where id = g;
+ perform public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',3,
+   jsonb_build_object('goals',jsonb_build_array(jsonb_build_object('id',g))),'2026-11-21');
+ assert (select to_jsonb(goals) from public.goals where id = g) = before_goal;
+ assert (select title = 'Coach approved squat 205 lb' and target_value = 205 and target_date = '2027-01-01' from public.goals where id = g);
+ perform public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',3,
+   jsonb_build_object('goals',jsonb_build_array(jsonb_build_object('id',g,'target_value',210))),'2026-11-21');
+ assert (select title = 'Coach approved squat 205 lb' and target_value = 210 and target_date = '2027-01-01' from public.goals where id = g);
+ raise notice 'PASS: coach-edited title/target survive resend and unchanged save; athlete edits patch only changed fields';
+end $$;
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',4,'{"injury_list":[{"area":"Knee","severity":"mild","notes":"Avoid jumping"}]}','2026-11-21');
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',4,'{"injury_list":[]}','2026-11-21');
 do $$ begin
@@ -95,7 +112,7 @@ do $$ begin
  assert (select injuries = 'None' and height_cm = 180 from public.athletes where id = '35000000-0000-0000-0000-000000000011');
  assert (select count(*) from public.goals) = 3;
  assert (select title from public.goals where id = '35000000-0000-0000-0000-000000000021') = 'Coach goal';
- assert (select target_value from public.goals where title = 'Strength: squat') = 110;
+ assert (select target_value from public.goals where title = 'Coach approved squat 205 lb') = 210;
  assert (select diet_type from public.athlete_food_preferences) = 'none';
  assert (select count(*) from public.benchmark_results) = 0;
  assert (select count(*) from public.body_metrics) = 1;

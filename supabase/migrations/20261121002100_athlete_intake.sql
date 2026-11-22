@@ -91,9 +91,15 @@ begin
         select id into record_id from public.goals where id = (item->>'id')::uuid and athlete_id = a.id and coach_id = a.coach_id
           and id in (select value::uuid from jsonb_array_elements_text(coalesce(intake.answers->'goal_ids','[]'))) for update;
         if record_id is null then raise exception 'Not an intake goal' using errcode = '42501'; end if;
-        update public.goals set title = item->>'title', goal_type = (item->>'goal_type')::public.goal_type,
-          target_value = (item->>'target_value')::numeric, target_date = (item->>'target_date')::date
-          where id = record_id and status <> 'achieved';
+        update public.goals set title = case when item ? 'title' then item->>'title' else title end,
+          goal_type = case when item ? 'goal_type' then (item->>'goal_type')::public.goal_type else goal_type end,
+          target_value = case when item ? 'target_value' then (item->>'target_value')::numeric else target_value end,
+          target_date = case when item ? 'target_date' then (item->>'target_date')::date else target_date end
+          where id = record_id and status <> 'achieved' and (
+            (item ? 'title' and title is distinct from item->>'title') or
+            (item ? 'goal_type' and goal_type is distinct from (item->>'goal_type')::public.goal_type) or
+            (item ? 'target_value' and target_value is distinct from (item->>'target_value')::numeric) or
+            (item ? 'target_date' and target_date is distinct from (item->>'target_date')::date));
       else
         insert into public.goals(athlete_id, coach_id, title, goal_type, target_value, target_date)
           values (a.id, a.coach_id, item->>'title', (item->>'goal_type')::public.goal_type,

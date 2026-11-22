@@ -4,7 +4,7 @@ import { getViewer } from "@/lib/viewer";
 import { cmToFtIn } from "@/lib/height";
 import { fromKg } from "@/lib/units";
 import { getToday } from "@/lib/time-zone";
-import { GOAL_CATEGORIES, injuryPrefill } from "@/lib/athlete-intake";
+import { goalPrefill, injuryPrefill } from "@/lib/athlete-intake";
 import { IntakeForm } from "./intake-form";
 
 export default async function OnboardingPage({ searchParams }: { searchParams: Promise<{ step?: string }> }) {
@@ -33,7 +33,7 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
     ...answers, birth_date: athlete.data?.birth_date ?? "", sex: athlete.data?.sex ?? "", height_ft: height?.ft ?? "", height_in: height?.in ?? "", weight: weight == null ? "" : fromKg(weight, viewer.units),
     experience_level: athlete.data?.experience_level ?? "beginner", years_training: answers.years_training ?? "", crossfit_detail: answers.crossfit_detail ?? "", sports_background: answers.sports_background ?? "",
     benchmarks: selectedResults.map((r) => ({ benchmark_id: r.benchmark_id, load: r.load_kg == null ? "" : fromKg(r.load_kg, viewer.units), time_seconds: r.time_seconds ?? "", rounds: r.rounds ?? "", reps: r.reps ?? "" })),
-    goals: selectedGoals.map((g) => ({ id: g.id, status: g.status, category: GOAL_CATEGORIES.find((c) => g.title === c || g.title.startsWith(`${c}:`)) ?? "Strength", target: g.title.includes(": ") ? g.title.split(": ").slice(1).join(": ") : "", target_value: g.target_value ?? "", target_date: g.target_date ?? "" })),
+    goals: selectedGoals.map(goalPrefill),
     ...injuryPrefill(answers, athlete.data?.injuries), days_per_week: answers.days_per_week ?? "", session_minutes: answers.session_minutes ?? "", location: answers.location ?? "gym", equipment: answers.equipment ?? [],
     diet_type: preferences.data?.diet_type ?? "none", allergies: preferences.data?.allergies.join(", ") ?? "", dislikes: preferences.data?.dislikes.join(", ") ?? "", cooking_minutes: preferences.data?.cooking_minutes == null ? "" : String(preferences.data.cooking_minutes), eating_habits: answers.eating_habits ?? "",
     sleep_hours: answers.sleep_hours ?? "", stress_level: answers.stress_level ?? "moderate", job_activity: answers.job_activity ?? "sedentary",
