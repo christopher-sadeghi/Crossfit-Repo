@@ -38,3 +38,18 @@ test("preserves line-wrapped allergen phrases and odd whitespace", () => {
   assert.ok(ingredients.includes("tree nuts"));
   assert.deepEqual(matchedAllergies(ingredients, ["peanut butter", "tree nut", "unusual seed"]), ["peanut butter", "tree nut", "unusual seed"]);
 });
+
+test("keeps newline-delimited and inline allergen declarations before trimming", () => {
+  for (const declarations of [
+    "\nContains: hazelnuts\nMay contain: almonds\nTraces of: walnuts",
+    " Contains: hazelnuts. May contain: almonds Traces of: walnuts",
+  ]) {
+    const ingredients = foodIngredients([{ name: "Snack", ingredients: `${"sugar, ".repeat(1200)}palm oil${declarations}` }], 8000);
+    assert.ok(ingredients);
+    assert.ok(ingredients.length <= 8000);
+    assert.ok(ingredients.includes("Contains: hazelnuts"));
+    assert.ok(ingredients.includes("May contain: almonds"));
+    assert.ok(ingredients.includes("Traces of: walnuts"));
+    assert.deepEqual(matchedAllergies(ingredients, ["hazelnut", "almond", "walnut"]), ["hazelnut", "almond", "walnut"]);
+  }
+});

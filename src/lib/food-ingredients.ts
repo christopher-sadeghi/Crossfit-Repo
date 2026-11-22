@@ -5,10 +5,29 @@ const commonAllergens = ["peanut", "tree nut", "milk", "egg", "fish", "shellfish
 
 export function foodIngredients(entries: IngredientEntry[], limit: number): string | null {
   const whitespace = (text: string) => text.replace(/\s+/g, " ").trim();
-  entries = entries.map(entry => ({ name: whitespace(entry.name), ingredients: entry.ingredients === null ? null : whitespace(entry.ingredients), allergens: entry.allergens?.map(whitespace) }));
+  const declarations = new Set<string>();
+  entries = entries.map(entry => {
+    const raw = entry.ingredients ?? "";
+    const markers = [...raw.matchAll(/\b(?:may\s+contain|contains?|allergens?|traces(?:\s+of)?)\s*:?\s+/gi)];
+    let remaining = "";
+    let cursor = 0;
+    for (let i = 0; i < markers.length; i++) {
+      const marker = markers[i];
+      const start = marker.index;
+      const content = start + marker[0].length;
+      const next = markers[i + 1]?.index ?? raw.length;
+      const boundary = raw.slice(content, next).search(/[\r\n.;]/);
+      const end = boundary < 0 ? next : content + boundary;
+      declarations.add(whitespace(raw.slice(start, end)));
+      remaining += `${raw.slice(cursor, start)}; `;
+      cursor = end;
+    }
+    remaining += raw.slice(cursor);
+    return { name: whitespace(entry.name), ingredients: whitespace(remaining), allergens: entry.allergens?.map(whitespace) };
+  });
   const allergens = new Set<string>();
   const names = new Set<string>();
-  const safety = new Set<string>();
+  const safety = new Set<string>(declarations);
   const plain: string[] = [];
   for (const entry of entries) {
     names.add(entry.name);
