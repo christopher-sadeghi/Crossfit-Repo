@@ -164,7 +164,7 @@ test("completed intake notifies the coach only after saving, links intake, and t
   assert.deepEqual(partial.writes.map((write) => write.name), ["save_athlete_intake_step"]);
 });
 test("achieved goals render without edit controls, occupy picks and submit identity only", async () => {
-  const goalIds = ["35000000-0000-0000-0000-000000000001", "35000000-0000-0000-0000-000000000002", "35000000-0000-0000-0000-000000000003", "35000000-0000-0000-0000-000000000004", "35000000-0000-0000-0000-000000000005", "35000000-0000-0000-0000-000000000006"];
+  const goalIds = Array.from({ length: 6 }, (_, index) => `35000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`);
   const goals = goalIds.map((id) => ({ id, status: "achieved", category: "Strength", target: "Squat", target_value: 100, target_date: "2026-01-01" }));
   let submission;
   let pending;

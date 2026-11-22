@@ -261,7 +261,11 @@ test("check-in and habit actions validate, isolate their payloads, use viewer-lo
 test("partial saved check-ins render only answered fields and offer an edit action", () => {
   const React = require("react");
   const { renderToStaticMarkup } = require("react-dom/server");
-  const tag = (name) => (props) => React.createElement(name, props, props.children);
+  const tag = (name) => {
+    const Tag = (props) => React.createElement(name, props, props.children);
+    Tag.displayName = name;
+    return Tag;
+  };
   const { CheckInForm } = load("src/app/athlete/check-in/check-in-form.tsx", {
     "next/link": "a",
     "@/components/ui/badge": { Badge: "span" },
