@@ -7,7 +7,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { getToday } from "@/lib/time-zone";
 
 type Client = SupabaseClient<Database>;
-export type NotificationKind = "result_logged" | "workout_adjusted" | "low_readiness" | "message" | "missed_workouts" | "coach_message" | "schedule_changed" | "suggestion_approved" | "progress_report" | "high_training_load";
+export type NotificationKind = "result_logged" | "workout_adjusted" | "low_readiness" | "message" | "missed_workouts" | "coach_message" | "schedule_changed" | "suggestion_approved" | "progress_report" | "progress_check_in" | "high_training_load";
 export type NotificationInput = {
   athleteId: string;
   kind: NotificationKind;
@@ -121,6 +121,37 @@ export async function checkDriftingAthletes(supabase: Client, coach: { id: strin
     ));
   } catch (error) {
     console.error("Drifting-athlete check failed:", error);
+  }
+}
+
+export async function checkProgressReminders(supabase: Client, scope: { coachId: string } | { athleteId: string }): Promise<void> {
+  try {
+    const today = await getToday();
+    const query = supabase.from("progress_reminders").select(`athlete_id, starts_on, cadence_weeks,
+      athlete:athletes!progress_reminders_athlete_id_fkey!inner(
+        status, user_id,
+        measurements:body_measurements!body_measurements_athlete_id_fkey(measured_on),
+        photos:progress_photos!progress_photos_athlete_id_fkey(taken_on)
+      )`)
+      .eq("athlete.status", "active").not("athlete.user_id", "is", null)
+      .lte("athlete.measurements.measured_on", today).lte("athlete.photos.taken_on", today)
+      .order("measured_on", { referencedTable: "athlete.measurements", ascending: false }).limit(1, { referencedTable: "athlete.measurements" })
+      .order("taken_on", { referencedTable: "athlete.photos", ascending: false }).limit(1, { referencedTable: "athlete.photos" });
+    const { data, error } = await ("coachId" in scope ? query.eq("coach_id", scope.coachId) : query.eq("athlete_id", scope.athleteId));
+    if (error) throw error;
+    await Promise.all((data ?? []).map((reminder) => {
+      const latest = [reminder.starts_on, reminder.athlete.measurements[0]?.measured_on, reminder.athlete.photos[0]?.taken_on]
+        .filter((date): date is string => !!date).sort().at(-1)!;
+      const dueDate = programDate(latest, reminder.cadence_weeks + 1, 1);
+      if (today < dueDate) return;
+      return notify(supabase, {
+        athleteId: reminder.athlete_id, kind: "progress_check_in", title: "Time for a progress check-in",
+        body: "Capture your progress with photos and measurements when you're ready.", link: "/athlete/progress",
+        dedupeKey: `progress-check-in:${reminder.athlete_id}:${dueDate}`,
+      });
+    }));
+  } catch (error) {
+    console.error("Progress reminder check failed:", error);
   }
 }
 

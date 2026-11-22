@@ -17,6 +17,7 @@
     "ai": "^7.0.179",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.5.2",
+    "heic2any": "^0.0.4",
     "lucide-react": "^1.77.0",
     "next": "15.5.29",
     "radix-ui": "^1.8.1",

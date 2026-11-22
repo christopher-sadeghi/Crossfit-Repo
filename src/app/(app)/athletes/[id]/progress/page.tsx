@@ -3,10 +3,14 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
 import { RequestProgressSummaryForm } from "@/components/suggestions/suggestion-forms";
+import { CheckInReminder } from "@/components/progress/check-in-reminder";
+import { MeasurementChart, MeasurementLog } from "@/components/progress/measurements";
+import { ProgressPhotos } from "@/components/progress/progress-photos";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getCoach } from "@/lib/coach";
+import { loadProgressCheckIns } from "@/lib/measurements";
 import { addDays, targetOn, totals } from "@/lib/nutrition";
 import { getToday } from "@/lib/time-zone";
 import { formatGoalValue, GOAL_TYPE_LABELS, goalProgress, loadPrsByMovement, TRACKING_LABELS } from "@/lib/progress";
@@ -49,6 +53,11 @@ export default async function AthleteProgressPage({ params }: Props) {
 
   const athlete = athleteRes.data;
   if (!athlete) notFound();
+  const [checkIns, reminder] = await Promise.all([
+    loadProgressCheckIns(supabase, id, now),
+    supabase.from("progress_reminders").select("cadence_weeks").eq("athlete_id", id).maybeSingle(),
+  ]);
+  if (reminder.error) throw new Error("Couldn't load the reminder setting.");
   const metrics = metricsRes.data ?? [];
   const goals = goalsRes.data ?? [];
   const results = resultsRes.data ?? [];
@@ -98,6 +107,7 @@ export default async function AthleteProgressPage({ params }: Props) {
             {weightData.length ? <WeightChart data={weightData} units={units} /> : <Empty text="Log a measurement below to start this chart." />}
           </CardContent>
         </Card>
+        <MeasurementChart measurements={checkIns.measurements} measurementTrendRows={checkIns.measurementTrendRows} units={units} />
         <Card>
           <CardHeader>
             <CardTitle>Personal records by movement</CardTitle>
@@ -131,6 +141,14 @@ export default async function AthleteProgressPage({ params }: Props) {
             )}
           </CardContent>
         </Card>
+      </section>
+
+      <section aria-label="Progress check-ins" className="mb-6 grid items-start gap-4 xl:grid-cols-2">
+        <ProgressPhotos athleteId={id} coachId={coach!.id} today={now} {...checkIns} />
+        <div className="grid gap-4">
+          <MeasurementLog athleteId={id} today={now} measurements={checkIns.measurements} units={units} />
+          <CheckInReminder athleteId={id} cadence={reminder.data?.cadence_weeks ?? null} />
+        </div>
       </section>
 
       <section aria-label="Goals" className="mb-6 grid gap-4">

@@ -64,7 +64,7 @@ grant select, insert, update, delete on public.ai_activity_draft_requests to ser
 alter table public.notifications drop constraint notifications_kind_check;
 alter table public.notifications add constraint notifications_kind_check check (
   kind in ('result_logged', 'workout_adjusted', 'low_readiness', 'message', 'missed_workouts',
-    'coach_message', 'schedule_changed', 'suggestion_approved', 'progress_report', 'high_training_load')
+    'coach_message', 'schedule_changed', 'suggestion_approved', 'progress_report', 'progress_check_in', 'high_training_load')
 );
 
 create or replace function public.create_notification(
@@ -84,14 +84,14 @@ begin
   select * into v_athlete from public.athletes where id = p_athlete_id;
   if not found then raise exception 'athlete_not_found'; end if;
   if v_athlete.user_id = auth.uid() and v_athlete.status = 'active' then
-    if p_kind not in ('result_logged', 'workout_adjusted', 'low_readiness', 'message', 'high_training_load') or p_kind is null then
+    if p_kind not in ('result_logged', 'workout_adjusted', 'low_readiness', 'message', 'progress_check_in', 'high_training_load') or p_kind is null then
       raise exception 'invalid_notification_kind';
     end if;
-    v_recipient := v_athlete.coach_id;
+    v_recipient := case when p_kind = 'progress_check_in' then v_athlete.user_id else v_athlete.coach_id end;
   elsif v_athlete.coach_id = auth.uid() then
     if p_kind in ('missed_workouts', 'high_training_load') then
       v_recipient := v_athlete.coach_id;
-    elsif p_kind in ('coach_message', 'schedule_changed', 'suggestion_approved', 'progress_report') then
+    elsif p_kind in ('coach_message', 'schedule_changed', 'suggestion_approved', 'progress_report', 'progress_check_in') then
       v_recipient := v_athlete.user_id;
     else
       raise exception 'invalid_notification_kind';
