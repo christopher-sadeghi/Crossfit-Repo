@@ -8,11 +8,12 @@ const source = ts.transpileModule(readFileSync(new URL("../src/lib/notifications
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 
-function fixture({ athletes = [], schedules = {}, results = [], suggestion = { suggestion_type: "scale_workout", status: "approved" }, messageError, existingMessage = null, rpcError, queryError, thrown = false } = {}) {
+function fixture({ athletes = [], schedules = {}, results = [], drifting = [], driftError, suggestion = { suggestion_type: "scale_workout", status: "approved" }, messageError, existingMessage = null, rpcError, queryError, thrown = false } = {}) {
   const calls = [];
   const errors = [];
   const queries = [];
   const messages = [];
+  const driftCalls = [];
   const exports = {};
   const client = {
     rpc: async (name, args) => {
@@ -35,6 +36,11 @@ function fixture({ athletes = [], schedules = {}, results = [], suggestion = { s
     exports,
     console: { error: (...args) => errors.push(args) },
     require: (name) => {
+      if (name.endsWith("consistency-data")) return { loadDriftingAthletes: async (...args) => {
+        driftCalls.push(args);
+        if (driftError) throw driftError;
+        return drifting;
+      } };
       if (name.endsWith("athlete-schedule")) return { loadAthleteSchedule: async (_, id, range) => {
         assert.equal(range.to, "2026-11-20");
         return schedules[id] ?? [];
@@ -48,8 +54,42 @@ function fixture({ athletes = [], schedules = {}, results = [], suggestion = { s
       throw new Error(`Unexpected import ${name}`);
     },
   });
-  return { helpers: exports, client, calls, errors, queries, messages };
+  return { helpers: exports, client, calls, errors, queries, messages, driftCalls };
 }
+
+test("drifting notifications include unlinked athletes, coach settings, reasons and episode keys", async () => {
+  const athlete = { id: "a", first_name: "Alex", last_name: "A", user_id: null };
+  const row = { athlete, stats: { lastActivityDate: "2026-11-01" }, reasons: ["inactive", "declining"], daysSinceActivity: 20, last30Rate: 25, prev30Rate: 75 };
+  const f = fixture({ drifting: [row] });
+  await f.helpers.checkDriftingAthletes(f.client, { id: "coach", driftDays: 7 });
+  assert.deepEqual(f.driftCalls[0], [f.client, "coach", "2026-11-21", 7]);
+  assert.equal(f.calls.length, 2);
+  for (const { args } of f.calls) {
+    assert.equal(args.p_kind, "missed_workouts");
+    assert.equal(args.p_athlete_id, "a");
+    assert.equal(args.p_link, "/athletes/a?tab=consistency");
+  }
+  assert.match(f.calls[0].args.p_title, /Alex A: drifting.*no activity in 20 days/);
+  assert.equal(f.calls[0].args.p_dedupe_key, "drifting:inactive:a:2026-11-01");
+  assert.match(f.calls[1].args.p_title, /completion down from 75% to 25%/);
+  assert.equal(f.calls[1].args.p_dedupe_key, "drifting:declining:a:2026-11");
+  const never = fixture({ drifting: [{ ...row, reasons: ["inactive"], stats: { lastActivityDate: null }, daysSinceActivity: null }] });
+  await never.helpers.checkDriftingAthletes(never.client, { id: "coach" });
+  assert.equal(never.calls[0].args.p_dedupe_key, "drifting:inactive:a:never");
+  assert.match(never.calls[0].args.p_title, /no activity recorded/);
+});
+
+test("drifting check handles no flags and swallows loader and notification errors", async () => {
+  const empty = fixture();
+  await empty.helpers.checkDriftingAthletes(empty.client, { id: "coach" });
+  assert.equal(empty.calls.length, 0);
+  const failed = fixture({ driftError: new Error("unavailable") });
+  await failed.helpers.checkDriftingAthletes(failed.client, { id: "coach" });
+  assert.equal(failed.errors.length, 1);
+  const offline = fixture({ thrown: true, drifting: [{ athlete: { id: "a" }, stats: { lastActivityDate: null }, reasons: ["inactive"], daysSinceActivity: null }] });
+  await offline.helpers.checkDriftingAthletes(offline.client, { id: "coach" });
+  assert.equal(offline.errors.length, 1);
+});
 
 test("notify sends RPC parameters and null optional values", async () => {
   const { helpers, client, calls } = fixture();
