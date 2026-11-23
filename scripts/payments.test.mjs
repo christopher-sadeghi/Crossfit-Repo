@@ -235,7 +235,7 @@ test("only the owner can connect or create plans, and missing Stripe configurati
     type: "standard", email: "owner@example.test", metadata: { coach_id: ownerId },
   }]);
   assert.equal(owner.tables.coach_stripe_accounts[0].coach_id, ownerId);
-  assert.deepEqual(owner.calls.find(([name]) => name === "accountLinks.create")[2], { stripeAccount: accountId });
+  assert.equal(owner.calls.find(([name]) => name === "accountLinks.create")[2], undefined);
 });
 
 test("plan validation is strict and valid plan creation uses the connected account", async () => {

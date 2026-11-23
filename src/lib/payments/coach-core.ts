@@ -40,7 +40,7 @@ export function createCoachPaymentActions(dependencies: Dependencies) {
       refresh_url: `${origin}/settings/payments/connect`,
       return_url: `${origin}/settings?stripe=return`,
       type: "account_onboarding",
-    }, { stripeAccount: accountId });
+    });
   }
 
   async function startConnect(): Promise<ActionResult> {

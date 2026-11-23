@@ -22,11 +22,7 @@ export async function PaymentsCard({ stripeReturn }: { stripeReturn?: string }) 
   const stripe = getStripe();
   if (account && stripe && (stripeReturn === "return" || !account.charges_enabled)) {
     try {
-      const updated = await stripe.accounts.retrieve(
-        account.stripe_account_id,
-        {},
-        { stripeAccount: account.stripe_account_id },
-      );
+      const updated = await stripe.accounts.retrieve(account.stripe_account_id);
       account = {
         ...account,
         charges_enabled: updated.charges_enabled,
