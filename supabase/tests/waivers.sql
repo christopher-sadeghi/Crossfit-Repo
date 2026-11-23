@@ -132,6 +132,19 @@ do $$ begin
 end $$;
 reset role;
 
+update public.athlete_waiver_signatures
+set user_id = '37000000-0000-4000-8000-000000000005'
+where athlete_id = '37000000-0000-4000-8000-000000000011';
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"37000000-0000-4000-8000-000000000004","role":"authenticated"}', true);
+do $$ begin
+  assert not exists (select 1 from public.athlete_waiver_signatures where athlete_id = '37000000-0000-4000-8000-000000000011');
+end $$;
+reset role;
+update public.athlete_waiver_signatures
+set user_id = (select user_id from public.athletes where id = athlete_waiver_signatures.athlete_id)
+where athlete_id = '37000000-0000-4000-8000-000000000011';
+
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"37000000-0000-4000-8000-000000000003","role":"authenticated"}', true);
 do $$ begin

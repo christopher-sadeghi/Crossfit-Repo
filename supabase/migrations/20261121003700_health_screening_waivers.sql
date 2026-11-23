@@ -255,7 +255,7 @@ grant all on public.athlete_waiver_signatures to service_role;
 create policy "Coaches and athletes can read waiver signatures" on public.athlete_waiver_signatures
   for select to authenticated using (
     coach_id = (select public.current_gym_id())
-    or athlete_id = (select public.current_athlete_id())
+    or (athlete_id = (select public.current_athlete_id()) and user_id = (select auth.uid()))
   );
 
 create function public.publish_coach_waiver(p_body text, p_require_resign boolean)
