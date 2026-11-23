@@ -15,7 +15,7 @@ function load(relative, overrides = {}) {
   new Function("require", "module", "exports", js)(localRequire, loaded, loaded.exports);
   return loaded.exports;
 }
-const { intakeSchemas: schemas, GOAL_OPTIONS, healthFlag } = load("src/lib/athlete-intake.ts");
+const { intakeSchemas: schemas, GOAL_OPTIONS, healthFlag, stripHealthScreening } = load("src/lib/athlete-intake.ts");
 const valid = [
   { birth_date: "1995-01-01", height_ft: 5, height_in: 10, weight: 180, sex: "" },
   { experience_level: "beginner", years_training: 0, crossfit_detail: "", sports_background: "", benchmarks: [] },
@@ -98,6 +98,16 @@ test("health screening validates required answers and flags only higher-risk res
   assert.equal(schemas[7].safeParse({ ...screening, recent_surgery: true }).success, false);
   assert.equal(schemas[7].safeParse({ ...screening, emergency_contact: { ...screening.emergency_contact, phone: "not a phone" } }).success, false);
   assert.equal(schemas[7].safeParse({ ...screening, medications: "x".repeat(1001) }).success, false);
+});
+test("AI intake data excludes health screening keys and preserves non-object inputs", () => {
+  assert.deepEqual(stripHealthScreening({
+    days_per_week: 3,
+    health_screening: valid[7].health_screening,
+    health_flag: true,
+  }), { days_per_week: 3 });
+  for (const value of [null, undefined, false, 7, "answers", ["answers"]]) {
+    assert.equal(stripHealthScreening(value), value);
+  }
 });
 test("injury prefill preserves profile notes and clearing requires explicit confirmation", () => {
   const { injuryPrefill } = load("src/lib/athlete-intake.ts");

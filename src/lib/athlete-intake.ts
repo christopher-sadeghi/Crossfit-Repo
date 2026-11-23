@@ -54,6 +54,10 @@ export function healthFlag(screening: Partial<HealthScreening> | null | undefine
     || screening.recent_surgery
   ));
 }
+export function stripHealthScreening<T>(answers: T): T {
+  if (!answers || typeof answers !== "object" || Array.isArray(answers)) return answers;
+  return Object.fromEntries(Object.entries(answers).filter(([key]) => key !== "health_screening" && key !== "health_flag")) as T;
+}
 export function injuryPrefill(answers: Record<string, unknown>, injuries: string | null | undefined) {
   const injury_list = Array.isArray(answers.injury_list) && answers.injury_list.length ? answers.injury_list
     : answers.no_injuries === true || !injuries?.trim() || injuries.trim().toLowerCase() === "none" ? []
