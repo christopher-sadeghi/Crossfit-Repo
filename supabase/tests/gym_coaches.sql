@@ -16,6 +16,15 @@ values
   ('55000000-0000-0000-0000-000000000011', '55000000-0000-0000-0000-000000000001', '55000000-0000-0000-0000-000000000002', '55000000-0000-0000-0000-000000000004', 'Athlete', 'A'),
   ('55000000-0000-0000-0000-000000000012', '55000000-0000-0000-0000-000000000003', null, '55000000-0000-0000-0000-000000000005', 'Athlete', 'B');
 
+insert into public.messages(id, athlete_id, coach_id, sender_id, body)
+values ('55000000-0000-0000-0000-000000000016', '55000000-0000-0000-0000-000000000011',
+  '55000000-0000-0000-0000-000000000001', '55000000-0000-0000-0000-000000000004', 'Can I change this suggestion?');
+insert into public.ai_suggestions(id, athlete_id, coach_id, suggestion_type, status, error, input, requested_by)
+values ('55000000-0000-0000-0000-000000000015', '55000000-0000-0000-0000-000000000011',
+  '55000000-0000-0000-0000-000000000001', 'write_workout', 'failed', 'in_progress',
+  jsonb_build_object('source_message_id', '55000000-0000-0000-0000-000000000016'),
+  '55000000-0000-0000-0000-000000000004');
+
 insert into storage.buckets(id, name, public)
 values ('movement-demos', 'movement-demos', false)
 on conflict (id) do nothing;
@@ -70,6 +79,34 @@ do $$ declare token uuid := '55000000-0000-0000-0000-000000000099'; begin
     raise exception 'staff removed a coach';
   exception when insufficient_privilege then null;
   end;
+end $$;
+select set_config('request.jwt.claims', '{"sub":"55000000-0000-0000-0000-000000000004","role":"authenticated"}', true);
+do $$ begin
+  begin
+    update public.ai_suggestions
+    set input = input || jsonb_build_object('changed', true)
+    where id = '55000000-0000-0000-0000-000000000015';
+    raise exception 'athlete changed assistant suggestion input';
+  exception when raise_exception then
+    if sqlerrm <> 'assistant_suggestion_identity_is_immutable' then raise; end if;
+  end;
+  begin
+    update public.ai_suggestions
+    set suggestion_type = 'adjust_macros'
+    where id = '55000000-0000-0000-0000-000000000015';
+    raise exception 'athlete changed assistant suggestion type';
+  exception when raise_exception then
+    if sqlerrm <> 'assistant_suggestion_identity_is_immutable' then raise; end if;
+  end;
+end $$;
+
+select set_config('request.jwt.claims', '{"sub":"55000000-0000-0000-0000-000000000002","role":"authenticated"}', true);
+do $$ declare n integer; begin
+  update public.ai_suggestions
+  set input = input || jsonb_build_object('staff_updated', true), suggestion_type = 'adjust_macros'
+  where id = '55000000-0000-0000-0000-000000000015';
+  get diagnostics n = row_count;
+  assert n = 1;
 end $$;
 
 select set_config('request.jwt.claims', '{"sub":"55000000-0000-0000-0000-000000000004","role":"authenticated"}', true);

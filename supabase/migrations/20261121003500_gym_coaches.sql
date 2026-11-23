@@ -397,6 +397,13 @@ begin
       and p.prosrc ilike '%auth.uid%'
   loop
     v_definition := replace(pg_get_functiondef(f.oid), 'auth.uid()', 'public.current_gym_id()');
+    if f.proname = 'lock_athlete_assistant_suggestion' then
+      v_definition := replace(
+        v_definition,
+        'old.coach_id <> public.current_gym_id()',
+        'old.coach_id IS DISTINCT FROM public.current_gym_id()'
+      );
+    end if;
     if f.proname in ('clear_demo_data', 'load_demo_data', 'load_demo_data_unscored') then
       v_definition := regexp_replace(
         v_definition,
