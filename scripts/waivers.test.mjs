@@ -7,14 +7,18 @@ import ts from "typescript";
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, "..");
-const filename = path.resolve(root, "src/lib/waivers.ts");
-const loaded = { exports: {} };
-const js = ts.transpileModule(readFileSync(filename, "utf8"), {
-  fileName: filename,
-  compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, esModuleInterop: true },
-}).outputText;
-new Function("require", "module", "exports", js)((id) => require(id), loaded, loaded.exports);
-const { WAIVER_TEMPLATE, renderWaiverBody, waiverStatus } = loaded.exports;
+function load(relative, overrides = {}) {
+  const filename = path.resolve(root, relative);
+  const loaded = { exports: {} };
+  const js = ts.transpileModule(readFileSync(filename, "utf8"), {
+    fileName: filename,
+    compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, esModuleInterop: true },
+  }).outputText;
+  const localRequire = (id) => id in overrides ? overrides[id] : require(id);
+  new Function("require", "module", "exports", js)(localRequire, loaded, loaded.exports);
+  return loaded.exports;
+}
+const { WAIVER_TEMPLATE, renderWaiverBody, waiverStatus } = load("src/lib/waivers.ts");
 
 test("waiver status asks only when a request is pending", () => {
   const latestWaiver = { id: "waiver-current", version: 3 };
@@ -52,9 +56,38 @@ test("unrequested athletes remain unprompted and prior signatures stay visible",
   });
 });
 
-test("waiver template keeps its coach placeholder until display time", () => {
+test("waiver template is rendered before publishing and published text stays fixed", () => {
   assert.match(WAIVER_TEMPLATE, /with \{\{coach_name\}\}/);
   assert.match(WAIVER_TEMPLATE, /8\. Agreement\./);
-  assert.equal(renderWaiverBody(WAIVER_TEMPLATE, "Jordan Coach").includes("{{coach_name}}"), false);
+  const publishedBody = renderWaiverBody(WAIVER_TEMPLATE, "Jordan Coach");
+  assert.match(publishedBody, /with Jordan Coach/);
+  assert.equal(publishedBody.includes("{{coach_name}}"), false);
+  assert.equal(renderWaiverBody(publishedBody, "Another Coach"), publishedBody);
   assert.equal(renderWaiverBody("Signed by {{coach_name}} and {{coach_name}}", ""), "Signed by your coach and your coach");
+});
+
+test("waiver publishing stores the coach name in the published body", async () => {
+  let published;
+  const { publishWaiver } = load("src/app/(app)/settings/waiver-actions.ts", {
+    "next/cache": { revalidatePath() {} },
+    "@/lib/auth/form-state": { failure: (_formData, error) => ({ error }) },
+    "@/lib/coach": { getCoach: async () => ({ role: "owner", gymId: "coach-id" }) },
+    "@/lib/waivers": { renderWaiverBody },
+    "@/lib/supabase/server": {
+      createClient: async () => ({
+        from: () => {
+          const query = { select: () => query, eq: () => query, maybeSingle: async () => ({ data: { full_name: "Jordan Coach" }, error: null }) };
+          return query;
+        },
+        rpc: async (name, args) => { published = { name, args }; return { error: null }; },
+      }),
+    },
+  });
+  const formData = new FormData();
+  const body = "Waiver terms from {{coach_name}}. ".repeat(4);
+  formData.set("body", body);
+
+  assert.deepEqual(await publishWaiver({}, formData), { message: "Waiver published." });
+  assert.equal(published.name, "publish_coach_waiver");
+  assert.equal(published.args.p_body, renderWaiverBody(body.trim(), "Jordan Coach"));
 });

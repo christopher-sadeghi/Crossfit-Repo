@@ -6,6 +6,7 @@ import { z } from "zod";
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { createClient } from "@/lib/supabase/server";
 import { getCoach } from "@/lib/coach";
+import { renderWaiverBody } from "@/lib/waivers";
 
 export async function publishWaiver(_previousState: FormState, formData: FormData): Promise<FormState> {
   const coach = await getCoach();
@@ -14,8 +15,10 @@ export async function publishWaiver(_previousState: FormState, formData: FormDat
   if (!parsedBody.success) return failure(formData, "Waiver text must be between 50 and 20,000 characters.");
 
   const supabase = await createClient();
+  const { data: owner, error: ownerError } = await supabase.from("coaches").select("full_name").eq("id", coach.gymId).maybeSingle();
+  if (ownerError) return failure(formData, "Couldn't publish the waiver. Please try again.");
   const { error } = await supabase.rpc("publish_coach_waiver", {
-    p_body: parsedBody.data,
+    p_body: renderWaiverBody(parsedBody.data, owner?.full_name || "your coach"),
     p_require_resign: formData.get("requires_resign") === "on",
   });
   if (error) return failure(formData, "Couldn't publish the waiver. Please try again.");

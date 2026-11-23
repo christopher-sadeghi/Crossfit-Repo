@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getCoach } from "@/lib/coach";
 import { createClient } from "@/lib/supabase/server";
-import { renderWaiverBody } from "@/lib/waivers";
 
 import { PrintButton } from "./print-button";
 
@@ -39,7 +38,7 @@ export default async function SignedWaiverPage({ params }: { params: Promise<{ i
         <h1 className="text-2xl font-semibold">Signed waiver</h1>
         <p className="text-muted-foreground">{athleteName} · {coachName} · Version {waiverResult.data.version}</p>
       </header>
-      <pre className="whitespace-pre-wrap text-sm">{renderWaiverBody(waiverResult.data.body, coachName)}</pre>
+      <pre className="whitespace-pre-wrap text-sm">{waiverResult.data.body}</pre>
       <section className="space-y-1 border-t pt-4 text-sm">
         <p><span className="font-medium">Signed by:</span> {signatureResult.data.signed_name}</p>
         <p><span className="font-medium">Signed at:</span> {new Date(signatureResult.data.signed_at).toLocaleString()}</p>

@@ -47,9 +47,9 @@ export async function WaiverCard() {
         ? <p className="text-sm text-muted-foreground">Version {latestWaiver.version} · published {new Date(latestWaiver.created_at).toLocaleDateString()}</p>
         : <p className="text-sm text-muted-foreground">Not published yet — athletes won&apos;t be asked until you publish.</p>}
       {coach.role === "owner"
-        ? <WaiverForm body={latestWaiver?.body ?? WAIVER_TEMPLATE} hasPublishedWaiver={Boolean(latestWaiver)} />
+        ? <WaiverForm body={latestWaiver?.body ?? renderWaiverBody(WAIVER_TEMPLATE, coachName)} hasPublishedWaiver={Boolean(latestWaiver)} />
         : latestWaiver
-          ? <pre className="max-h-96 overflow-y-auto whitespace-pre-wrap rounded-md border p-3 text-sm">{renderWaiverBody(latestWaiver.body, coachName)}</pre>
+          ? <pre className="max-h-96 overflow-y-auto whitespace-pre-wrap rounded-md border p-3 text-sm">{latestWaiver.body}</pre>
           : null}
       <p className="text-sm text-muted-foreground">This is a starting template, not legal advice. Have a lawyer review it before using it.</p>
       <div className="space-y-2">
