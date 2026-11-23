@@ -148,6 +148,8 @@ function fakeGateway() {
     },
     checkout: {
       sessions: {
+        list: async (...args) => { calls.push(["checkout.sessions.list", ...args]); return { data: [] }; },
+        expire: async (...args) => { calls.push(["checkout.sessions.expire", ...args]); return { id: args[0] }; },
         create: async (...args) => { calls.push(["checkout.sessions.create", ...args]); return { id: "cs_created", url: "https://checkout.stripe.test/session" }; },
       },
     },
@@ -289,8 +291,20 @@ test("checkout creates a connected-account subscription session with metadata", 
       membership_plans: [plan()],
     },
   });
+  fixture.gateway.checkout.sessions.list = async (...args) => {
+    fixture.calls.push(["checkout.sessions.list", ...args]);
+    return { data: [{ id: "cs_open" }] };
+  };
   const result = await fixture.actions.createCheckout(planId);
   assert.equal(result.url, "https://checkout.stripe.test/session");
+  const listCall = fixture.calls.find(([name]) => name === "checkout.sessions.list");
+  assert.deepEqual(listCall.slice(1), [
+    { customer: "cus_created", status: "open", limit: 100 },
+    { stripeAccount: accountId },
+  ]);
+  const expireCall = fixture.calls.find(([name]) => name === "checkout.sessions.expire");
+  assert.deepEqual(expireCall.slice(1), ["cs_open", {}, { stripeAccount: accountId }]);
+  assert.ok(fixture.calls.indexOf(expireCall) < fixture.calls.findIndex(([name]) => name === "checkout.sessions.create"));
   const checkout = fixture.calls.find(([name]) => name === "checkout.sessions.create");
   assert.deepEqual(checkout[1].line_items, [{ price: `price_${planId}`, quantity: 1 }]);
   assert.equal(checkout[1].mode, "subscription");

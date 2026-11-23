@@ -95,6 +95,15 @@ export function createAthletePaymentActions(dependencies: Dependencies) {
         customerId = customer.id;
       }
 
+      const openSessions = await stripe.checkout.sessions.list({
+        customer: customerId,
+        status: "open",
+        limit: 100,
+      }, options);
+      await Promise.all(openSessions.data.map((session) =>
+        stripe.checkout.sessions.expire(session.id, {}, options),
+      ));
+
       const metadata = { athlete_id: athlete.id, plan_id: plan.id, coach_id: athlete.coach_id };
       const session = await stripe.checkout.sessions.create({
         mode: "subscription",

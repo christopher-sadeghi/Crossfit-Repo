@@ -8,7 +8,7 @@ export type PaymentsGateway = {
   products: Pick<Stripe["products"], "create">;
   prices: Pick<Stripe["prices"], "create" | "update">;
   customers: Pick<Stripe["customers"], "create">;
-  checkout: { sessions: Pick<Stripe["checkout"]["sessions"], "create"> };
+  checkout: { sessions: Pick<Stripe["checkout"]["sessions"], "create" | "list" | "expire"> };
   billingPortal: {
     configurations: Pick<Stripe["billingPortal"]["configurations"], "create">;
     sessions: Pick<Stripe["billingPortal"]["sessions"], "create">;
