@@ -13,7 +13,7 @@ export default async function MessagesPage() {
   if (viewer.kind === "none") redirect("/no-access");
   const supabase = await createClient();
   const [{ data: athletes, error: athleteError }, timeZone] = await Promise.all([
-    supabase.from("athletes").select("id, first_name, last_name").eq("coach_id", viewer.gymId).eq("status", "active").order("first_name"),
+    supabase.from("athletes").select("id, first_name, last_name, user_id").eq("coach_id", viewer.gymId).eq("status", "active").order("first_name"),
     getTimeZone(),
   ]);
   if (athleteError) throw new Error("Couldn't load conversations. Please try again.");
@@ -22,7 +22,9 @@ export default async function MessagesPage() {
       .eq("coach_id", viewer.gymId).eq("athlete_id", athlete.id).eq("suggestion_type", "athlete_adjust_workout").in("status", ["approved", "edited"]);
     const [last, unread, lastAdjustment, unreviewed] = await Promise.all([
       supabase.from("messages").select("body, created_at").eq("athlete_id", athlete.id).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle(),
-      supabase.from("messages").select("id", { count: "exact", head: true }).eq("athlete_id", athlete.id).neq("sender_id", viewer.id).is("read_at", null),
+      athlete.user_id
+        ? supabase.from("messages").select("id", { count: "exact", head: true }).eq("athlete_id", athlete.id).eq("sender_id", athlete.user_id).is("read_at", null)
+        : Promise.resolve({ count: 0, error: null }),
       adjustments().order("decided_at", { ascending: false, nullsFirst: false }).order("created_at", { ascending: false }).limit(1).maybeSingle(),
       adjustments().is("coach_reviewed_at", null).limit(1).maybeSingle(),
     ]);

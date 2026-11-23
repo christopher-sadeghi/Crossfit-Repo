@@ -137,7 +137,12 @@ function form(body = "Hello Sam", link = "") {
 }
 
 test("send action inserts with current client and notifies once, and read action updates receipts", async () => {
-  const { actions, calls, notifications } = actionsFixture();
+  const messages = [
+    { athlete_id: athleteId, sender_id: userId, read_at: null },
+    { athlete_id: athleteId, sender_id: coachId, read_at: null },
+    { athlete_id: athleteId, sender_id: "staff-coach", read_at: null },
+  ];
+  const { actions, calls, notifications } = actionsFixture({ tables: { messages } });
   const state = await actions.sendMessage(athleteId, {}, form());
   assert.equal(state.sentId, itemId);
   assert.equal(calls[0].insert.athlete_id, athleteId);
@@ -147,6 +152,71 @@ test("send action inserts with current client and notifies once, and read action
   assert.equal(notifications[0][3], "coach");
   assert.deepEqual(await actions.markThreadRead(athleteId), {});
   assert.ok(calls[1].update.read_at);
+  assert.ok(messages[0].read_at);
+  assert.equal(messages[1].read_at, null);
+  assert.equal(messages[2].read_at, null);
+});
+
+test("coach does not mark messages read before an athlete has an account", async () => {
+  const messages = [{ athlete_id: athleteId, sender_id: coachId, read_at: null }];
+  const { actions, calls } = actionsFixture({
+    tables: { athletes: [{ ...athlete, user_id: null }], messages },
+  });
+  assert.deepEqual(await actions.markThreadRead(athleteId), {});
+  assert.ok(!calls.some((call) => call.table === "messages" && call.update));
+  assert.equal(messages[0].read_at, null);
+});
+
+test("athlete read marking still selects coach messages", async () => {
+  const messages = [
+    { athlete_id: athleteId, sender_id: userId, read_at: null },
+    { athlete_id: athleteId, sender_id: coachId, read_at: null },
+  ];
+  const { actions } = actionsFixture({
+    viewer: { kind: "athlete", athleteId },
+    tables: { messages },
+  });
+  assert.deepEqual(await actions.markThreadRead(athleteId), {});
+  assert.equal(messages[0].read_at, null);
+  assert.ok(messages[1].read_at);
+});
+
+test("coach unread badge counts only athlete senders while athlete behavior stays unchanged", async () => {
+  const coachMessages = [
+    { sender_id: userId, read_at: null },
+    { sender_id: "another-athlete", read_at: null },
+    { sender_id: coachId, read_at: null },
+    { sender_id: userId, read_at: "2026-11-21T10:00:00Z" },
+  ];
+  const { client: coachClient } = clientFixture({
+    athletes: [
+      { coach_id: coachId, user_id: userId },
+      { coach_id: coachId, user_id: "another-athlete" },
+      { coach_id: coachId, user_id: null },
+    ],
+    messages: coachMessages,
+  });
+  const loadCoachActions = loader({
+    "next/cache": { revalidatePath() {} },
+    "@/lib/supabase/server": { createClient: async () => coachClient },
+    "@/lib/viewer": { getViewer: async () => coach },
+  });
+  const coachFeed = await loadCoachActions("src/app/notification-actions.ts").getNotifications();
+  assert.equal(coachFeed.unreadMessages, 2);
+
+  const { client: athleteClient } = clientFixture({
+    messages: [
+      { sender_id: userId, read_at: null },
+      { sender_id: coachId, read_at: null },
+    ],
+  });
+  const loadAthleteActions = loader({
+    "next/cache": { revalidatePath() {} },
+    "@/lib/supabase/server": { createClient: async () => athleteClient },
+    "@/lib/viewer": { getViewer: async () => ({ kind: "athlete", athleteId }) },
+  });
+  const athleteFeed = await loadAthleteActions("src/app/notification-actions.ts").getNotifications();
+  assert.equal(athleteFeed.unreadMessages, 1);
 });
 
 test("send rejects empty, oversized, forged links, strangers and database failures without notifying", async () => {

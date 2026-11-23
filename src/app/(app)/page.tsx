@@ -25,18 +25,22 @@ export default async function DashboardPage() {
   if (!coach) redirect("/login");
 
   const [supabase, today] = await Promise.all([createClient(), getToday()]);
-  const [roster, approvals, formChecks, messages] = await Promise.all([
+  const [roster, approvals, formChecks, athleteUsers] = await Promise.all([
     loadCoachConsistency(supabase, coach.gymId, today, coach.driftDays),
     supabase.from("ai_suggestions").select("id", { count: "exact", head: true })
       .eq("coach_id", coach.gymId).eq("status", "pending"),
     supabase.from("form_reviews").select("id, athlete_id").eq("coach_id", coach.gymId)
       .eq("status", "awaiting_review").order("created_at"),
-    supabase.from("messages").select("athlete_id").eq("coach_id", coach.gymId)
-      .neq("sender_id", coach.id).is("read_at", null),
+    supabase.from("athletes").select("user_id").eq("coach_id", coach.gymId),
     checkMissedWorkouts(supabase, coach),
     checkProgressReminders(supabase, { coachId: coach.gymId }),
   ]);
-  const error = approvals.error ?? formChecks.error ?? messages.error;
+  const senderIds = [...new Set((athleteUsers.data ?? []).flatMap(({ user_id }) => user_id ? [user_id] : []))];
+  const messages = senderIds.length
+    ? await supabase.from("messages").select("athlete_id").eq("coach_id", coach.gymId)
+      .in("sender_id", senderIds).is("read_at", null)
+    : { data: [], error: null };
+  const error = approvals.error ?? formChecks.error ?? athleteUsers.error ?? messages.error;
   if (error) throw new Error("Couldn't load the dashboard.", { cause: error });
 
   const [checkIns, loadWarnings] = await Promise.all([
