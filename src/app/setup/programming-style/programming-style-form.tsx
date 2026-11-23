@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { saveProgrammingStyle, skipProgrammingStyle } from "./actions";
@@ -39,7 +40,10 @@ function TextField({ title, value, maxLength, onChange, multiline = false }: { t
   </label>;
 }
 
-export function ProgrammingStyleForm({ initialAnswers }: { initialAnswers: ProgrammingStyleAnswers }) {
+export function ProgrammingStyleForm({ initialAnswers, savedStatus }: {
+  initialAnswers: ProgrammingStyleAnswers;
+  savedStatus: "completed" | "skipped" | null;
+}) {
   const [answers, setAnswers] = useState(initialAnswers);
   const [step, setStep] = useState(0);
   const [pending, startTransition] = useTransition();
@@ -73,7 +77,9 @@ export function ProgrammingStyleForm({ initialAnswers }: { initialAnswers: Progr
     <div className="grid gap-5">{fields[step]}</div>
     <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
       <Button type="button" variant="outline" disabled={pending || step === 0} onClick={() => setStep((value) => value - 1)}>Back</Button>
-      <Button type="button" variant="ghost" disabled={pending} onClick={() => run(skipProgrammingStyle)}>Skip for now</Button>
+      {savedStatus === "completed"
+        ? <Button asChild variant="ghost"><Link href="/settings">Cancel</Link></Button>
+        : <Button type="button" variant="ghost" disabled={pending} onClick={() => run(skipProgrammingStyle)}>Skip for now</Button>}
       {step < 5
         ? <Button type="button" disabled={pending} onClick={() => setStep((value) => value + 1)}>Next</Button>
         : <Button type="button" disabled={pending} onClick={() => run(saveProgrammingStyle)}>{pending ? "Saving…" : "Save"}</Button>}

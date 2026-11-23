@@ -59,4 +59,13 @@ do $$ begin
 end $$;
 
 reset role;
+update public.athletes set status = 'archived'
+where id = '78000000-0000-0000-0000-000000000011';
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"78000000-0000-0000-0000-000000000004","role":"authenticated"}', true);
+do $$ begin
+  assert public.programming_style_for_athlete('78000000-0000-0000-0000-000000000011') is null;
+  raise notice 'PASS: archived athlete receives no programming style';
+end $$;
+reset role;
 rollback;

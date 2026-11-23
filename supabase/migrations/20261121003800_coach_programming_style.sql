@@ -38,7 +38,7 @@ security definer
 set search_path = ''
 as $$
   select case
-    when a.user_id = (select auth.uid())
+    when (a.user_id = (select auth.uid()) and a.status = 'active')
       or exists (
         select 1 from public.coaches requester
         where requester.id = (select auth.uid()) and requester.gym_id = a.coach_id

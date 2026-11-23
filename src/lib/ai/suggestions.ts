@@ -302,18 +302,20 @@ export async function buildWorkoutRequest(
   let workoutId: string | null = null;
   let workoutUpdatedAt: string | null = null;
   let currentWorkout: Json | null = null;
+  let existingWorkout: { athlete_id: string | null } | null = null;
 
   if (params.workoutId) {
     const { data: workout, error: workoutError } = await supabase
       .from("workouts")
       .select(
-        "id, title, workout_type, time_cap_seconds, rounds, description, notes, updated_at, workout_movements(position, movement_id, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(name))",
+        "id, athlete_id, title, workout_type, time_cap_seconds, rounds, description, notes, updated_at, workout_movements(position, movement_id, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(name))",
       )
       .eq("id", params.workoutId)
       .order("position", { referencedTable: "workout_movements" })
       .maybeSingle();
     if (workoutError || !workout) throw workoutError ?? new Error("Workout not found.");
 
+    existingWorkout = workout;
     workoutId = workout.id;
     workoutUpdatedAt = workout.updated_at;
     currentWorkout = {
@@ -333,8 +335,9 @@ export async function buildWorkoutRequest(
 
   const athleteId = !workoutId && params.athleteId && params.scheduledOn ? params.athleteId : null;
   const athlete = athleteId ? await loadAthleteProgrammingContext(supabase, athleteId, units, params.session) : null;
-  const programmingStyle = athleteId
-    ? await athleteProgrammingStyleNote(supabase, athleteId)
+  const styleAthleteId = athleteId ?? existingWorkout?.athlete_id ?? null;
+  const programmingStyle = styleAthleteId
+    ? await athleteProgrammingStyleNote(supabase, styleAthleteId)
     : params.requestedBy ? await coachProgrammingStyleNote(supabase, params.requestedBy) : null;
   const input = {
     mode: workoutId ? "adjust" : "write",
