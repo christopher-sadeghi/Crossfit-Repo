@@ -33,6 +33,7 @@ function loader(mocks = {}) {
 
 const athleteId = "29000000-0000-4000-8000-000000000011";
 const coachId = "29000000-0000-4000-8000-000000000001";
+const staffCoachId = "29000000-0000-4000-8000-000000000002";
 const userId = "29000000-0000-4000-8000-000000000003";
 const itemId = "29000000-0000-4000-8000-000000000021";
 const athlete = { id: athleteId, coach_id: coachId, user_id: userId, first_name: "Sam", last_name: "Athlete", status: "active" };
@@ -340,6 +341,38 @@ test("coach conversation activity includes applied athlete adjustments and flags
   assert.deepEqual(rows.map((row) => row.some((node) => node.props.children === "Adjustment to review")), [true, false, false]);
   assert.ok(rows[0].some((node) => node.props.children === "Athlete adjusted a workout"));
   assert.ok(rows[2].some((node) => node.props["aria-label"] === "1 unread messages"));
+});
+
+test("message labels identify gym coaches for coaches and fall back for hidden staff rows", async () => {
+  const coaches = [
+    { id: coachId, gym_id: coachId, full_name: "Owner Coach" },
+    { id: staffCoachId, gym_id: coachId, full_name: "Staff Coach" },
+  ];
+  const messages = [
+    { id: "athlete", athlete_id: athleteId, sender_id: userId, body: "Athlete", created_at: "2026-11-21T10:00:00Z" },
+    { id: "owner", athlete_id: athleteId, sender_id: coachId, body: "Owner", created_at: "2026-11-21T10:01:00Z" },
+    { id: "staff", athlete_id: athleteId, sender_id: staffCoachId, body: "Staff", created_at: "2026-11-21T10:02:00Z" },
+    { id: "unknown", athlete_id: athleteId, sender_id: "unknown-coach", body: "Unknown", created_at: "2026-11-21T10:03:00Z" },
+  ];
+
+  for (const { viewer, user, expected } of [
+    { viewer: { kind: "coach", id: staffCoachId, gymId: coachId, role: "coach" }, user: staffCoachId, expected: ["Sam Athlete", "Owner Coach", "You", "Coach"] },
+    { viewer: { kind: "athlete", athleteId }, user: userId, expected: ["Sam Athlete", "Owner Coach", "Coach", "Coach"] },
+  ]) {
+    const { client } = clientFixture({ athletes: [athlete], coaches, messages });
+    client.auth.getClaims = async () => ({ data: { claims: { sub: user } } });
+    const { MessageThread } = loader({
+      "@/lib/supabase/server": { createClient: async () => client },
+      "@/lib/viewer": { getViewer: async () => viewer },
+      "@/lib/time-zone": { getToday: async () => "2026-11-21", getTimeZone: async () => "UTC" },
+      "@/lib/messages": { messageAthlete: async () => athlete, resolveMessageLinks: async () => new Map(), messageLinkOptions: async () => [] },
+      "@/components/messages/composer": { MessageComposer: "composer" },
+      "@/components/messages/thread-live": { ThreadLive: "thread-live" },
+      ...threadCardMocks,
+    })("src/components/messages/thread.tsx");
+    const nodes = treeNodes(await MessageThread(viewer.kind === "coach" ? { athleteId } : {}));
+    assert.deepEqual(nodes.filter((node) => node.type === "p" && node.props.className === "mb-1 text-xs opacity-75").map((node) => node.props.children), expected);
+  }
 });
 
 test("athlete suggestion attachments are neutral unlinked text; coach picker warns suggestions are private", async () => {
