@@ -284,7 +284,7 @@ begin
     returning * into v_waiver;
 
   if coalesce(p_require_resign, false) and v_previous_version is not null then
-    update public.athletes set waiver_requested_at = now()
+    update public.athletes set waiver_requested_at = clock_timestamp()
       where coach_id = v_coach_id and status = 'active' and user_id is not null;
   end if;
   return v_waiver;
@@ -329,8 +329,8 @@ begin
     raise exception 'Invalid user agent' using errcode = '22023';
   end if;
 
-  insert into public.athlete_waiver_signatures(athlete_id, coach_id, waiver_id, signed_name, user_agent)
-    values (v_athlete.id, v_athlete.coach_id, v_latest_waiver.id, v_name, p_user_agent)
+  insert into public.athlete_waiver_signatures(athlete_id, coach_id, waiver_id, signed_name, signed_at, user_agent)
+    values (v_athlete.id, v_athlete.coach_id, v_latest_waiver.id, v_name, clock_timestamp(), p_user_agent)
     returning * into v_signature;
   return v_signature;
 end;
