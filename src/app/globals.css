@@ -130,21 +130,21 @@
 }
 
 @media print {
-  body * {
+  body:has(.waiver-print-content) * {
     visibility: hidden;
   }
-  .waiver-print-content,
-  .waiver-print-content * {
+  body:has(.waiver-print-content) .waiver-print-content,
+  body:has(.waiver-print-content) .waiver-print-content * {
     visibility: visible;
   }
-  .waiver-print-content {
+  body:has(.waiver-print-content) .waiver-print-content {
     position: absolute;
     inset: 0;
     width: 100%;
     max-width: none;
     padding: 0;
   }
-  .waiver-print-hidden {
+  body:has(.waiver-print-content) .waiver-print-hidden {
     display: none !important;
   }
 }
