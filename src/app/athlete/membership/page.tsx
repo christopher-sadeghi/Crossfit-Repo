@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getStripe } from "@/lib/payments/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getViewer } from "@/lib/viewer";
 import { LIVE_MEMBERSHIP_STATUSES } from "@/lib/payments/athlete-core";
@@ -29,6 +30,21 @@ export default async function AthleteMembershipPage({ searchParams }: Props) {
   if (!viewer) redirect("/login");
   if (viewer.kind === "coach") redirect("/");
   if (viewer.kind === "none") redirect("/no-access");
+
+  if (!getStripe()) {
+    return (
+      <main className="grid gap-6">
+        <header>
+          <h1 className="text-xl font-semibold tracking-tight">Membership</h1>
+          <p className="mt-1 text-sm text-muted-foreground">View your membership and manage billing.</p>
+        </header>
+        <Card>
+          <CardHeader><CardTitle>Payments</CardTitle></CardHeader>
+          <CardContent><p className="text-sm text-muted-foreground">Payments aren&apos;t switched on yet.</p></CardContent>
+        </Card>
+      </main>
+    );
+  }
 
   const admin = createAdminClient();
   const [liveMembershipResult, latestMembershipResult, accountResult] = await Promise.all([
