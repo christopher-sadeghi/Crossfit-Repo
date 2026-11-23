@@ -23,12 +23,16 @@ do $$ begin
 end $$;
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"35000000-0000-0000-0000-000000000003","role":"authenticated"}',true);
-do $$ declare n integer; begin
+do $$ begin
  assert (select count(*) from public.athlete_intakes) = 1;
- update public.athlete_intakes set answers = '{"goal_ids":["35000000-0000-0000-0000-000000000021"]}' where athlete_id = '35000000-0000-0000-0000-000000000011';
- get diagnostics n = row_count; assert n = 0;
- update public.athlete_intakes set answers = '{}' where athlete_id = '35000000-0000-0000-0000-000000000012';
- get diagnostics n = row_count; assert n = 0;
+ begin
+   update public.athlete_intakes set answers = '{"goal_ids":["35000000-0000-0000-0000-000000000021"]}' where athlete_id = '35000000-0000-0000-0000-000000000011';
+   raise exception 'Athlete directly changed intake answers';
+ exception when insufficient_privilege then null; end;
+ begin
+   update public.athlete_intakes set answers = '{}' where athlete_id = '35000000-0000-0000-0000-000000000012';
+   raise exception 'Athlete directly changed another intake';
+ exception when insufficient_privilege then null; end;
  begin
    perform public.save_athlete_intake_step('35000000-0000-0000-0000-000000000012',1,'{}','2026-11-21');
    raise exception 'RPC allowed another athlete';
@@ -141,7 +145,12 @@ do $$ declare n integer; begin
  assert (select count(*) from public.athlete_intakes) = 1;
  assert (select count(*) from public.body_metrics where athlete_id = '35000000-0000-0000-0000-000000000011') = 1;
  assert (select weight_kg from public.body_metrics where athlete_id = '35000000-0000-0000-0000-000000000011') = 81;
- update public.athlete_intakes set status = 'requested', requested_at = now(), completed_at = null;
+ begin
+   update public.athlete_intakes set answers = '{}' where athlete_id = '35000000-0000-0000-0000-000000000011';
+   raise exception 'Coach directly changed intake answers';
+ exception when insufficient_privilege then null; end;
+ update public.athlete_intakes set status = 'requested', requested_at = now() - interval '1 day', completed_at = null;
+ assert (select status = 'requested' and requested_at < now() and completed_at is null from public.athlete_intakes);
  assert (select answers->>'sports_background' from public.athlete_intakes) = 'Running';
  update public.athlete_intakes set status = 'requested' where athlete_id = '35000000-0000-0000-0000-000000000012';
  get diagnostics n = row_count; assert n = 0;

@@ -2,6 +2,9 @@ alter table public.athlete_intakes
   drop constraint athlete_intakes_current_step_check;
 alter table public.athlete_intakes
   add constraint athlete_intakes_current_step_check check (current_step between 1 and 8);
+revoke insert, update on public.athlete_intakes from authenticated;
+grant insert (athlete_id, coach_id, status, requested_at, completed_at) on public.athlete_intakes to authenticated;
+grant update (status, requested_at, completed_at) on public.athlete_intakes to authenticated;
 
 alter table public.notifications drop constraint notifications_kind_check;
 alter table public.notifications add constraint notifications_kind_check check (
