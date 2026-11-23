@@ -53,6 +53,8 @@ export async function IntakeTab({ athleteId, units }: { athleteId: string; units
   const answers = (intake.data?.answers ?? {}) as Record<string, unknown>;
   const waiverVersions = new Map((waivers.data ?? []).map((waiver) => [waiver.id, waiver.version]));
   const latestWaiver = waivers.data?.[0] ?? null;
+  const lastSignature = signatures.data?.[0] ?? null;
+  const lastSignatureVersion = lastSignature ? waiverVersions.get(lastSignature.waiver_id) : undefined;
   const status = waiverStatus({
     waiverRequestedAt: athlete.data?.waiver_requested_at,
     latestWaiver,
@@ -100,7 +102,10 @@ export async function IntakeTab({ athleteId, units }: { athleteId: string; units
     </section>}
     <section className="space-y-2 rounded-lg border p-4">
       <h3 className="font-medium">Waiver</h3>
-      {status.status === "needs_sign" ? <p className="text-sm">Not signed</p>
+      {status.status === "needs_sign" ? <div className="space-y-1 text-sm">
+          <p>Not signed</p>
+          {lastSignature && <Link className="underline underline-offset-4" href={`/athletes/${athleteId}/waiver`}>View last signed copy (v{lastSignatureVersion ?? "?"})</Link>}
+        </div>
         : status.status === "signed" ? <div className="space-y-1 text-sm">
           <p>Signed by {status.signature.signedName} on {new Date(status.signature.signedAt).toLocaleString()} (version {status.signature.version})</p>
           <Link className="underline underline-offset-4" href={`/athletes/${athleteId}/waiver`}>View / print</Link>

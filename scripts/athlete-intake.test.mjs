@@ -74,6 +74,44 @@ test("coach intake summary renders goal titles then categories, never bookkeepin
     assert.ok(!rendered.includes("goal categories"));
   }
 });
+test("coach intake keeps a link to the last signed waiver while a new version is pending", async () => {
+  const data = {
+    athlete_intakes: { status: "completed", current_step: 8, requested_at: "2026-11-21", completed_at: "2026-11-21", answers: {} },
+    athletes: { waiver_requested_at: "2026-11-22", birth_date: null, sex: null, height_cm: null, experience_level: null, injuries: null },
+    athlete_food_preferences: null,
+    body_metrics: [],
+    goals: [],
+    benchmark_results: [],
+    coach_waivers: [{ id: "latest-waiver", version: 2 }, { id: "signed-waiver", version: 1 }],
+    athlete_waiver_signatures: [{ waiver_id: "signed-waiver", signed_name: "Alex Athlete", signed_at: "2026-11-21T10:00:00.000Z" }],
+  };
+  const db = { from(table) {
+    const query = {
+      select() { return query; }, eq() { return query; }, order() { return query; }, limit() { return query; },
+      single() { return query; }, maybeSingle() { return query; },
+      then(resolve) { return Promise.resolve({ data: data[table], error: null }).then(resolve); },
+    };
+    return query;
+  } };
+  const { IntakeTab } = load("src/app/(app)/athletes/[id]/intake-tab.tsx", {
+    "next/link": "a",
+    "next/cache": { revalidatePath() {} },
+    "@/lib/supabase/server": { createClient: async () => db },
+    "@/lib/coach": { getCoach: async () => ({ gymId: "coach" }) },
+    "@/components/ui/button": { Button: "button" },
+    "@/components/ui/badge": { Badge: "span" },
+    "@/components/ui/card": { Card: "section", CardContent: "div", CardHeader: "header", CardTitle: "h2" },
+    "@/components/suggestions/request-forms": { RequestIntakeAiForm: "form" },
+  });
+  const tree = await IntakeTab({ athleteId: "athlete", units: "lb" });
+  function elements(node, type) {
+    if (!node || typeof node !== "object") return [];
+    return [...(node.type === type ? [node] : []), ...[node.props?.children].flat(Infinity).flatMap((child) => elements(child, type))];
+  }
+  const links = elements(tree, "a");
+  assert.ok(links.some((link) => link.props.href === "/athletes/athlete/waiver"
+    && (Array.isArray(link.props.children) ? link.props.children.join("") : link.props.children) === "View last signed copy (v1)"));
+});
 test("all eight steps accept normal answers and optional empty values", () => {
   schemas.forEach((schema, i) => assert.equal(schema.safeParse(i === 7 ? valid[i].health_screening : valid[i]).success, true, `step ${i + 1}`));
   const food = schemas[5].parse({ ...valid[5], allergies: "peanuts, peanuts, milk" });
