@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadLiftMaxes } from "@/lib/benchmarks";
+import { stripHealthScreening } from "@/lib/athlete-intake";
 import { addDays } from "@/lib/nutrition";
 import { getToday } from "@/lib/time-zone";
 import { toKg } from "@/lib/units";
@@ -44,7 +45,7 @@ async function buildRequest(db: SupabaseClient<Database>, { athleteId }: { athle
   const startDate = addDays(today, (8 - new Date(`${today}T00:00:00Z`).getUTCDay()) % 7);
   const input = {
     ...context, library, days_per_week: answers.data.days_per_week, default_start_date: startDate,
-    intake: intake.data.answers, goals: goals.data ?? [], lift_maxes: formatLiftMaxes(lifts, context.units),
+    intake: stripHealthScreening(intake.data.answers), goals: goals.data ?? [], lift_maxes: formatLiftMaxes(lifts, context.units),
     athlete: { ...athlete.data, age: athlete.data.birth_date ? ageOn(athlete.data.birth_date, today) : null },
   } satisfies Json;
   const movement = programMovementSchema.extend({ movement_id: movementIdSchema(library.map((m) => m.id)) });

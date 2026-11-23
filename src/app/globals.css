@@ -128,3 +128,23 @@
     @apply font-sans;
   }
 }
+
+@media print {
+  body:has(.waiver-print-content) * {
+    visibility: hidden;
+  }
+  body:has(.waiver-print-content) .waiver-print-content,
+  body:has(.waiver-print-content) .waiver-print-content * {
+    visibility: visible;
+  }
+  body:has(.waiver-print-content) .waiver-print-content {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    padding: 0;
+  }
+  body:has(.waiver-print-content) .waiver-print-hidden {
+    display: none !important;
+  }
+}

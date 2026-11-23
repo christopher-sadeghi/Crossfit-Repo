@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { stripHealthScreening } from "@/lib/athlete-intake";
 import { loadAthleteSchedule } from "@/lib/athlete-schedule";
 import { DEFAULT_DRIFT_DAYS } from "@/lib/consistency";
 import type { Database } from "@/lib/supabase/database.types";
@@ -21,5 +22,6 @@ export async function getMyTraining(supabase: SupabaseClient<Database>, viewer: 
   const ids = new Set(schedule.map((item) => item.workout.id));
   return { profile, today_wods: schedule, personal_scalings: (scalings.data ?? []).filter((row) => ids.has(row.workout_id))
     .flatMap((row) => { const scaling = effectiveScaling(row, today); return scaling ? [scaling] : []; }),
-    current_macros: targets.data?.[0] ?? null, food_preferences: preferences.data, intake: intake.data, units: viewer.units };
+    current_macros: targets.data?.[0] ?? null, food_preferences: preferences.data,
+    intake: intake.data ? { ...intake.data, answers: stripHealthScreening(intake.data.answers) } : null, units: viewer.units };
 }

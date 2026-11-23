@@ -2,7 +2,7 @@ import { z } from "zod";
 import { foodPreferencesFormSchema } from "./food-preferences";
 import { ftInToCm } from "./height";
 
-export const INTAKE_STEPS = ["About you", "Training history", "Goals", "Injuries & limitations", "Schedule & equipment", "Nutrition", "Lifestyle"];
+export const INTAKE_STEPS = ["About you", "Training history", "Goals", "Injuries & limitations", "Schedule & equipment", "Nutrition", "Lifestyle", "Health & safety"];
 export const EQUIPMENT = ["Barbell", "Plates", "Rack", "Dumbbells", "Kettlebells", "Pull-up bar", "Rings", "Box", "Rower", "Bike", "Jump rope", "None"] as const;
 export const GOAL_CATEGORIES = ["Strength", "Conditioning", "Body composition", "Specific skill", "Competition"] as const;
 export const GOAL_OPTIONS: Record<(typeof GOAL_CATEGORIES)[number], readonly string[]> = {
@@ -16,6 +16,48 @@ const text = z.string().trim().max(2000);
 const requiredNumber = (schema: z.ZodNumber) => z.preprocess((v) => v === "" || v == null ? undefined : v, z.coerce.number().pipe(schema));
 const optionalNumber = z.preprocess((v) => v === "" || v == null ? null : v, z.coerce.number().finite().nullable());
 export const injurySchema = z.object({ area: z.string().trim().min(1).max(80), severity: z.enum(["mild", "moderate", "severe"]), notes: text });
+const requiredYesNo = z.boolean({ error: "Choose Yes or No." });
+export const healthScreeningSchema = z.object({
+  heart_condition: requiredYesNo,
+  chest_pain_activity: requiredYesNo,
+  chest_pain_rest: requiredYesNo,
+  dizziness_or_fainting: requiredYesNo,
+  bone_joint_problem: requiredYesNo,
+  blood_pressure_or_heart_meds: requiredYesNo,
+  doctor_advised_no_exercise: requiredYesNo,
+  pregnant: z.enum(["no", "yes", "prefer_not"], { error: "Choose an answer." }),
+  recent_surgery: requiredYesNo,
+  surgery_details: z.string().trim().max(500),
+  medications: z.string().trim().max(1000).optional(),
+  conditions: z.string().trim().max(1000).optional(),
+  emergency_contact: z.object({
+    name: z.string().trim().min(2).max(100),
+    phone: z.string().trim().regex(/^[0-9+() -]{7,30}$/),
+    relationship: z.string().trim().min(1).max(50),
+  }),
+}).superRefine((value, context) => {
+  if (value.recent_surgery && !value.surgery_details) {
+    context.addIssue({ code: "custom", path: ["surgery_details"], message: "Add a few details about your recent surgery." });
+  }
+});
+export type HealthScreening = z.infer<typeof healthScreeningSchema>;
+export function healthFlag(screening: Partial<HealthScreening> | null | undefined) {
+  return Boolean(screening && (
+    screening.heart_condition
+    || screening.chest_pain_activity
+    || screening.chest_pain_rest
+    || screening.dizziness_or_fainting
+    || screening.bone_joint_problem
+    || screening.blood_pressure_or_heart_meds
+    || screening.doctor_advised_no_exercise
+    || screening.pregnant === "yes"
+    || screening.recent_surgery
+  ));
+}
+export function stripHealthScreening<T>(answers: T): T {
+  if (!answers || typeof answers !== "object" || Array.isArray(answers)) return answers;
+  return Object.fromEntries(Object.entries(answers).filter(([key]) => key !== "health_screening" && key !== "health_flag")) as T;
+}
 export function injuryPrefill(answers: Record<string, unknown>, injuries: string | null | undefined) {
   const injury_list = Array.isArray(answers.injury_list) && answers.injury_list.length ? answers.injury_list
     : answers.no_injuries === true || !injuries?.trim() || injuries.trim().toLowerCase() === "none" ? []
@@ -63,6 +105,7 @@ export const intakeSchemas = [
   z.object({ days_per_week: z.coerce.number().int().min(1).max(7), session_minutes: z.coerce.number().int().min(10).max(300), location: z.enum(["gym", "home", "travel"]), equipment: z.array(z.enum(EQUIPMENT)).min(1).max(EQUIPMENT.length) }).refine((v) => !v.equipment.includes("None") || v.equipment.length === 1, "Choose equipment or None, not both."),
   foodPreferencesFormSchema.extend({ eating_habits: text }),
   z.object({ sleep_hours: requiredNumber(z.number().min(0).max(24)), stress_level: z.enum(["low", "moderate", "high"]), job_activity: z.enum(["sedentary", "light", "moderate", "physical"] ) }),
+  healthScreeningSchema,
 ] as const;
 
 export type IntakeFormValues = Record<string, unknown>;

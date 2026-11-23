@@ -323,7 +323,7 @@ export async function copyProgramForAthlete(_: FormState, formData: FormData): P
   const { data: programId, error } = await supabase.rpc("copy_program_for_athlete", {
     p_program_id: parsed.data.program_id,
     p_athlete_id: parsed.data.athlete_id,
-    p_start_date: parsed.data.start_date,
+    ...(parsed.data.start_date ? { p_start_date: parsed.data.start_date } : {}),
   });
   if (error || !programId) {
     if (error?.message.includes("start date")) {

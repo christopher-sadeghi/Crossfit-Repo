@@ -96,7 +96,7 @@ export async function streamAthleteAssistant(
       id: assistantMessageId,
       athlete_id: viewer.athleteId, coach_id: viewer.coachId, role: "assistant",
       content: (text.trim() || (cards.length ? "Here are your drafts. Nothing has been sent, saved or changed." : FRIENDLY_ERROR)).slice(0, 8000),
-      metadata: { cards, source_message_id: reserved.data.id } as unknown as Json,
+      metadata: { cards, source_message_id: reserved.data.id } as unknown as NonNullable<Json>,
       red_flag: safety.flagged,
     });
     if (result.error) throw new Error("The assistant reply could not be saved.");

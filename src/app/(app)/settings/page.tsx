@@ -15,6 +15,7 @@ import { SettingsForm } from "./settings-form";
 import { AssistantSettings } from "./assistant-settings";
 import { CoachesCard } from "./coaches-card";
 import { PaymentsCard } from "./payments-card";
+import { WaiverCard } from "./waiver-card";
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ stripe?: string }> }) {
   const { stripe } = await searchParams;
@@ -41,6 +42,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </Card>
       <CoachesCard />
       <PaymentsCard stripeReturn={stripe} />
+      <WaiverCard />
       <AssistantSettings />
       <div className="mt-6"><NotificationSettings /></div>
       <div className="mt-6"><PushSettings role="coach" /></div>

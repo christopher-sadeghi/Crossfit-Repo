@@ -23,12 +23,16 @@ do $$ begin
 end $$;
 set local role authenticated;
 select set_config('request.jwt.claims','{"sub":"35000000-0000-0000-0000-000000000003","role":"authenticated"}',true);
-do $$ declare n integer; begin
+do $$ begin
  assert (select count(*) from public.athlete_intakes) = 1;
- update public.athlete_intakes set answers = '{"goal_ids":["35000000-0000-0000-0000-000000000021"]}' where athlete_id = '35000000-0000-0000-0000-000000000011';
- get diagnostics n = row_count; assert n = 0;
- update public.athlete_intakes set answers = '{}' where athlete_id = '35000000-0000-0000-0000-000000000012';
- get diagnostics n = row_count; assert n = 0;
+ begin
+   update public.athlete_intakes set answers = '{"goal_ids":["35000000-0000-0000-0000-000000000021"]}' where athlete_id = '35000000-0000-0000-0000-000000000011';
+   raise exception 'Athlete directly changed intake answers';
+ exception when insufficient_privilege then null; end;
+ begin
+   update public.athlete_intakes set answers = '{}' where athlete_id = '35000000-0000-0000-0000-000000000012';
+   raise exception 'Athlete directly changed another intake';
+ exception when insufficient_privilege then null; end;
  begin
    perform public.save_athlete_intake_step('35000000-0000-0000-0000-000000000012',1,'{}','2026-11-21');
    raise exception 'RPC allowed another athlete';
@@ -118,7 +122,15 @@ select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',5,
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',6,'{"diet_type":"none","allergies":[],"dislikes":[],"cooking_minutes":15,"eating_habits":"Regular meals"}','2026-11-21');
 select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',7,'{"sleep_hours":8,"stress_level":"low","job_activity":"sedentary"}','2026-11-21');
 do $$ begin
- assert (select status = 'completed' and completed_at is not null and current_step = 7 from public.athlete_intakes);
+ assert (select status = 'in_progress' and completed_at is null and current_step = 8 from public.athlete_intakes);
+ raise notice 'PASS: step seven advances to health screening without completing intake';
+end $$;
+select public.save_athlete_intake_step('35000000-0000-0000-0000-000000000011',8,
+ '{"health_screening":{"heart_condition":false,"chest_pain_activity":false,"chest_pain_rest":false,"dizziness_or_fainting":false,"bone_joint_problem":false,"blood_pressure_or_heart_meds":false,"doctor_advised_no_exercise":false,"pregnant":"no","recent_surgery":false,"surgery_details":"","medications":"","conditions":"","emergency_contact":{"name":"Jordan Smith","phone":"+1 (415) 555-0101","relationship":"Partner"}}}','2026-11-21');
+do $$ begin
+ assert (select status = 'completed' and completed_at is not null and current_step = 8 from public.athlete_intakes);
+ assert (select answers->'health_screening'->'emergency_contact'->>'name' = 'Jordan Smith'
+   and answers->'health_flag' = 'false'::jsonb from public.athlete_intakes);
  assert (select injuries = 'None' and height_cm = 180 from public.athletes where id = '35000000-0000-0000-0000-000000000011');
  assert (select count(*) from public.goals) = 3;
  assert (select title from public.goals where id = '35000000-0000-0000-0000-000000000021') = 'Coach goal';
@@ -126,14 +138,19 @@ do $$ begin
  assert (select diet_type from public.athlete_food_preferences) = 'none';
  assert (select count(*) from public.benchmark_results) = 0;
  assert (select count(*) from public.body_metrics) = 1;
- raise notice 'PASS: all seven steps complete; goals replace without duplicates; empty injury and nutrition lists save';
+ raise notice 'PASS: health screening completes step eight; goals replace without duplicates; empty injury and nutrition lists save';
 end $$;
 select set_config('request.jwt.claims','{"sub":"35000000-0000-0000-0000-000000000001","role":"authenticated"}',true);
 do $$ declare n integer; begin
  assert (select count(*) from public.athlete_intakes) = 1;
  assert (select count(*) from public.body_metrics where athlete_id = '35000000-0000-0000-0000-000000000011') = 1;
  assert (select weight_kg from public.body_metrics where athlete_id = '35000000-0000-0000-0000-000000000011') = 81;
- update public.athlete_intakes set status = 'requested', requested_at = now(), completed_at = null;
+ begin
+   update public.athlete_intakes set answers = '{}' where athlete_id = '35000000-0000-0000-0000-000000000011';
+   raise exception 'Coach directly changed intake answers';
+ exception when insufficient_privilege then null; end;
+ update public.athlete_intakes set status = 'requested', requested_at = now() - interval '1 day', completed_at = null;
+ assert (select status = 'requested' and requested_at < now() and completed_at is null from public.athlete_intakes);
  assert (select answers->>'sports_background' from public.athlete_intakes) = 'Running';
  update public.athlete_intakes set status = 'requested' where athlete_id = '35000000-0000-0000-0000-000000000012';
  get diagnostics n = row_count; assert n = 0;

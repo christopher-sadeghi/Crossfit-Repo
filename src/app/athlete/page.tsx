@@ -28,6 +28,7 @@ import { AdjustWorkoutForm } from "./adjust-form";
 import { CheckInForm } from "./check-in/check-in-form";
 import { ScrollIntoView } from "./scroll-into-view";
 import { AthleteConsistencyCard } from "./consistency-card";
+import { waiverStatus } from "@/lib/waivers";
 
 type TodayWorkout = WhiteboardWorkout & {
   id: string;
@@ -75,7 +76,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
   const recentStart = new Date(`${currentDate}T00:00:00Z`);
   recentStart.setUTCDate(recentStart.getUTCDate() - 7);
   const recentStartIso = recentStart.toISOString().slice(0, 10);
-  const [scheduled, activities, membershipResult] = await Promise.all([
+  const [scheduled, activities, membershipResult, waiverAthleteResult, waiversResult, signaturesResult] = await Promise.all([
     loadAthleteSchedule<TodayWorkout>(
       supabase,
       viewer.athleteId,
@@ -89,8 +90,21 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase.from("athletes").select("waiver_requested_at").eq("id", viewer.athleteId).single(),
+    supabase.from("coach_waivers").select("id, version").eq("coach_id", viewer.coachId).order("version", { ascending: false }),
+    supabase.from("athlete_waiver_signatures").select("waiver_id, signed_name, signed_at").eq("athlete_id", viewer.athleteId).order("signed_at", { ascending: false }),
   ]);
   const latestMembershipStatus = membershipResult.data?.status;
+  const waiverVersionById = new Map((waiversResult.data ?? []).map((waiver) => [waiver.id, waiver.version]));
+  const waiverState = waiverStatus({
+    waiverRequestedAt: waiverAthleteResult.data?.waiver_requested_at,
+    latestWaiver: waiversResult.data?.[0] ?? null,
+    signatures: (signaturesResult.data ?? []).map((signature) => ({
+      signedAt: signature.signed_at,
+      signedName: signature.signed_name,
+      version: waiverVersionById.get(signature.waiver_id) ?? 0,
+    })),
+  });
 
   const todayWods = scheduled
     .filter((item) => item.date === currentDate)
@@ -161,6 +175,12 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
 
   return (
     <div className="grid gap-6">
+      {waiverState.status === "needs_sign" && <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
+          <p className="font-medium">Your coach asked you to sign a waiver</p>
+          <Button asChild variant="outline"><Link href="/athlete/waiver">Review and sign</Link></Button>
+        </CardContent>
+      </Card>}
       {(latestMembershipStatus === "past_due" || latestMembershipStatus === "unpaid") && (
         <p className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           Your last payment failed — <Link className="font-medium underline underline-offset-4" href="/athlete/membership">update your card</Link>

@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/units";
 import { cn } from "@/lib/utils";
 import { getCoach } from "@/lib/coach";
+import { waiverStatus } from "@/lib/waivers";
 
 import { LEVEL_LABELS } from "./options";
 
@@ -31,7 +32,7 @@ export default async function AthletesPage({ searchParams }: Props) {
 
   let query = supabase
     .from("athletes")
-    .select("id, first_name, last_name, email, experience_level, injuries, user_id, assigned_coach_id")
+    .select("id, first_name, last_name, email, experience_level, injuries, user_id, assigned_coach_id, waiver_requested_at")
     .eq("status", status)
     .order("first_name")
     .order("last_name");
@@ -42,7 +43,7 @@ export default async function AthletesPage({ searchParams }: Props) {
     const like = `ilike."%${word}%"`;
     query = query.or(`first_name.${like},last_name.${like},email.${like}`);
   }
-  const [athleteRows, inviteRows, resultRows, checkInAttention, coachRows, membershipRows] = await Promise.all([
+  const [athleteRows, inviteRows, resultRows, checkInAttention, coachRows, membershipRows, intakeRows, waiverRows, signatureRows] = await Promise.all([
     query,
     supabase
       .from("athlete_invites")
@@ -58,8 +59,11 @@ export default async function AthletesPage({ searchParams }: Props) {
     loadCheckInAttention(supabase, todayIso),
     supabase.from("coaches").select("id, full_name").eq("gym_id", coach?.gymId ?? ""),
     supabase.from("athlete_memberships").select("athlete_id, status, created_at").order("created_at", { ascending: false }),
+    supabase.from("athlete_intakes").select("athlete_id, answers"),
+    supabase.from("coach_waivers").select("id, version").eq("coach_id", coach?.gymId ?? "").order("version", { ascending: false }),
+    supabase.from("athlete_waiver_signatures").select("athlete_id, waiver_id, signed_name, signed_at").eq("coach_id", coach?.gymId ?? "").order("signed_at", { ascending: false }),
   ]);
-  const error = athleteRows.error ?? inviteRows.error ?? resultRows.error ?? membershipRows.error;
+  const error = athleteRows.error ?? inviteRows.error ?? resultRows.error ?? membershipRows.error ?? intakeRows.error ?? waiverRows.error ?? signatureRows.error;
   if (error) throw new Error("Couldn't load athletes.", { cause: error });
   const { data: athletes } = athleteRows;
   const { data: invites } = inviteRows;
@@ -70,6 +74,28 @@ export default async function AthletesPage({ searchParams }: Props) {
     if (!latestMembershipStatus.has(membership.athlete_id)) latestMembershipStatus.set(membership.athlete_id, membership.status);
   }
   const invitedAthletes = new Set((invites ?? []).map((invite) => invite.athlete_id));
+  const healthFlagAthletes = new Set((intakeRows.data ?? []).filter((intake) =>
+    (intake.answers as Record<string, unknown> | null)?.health_flag === true,
+  ).map((intake) => intake.athlete_id));
+  const waiverVersionById = new Map((waiverRows.data ?? []).map((waiver) => [waiver.id, waiver.version]));
+  const latestWaiver = waiverRows.data?.[0] ?? null;
+  const signaturesByAthlete = new Map<string, { signedAt: string; signedName: string; version: number }[]>();
+  for (const signature of signatureRows.data ?? []) {
+    const signatures = signaturesByAthlete.get(signature.athlete_id) ?? [];
+    signatures.push({
+      signedAt: signature.signed_at,
+      signedName: signature.signed_name,
+      version: waiverVersionById.get(signature.waiver_id) ?? 0,
+    });
+    signaturesByAthlete.set(signature.athlete_id, signatures);
+  }
+  const waiverNeedsSign = new Set((athletes ?? []).filter((athlete) =>
+    waiverStatus({
+      waiverRequestedAt: athlete.waiver_requested_at,
+      latestWaiver,
+      signatures: signaturesByAthlete.get(athlete.id) ?? [],
+    }).status === "needs_sign",
+  ).map((athlete) => athlete.id));
   const attentionResults = new Map<string, typeof results>();
   for (const result of results ?? []) {
     const rows = attentionResults.get(result.athlete_id) ?? [];
@@ -148,6 +174,8 @@ export default async function AthletesPage({ searchParams }: Props) {
                             Needs attention
                           </Badge>
                         )}
+                        {healthFlagAthletes.has(a.id) && <Badge variant="destructive">Health flag</Badge>}
+                        {waiverNeedsSign.has(a.id) && <Badge variant="outline">Waiver not signed</Badge>}
                         {(latestMembershipStatus.get(a.id) === "past_due" || latestMembershipStatus.get(a.id) === "unpaid") && (
                           <Badge variant="destructive">Past due</Badge>
                         )}

@@ -9,6 +9,7 @@ import { fromKgPrecise, toKg } from "@/lib/units";
 import type { Database, Enums, Json, Tables } from "@/lib/supabase/database.types";
 import { getToday } from "@/lib/time-zone";
 import { loadLiftMaxes } from "@/lib/benchmarks";
+import { stripHealthScreening } from "@/lib/athlete-intake";
 import { formatLiftMaxes, liftMaxContextSchema, LIFT_LOAD_RULE } from "./lift-context";
 
 import { movementGuideEntry } from "./movement-guides";
@@ -228,7 +229,7 @@ async function buildMacroRequest(supabase: SupabaseClient<Database>, params: Sug
     training_last_4_weeks: training,
     consistency,
     active_goals: goals ?? [],
-    intake: intake ? { status: intake.status, answers: intake.answers } : null,
+    intake: intake ? { status: intake.status, answers: stripHealthScreening(intake.answers) } : null,
   } satisfies Json;
 
   return {
@@ -412,7 +413,7 @@ async function applyWorkoutSuggestion(
     p_workout_id: workoutId,
     p_workout: workout,
     p_movements: movements,
-    p_expected_updated_at: expectedUpdatedAt,
+    p_expected_updated_at: expectedUpdatedAt ?? undefined,
     ...(input.data.mode === "write" && input.data.athlete_id && input.data.scheduled_on
       ? { p_athlete_id: input.data.athlete_id, p_scheduled_on: input.data.scheduled_on }
       : {}),

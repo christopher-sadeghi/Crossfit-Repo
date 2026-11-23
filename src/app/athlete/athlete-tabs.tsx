@@ -1,6 +1,6 @@
 "use client";
 
-import { Apple, CalendarDays, Camera, ClipboardList, CreditCard, Ellipsis, History, MessageSquare, NotebookPen, Trophy, Video } from "lucide-react";
+import { Apple, CalendarDays, Camera, ClipboardList, CreditCard, Ellipsis, FileText, History, MessageSquare, NotebookPen, Trophy, Video } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -23,6 +23,7 @@ export const ATHLETE_TABS: AthleteTab[] = [
   { href: "/athlete/progress", label: "Progress", group: "more", Icon: Camera },
   { href: "/athlete/form-checks", label: "Form checks", group: "more", Icon: Video },
   { href: "/athlete/membership", label: "Membership", group: "more", Icon: CreditCard },
+  { href: "/athlete/waiver", label: "Waiver", group: "more", Icon: FileText },
   { href: "/athlete/messages", label: "Messages", group: "primary", Icon: MessageSquare },
 ];
 

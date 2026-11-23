@@ -15,7 +15,7 @@ function load(relative, overrides = {}) {
   new Function("require", "module", "exports", js)(localRequire, loaded, loaded.exports);
   return loaded.exports;
 }
-const { intakeSchemas: schemas, GOAL_OPTIONS } = load("src/lib/athlete-intake.ts");
+const { intakeSchemas: schemas, GOAL_OPTIONS, healthFlag, stripHealthScreening } = load("src/lib/athlete-intake.ts");
 const valid = [
   { birth_date: "1995-01-01", height_ft: 5, height_in: 10, weight: 180, sex: "" },
   { experience_level: "beginner", years_training: 0, crossfit_detail: "", sports_background: "", benchmarks: [] },
@@ -24,13 +24,22 @@ const valid = [
   { days_per_week: 3, session_minutes: 60, location: "gym", equipment: ["Barbell"] },
   { diet_type: "none", allergies: "", dislikes: "", cooking_minutes: "", eating_habits: "" },
   { sleep_hours: 8, stress_level: "low", job_activity: "sedentary" },
+  { health_screening: { heart_condition: false, chest_pain_activity: false, chest_pain_rest: false, dizziness_or_fainting: false, bone_joint_problem: false, blood_pressure_or_heart_meds: false, doctor_advised_no_exercise: false, pregnant: "no", recent_surgery: false, surgery_details: "", medications: "", conditions: "", emergency_contact: { name: "Jordan Smith", phone: "+1 (415) 555-0101", relationship: "Partner" } } },
 ];
 test("coach intake summary renders goal titles then categories, never bookkeeping ids", async () => {
   const goalId = "35000000-0000-4000-8000-000000000001";
   const staleId = "35000000-0000-4000-8000-000000000002";
+  const healthScreening = {
+    ...valid[7].health_screening,
+    emergency_contact: { name: "Alex Emergency Contact", phone: "555-010-2222", relationship: "Sibling" },
+  };
   function text(node) {
     if (typeof node === "string" || typeof node === "number") return String(node);
     return [node?.props?.children].flat(Infinity).map((child) => child && typeof child === "object" ? text(child) : typeof child === "string" ? child : "").join("");
+  }
+  function elements(node, type) {
+    if (!node || typeof node !== "object") return [];
+    return [...(node.type === type ? [node] : []), ...[node.props?.children].flat(Infinity).flatMap((child) => elements(child, type))];
   }
   for (const { categories, title, expected } of [
     { categories: { [goalId]: "Competition", [staleId]: "Strength" }, title: "Coach approved squat 205 lb", expected: "Coach approved squat 205 lb · Competition · 205" },
@@ -40,7 +49,7 @@ test("coach intake summary renders goal titles then categories, never bookkeepin
     { categories: { [goalId]: "Strength" }, title: "Strength", expected: "Strength · 205" },
   ]) {
     const db = { from(table) {
-      const data = table === "athlete_intakes" ? { status: "completed", current_step: 7, requested_at: "2026-11-23", answers: { goal_ids: [goalId], goal_categories: categories } }
+      const data = table === "athlete_intakes" ? { status: "completed", current_step: 8, requested_at: "2026-11-23", answers: { goal_ids: [goalId], goal_categories: categories, health_screening: healthScreening } }
         : table === "goals" ? [{ id: goalId, title, target_value: 205, target_date: null }]
         : ["body_metrics", "benchmark_results"].includes(table) ? [] : null;
       const q = { select() { return q; }, eq() { return q; }, order() { return q; }, limit() { return q; }, single() { return q; }, maybeSingle() { return q; }, then(resolve) { return Promise.resolve({ data, error: null }).then(resolve); } };
@@ -49,25 +58,95 @@ test("coach intake summary renders goal titles then categories, never bookkeepin
     const { IntakeTab } = load("src/app/(app)/athletes/[id]/intake-tab.tsx", {
       "next/cache": { revalidatePath() {} },
       "@/lib/supabase/server": { createClient: async () => db },
-      "@/lib/coach": {},
+      "@/lib/coach": { getCoach: async () => ({ gymId: "coach" }) },
       "@/components/ui/button": { Button: "button" },
+      "@/components/ui/badge": { Badge: "span" },
       "@/components/ui/card": { Card: "section", CardContent: "div", CardHeader: "header", CardTitle: "h2" },
       "@/components/suggestions/request-forms": { RequestIntakeAiForm: "form" },
     });
-    const rendered = text(await IntakeTab({ athleteId: "athlete", units: "lb" }));
+    const tree = await IntakeTab({ athleteId: "athlete", units: "lb" });
+    const rendered = text(tree);
     assert.ok(rendered.includes(expected));
+    assert.ok(rendered.includes("Alex Emergency Contact (Sibling) · 555-010-2222"));
+    assert.ok(elements(tree, "a").some((element) => element.props.href === "tel:5550102222" && element.props.children === "555-010-2222"));
     assert.ok(!rendered.includes(goalId));
     assert.ok(!rendered.includes(staleId));
     assert.ok(!rendered.includes("goal categories"));
   }
 });
-test("all seven steps accept normal answers and optional empty values", () => {
-  schemas.forEach((schema, i) => assert.equal(schema.safeParse(valid[i]).success, true, `step ${i + 1}`));
+test("coach intake keeps a link to the last signed waiver while a new version is pending", async () => {
+  const data = {
+    athlete_intakes: { status: "completed", current_step: 8, requested_at: "2026-11-21", completed_at: "2026-11-21", answers: {} },
+    athletes: { waiver_requested_at: "2026-11-22", birth_date: null, sex: null, height_cm: null, experience_level: null, injuries: null },
+    athlete_food_preferences: null,
+    body_metrics: [],
+    goals: [],
+    benchmark_results: [],
+    coach_waivers: [{ id: "latest-waiver", version: 2 }, { id: "signed-waiver", version: 1 }],
+    athlete_waiver_signatures: [{ waiver_id: "signed-waiver", signed_name: "Alex Athlete", signed_at: "2026-11-21T10:00:00.000Z" }],
+  };
+  const db = { from(table) {
+    const query = {
+      select() { return query; }, eq() { return query; }, order() { return query; }, limit() { return query; },
+      single() { return query; }, maybeSingle() { return query; },
+      then(resolve) { return Promise.resolve({ data: data[table], error: null }).then(resolve); },
+    };
+    return query;
+  } };
+  const { IntakeTab } = load("src/app/(app)/athletes/[id]/intake-tab.tsx", {
+    "next/link": "a",
+    "next/cache": { revalidatePath() {} },
+    "@/lib/supabase/server": { createClient: async () => db },
+    "@/lib/coach": { getCoach: async () => ({ gymId: "coach" }) },
+    "@/components/ui/button": { Button: "button" },
+    "@/components/ui/badge": { Badge: "span" },
+    "@/components/ui/card": { Card: "section", CardContent: "div", CardHeader: "header", CardTitle: "h2" },
+    "@/components/suggestions/request-forms": { RequestIntakeAiForm: "form" },
+  });
+  const tree = await IntakeTab({ athleteId: "athlete", units: "lb" });
+  function elements(node, type) {
+    if (!node || typeof node !== "object") return [];
+    return [...(node.type === type ? [node] : []), ...[node.props?.children].flat(Infinity).flatMap((child) => elements(child, type))];
+  }
+  const links = elements(tree, "a");
+  assert.ok(links.some((link) => link.props.href === "/athletes/athlete/waiver"
+    && (Array.isArray(link.props.children) ? link.props.children.join("") : link.props.children) === "View last signed copy (v1)"));
+});
+test("all eight steps accept normal answers and optional empty values", () => {
+  schemas.forEach((schema, i) => assert.equal(schema.safeParse(i === 7 ? valid[i].health_screening : valid[i]).success, true, `step ${i + 1}`));
   const food = schemas[5].parse({ ...valid[5], allergies: "peanuts, peanuts, milk" });
   assert.deepEqual(food.allergies, ["peanuts", "milk"]);
   assert.equal(food.cooking_minutes, null);
 });
 test("all steps reject missing data", () => schemas.forEach((schema) => assert.equal(schema.safeParse({}).success, false)));
+test("health screening validates required answers and flags only higher-risk responses", () => {
+  const screening = valid[7].health_screening;
+  assert.equal(schemas[7].safeParse(screening).success, true);
+  assert.equal(healthFlag(screening), false);
+  assert.equal(healthFlag({ ...screening, heart_condition: true }), true);
+  assert.equal(healthFlag({ ...screening, pregnant: "yes" }), true);
+  assert.equal(healthFlag({ ...screening, recent_surgery: true }), true);
+  assert.equal(healthFlag(null), false);
+  const unanswered = schemas[7].safeParse({ ...screening, heart_condition: undefined });
+  assert.equal(unanswered.success, false);
+  assert.equal(unanswered.error.issues.find((issue) => issue.path[0] === "heart_condition").message, "Choose Yes or No.");
+  const unansweredPregnancy = schemas[7].safeParse({ ...screening, pregnant: undefined });
+  assert.equal(unansweredPregnancy.success, false);
+  assert.equal(unansweredPregnancy.error.issues.find((issue) => issue.path[0] === "pregnant").message, "Choose an answer.");
+  assert.equal(schemas[7].safeParse({ ...screening, recent_surgery: true }).success, false);
+  assert.equal(schemas[7].safeParse({ ...screening, emergency_contact: { ...screening.emergency_contact, phone: "not a phone" } }).success, false);
+  assert.equal(schemas[7].safeParse({ ...screening, medications: "x".repeat(1001) }).success, false);
+});
+test("AI intake data excludes health screening keys and preserves non-object inputs", () => {
+  assert.deepEqual(stripHealthScreening({
+    days_per_week: 3,
+    health_screening: valid[7].health_screening,
+    health_flag: true,
+  }), { days_per_week: 3 });
+  for (const value of [null, undefined, false, 7, "answers", ["answers"]]) {
+    assert.equal(stripHealthScreening(value), value);
+  }
+});
 test("injury prefill preserves profile notes and clearing requires explicit confirmation", () => {
   const { injuryPrefill } = load("src/lib/athlete-intake.ts");
   for (const answers of [{}, { injury_list: [] }]) {
@@ -123,17 +202,27 @@ test("goal choices accept six goals and repeated categories but reject seven and
 
 function actionHarness({ kind = "athlete", dbError = null, notificationError = null, notificationThrows = false } = {}) {
   const writes = [];
+  const dispatches = [];
+  const notifications = load("src/lib/notifications.ts", {
+    "next/server": { after() {} },
+    "@/lib/athlete-schedule": { loadAthleteSchedule: async () => [] },
+    "@/lib/consistency-data": { loadDriftingAthletes: async () => [] },
+    "@/lib/program-dates": { programDate: () => "" },
+    "@/lib/time-zone": { getToday: async () => "2026-11-21" },
+  });
+  notifications.dispatchNewNotifications = (athleteId, notificationKind) => dispatches.push({ athleteId, kind: notificationKind });
   const { saveIntakeStep } = load("src/app/athlete/onboarding/actions.ts", {
     "next/cache": { revalidatePath() {} },
     "next/navigation": { redirect(path) { throw new Error(`REDIRECT:${path}`); } },
     "@/lib/viewer": { getViewer: async () => ({ kind, athleteId: "own-athlete", units: "lb" }) },
     "@/lib/time-zone": { getToday: async () => "2026-11-21" },
+    "@/lib/notifications": notifications,
     "@/lib/supabase/server": { createClient: async () => ({
       rpc: async (name, args) => { writes.push({ name, ...args }); if (name === "create_notification" && notificationThrows) throw new Error("Notification offline"); return { error: name === "create_notification" ? notificationError : dbError }; },
       from: (table) => table === "athletes" ? { select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: { first_name: "Alex", last_name: "Athlete" }, error: null }) } : ({ select: async () => ({ data: [], error: null }) }),
     }) },
   });
-  return { saveIntakeStep, writes };
+  return { saveIntakeStep, writes, dispatches };
 }
 test("server action uses canonical fields, coach units and local today", async () => {
   const { saveIntakeStep, writes } = actionHarness();
@@ -143,13 +232,15 @@ test("server action uses canonical fields, coach units and local today", async (
   assert.deepEqual(writes[0].p_data, { birth_date: "1995-01-01", sex: "", height_cm: 177.8, weight_kg: 81.65 });
   await assert.rejects(saveIntakeStep(3, valid[2]), /REDIRECT/);
   assert.equal(writes[1].p_data.goals[0].goal_type, "performance");
-  await assert.rejects(saveIntakeStep(7, valid[6]), /REDIRECT:\/athlete$/);
+  await assert.rejects(saveIntakeStep(7, valid[6]), /REDIRECT:\/athlete\/onboarding\?step=8/);
+  await assert.rejects(saveIntakeStep(8, valid[7]), /REDIRECT:\/athlete$/);
+  assert.deepEqual(writes[3].p_data, { health_screening: valid[7].health_screening });
 });
 test("completed intake notifies the coach only after saving, links intake, and tolerates notification failures", async (t) => {
   t.mock.method(console, "error", () => {});
   for (const options of [{}, { notificationError: new Error("Denied") }, { notificationThrows: true }]) {
     const { saveIntakeStep, writes } = actionHarness(options);
-    await assert.rejects(saveIntakeStep(7, valid[6]), /REDIRECT:\/athlete$/);
+    await assert.rejects(saveIntakeStep(8, valid[7]), /REDIRECT:\/athlete$/);
     assert.deepEqual(writes.map((write) => write.name), ["save_athlete_intake_step", "create_notification"]);
     assert.equal(writes[1].p_athlete_id, "own-athlete");
     assert.equal(writes[1].p_kind, "message");
@@ -157,11 +248,24 @@ test("completed intake notifies the coach only after saving, links intake, and t
     assert.equal(writes[1].p_link, "/athletes/own-athlete?tab=intake");
   }
   const failed = actionHarness({ dbError: new Error("Save failed") });
-  assert.ok((await failed.saveIntakeStep(7, valid[6])).error);
+  assert.ok((await failed.saveIntakeStep(8, valid[7])).error);
   assert.deepEqual(failed.writes.map((write) => write.name), ["save_athlete_intake_step"]);
+  assert.deepEqual(failed.dispatches, []);
   const partial = actionHarness();
   await assert.rejects(partial.saveIntakeStep(1, valid[0]), /REDIRECT/);
   assert.deepEqual(partial.writes.map((write) => write.name), ["save_athlete_intake_step"]);
+});
+test("successful flagged health screenings dispatch notifications after the intake RPC", async () => {
+  const screening = { ...valid[7].health_screening, heart_condition: true };
+  const flagged = actionHarness();
+  await assert.rejects(flagged.saveIntakeStep(8, { health_screening: screening }), /REDIRECT:\/athlete$/);
+  assert.equal(flagged.dispatches[0].athleteId, "own-athlete");
+  assert.equal(flagged.dispatches[0].kind, "health_flag");
+  assert.equal(flagged.writes[0].name, "save_athlete_intake_step");
+
+  const unflagged = actionHarness();
+  await assert.rejects(unflagged.saveIntakeStep(8, valid[7]), /REDIRECT:\/athlete$/);
+  assert.equal(unflagged.dispatches.some((dispatch) => dispatch.kind === "health_flag"), false);
 });
 test("achieved goals render without edit controls, occupy picks and submit identity only", async () => {
   const goalIds = Array.from({ length: 6 }, (_, index) => `35000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`);
@@ -233,6 +337,50 @@ test("goal editor offers category-specific options and keeps unknown saved targe
   assert.equal(elements(tree, "input").some((input) => input.props.value === "Work toward a strict ring dip"), true);
   selects[0].props.onChange({ target: { value: "Conditioning" } });
   assert.deepEqual(formState.goals[0], { category: "Conditioning", target: "", target_value: "", target_date: "", specific_goal_choice: "" });
+});
+test("new health screening selects start unanswered while saved answers stay prefilled", () => {
+  function render(values) {
+    let formState = values;
+    let stateCalls = 0;
+    const { IntakeForm } = load("src/app/athlete/onboarding/intake-form.tsx", {
+      react: {
+        useState(initial) {
+          stateCalls += 1;
+          return stateCalls === 1 ? [formState, (next) => { formState = typeof next === "function" ? next(formState) : next; }] : [initial, () => {}];
+        },
+        useTransition: () => [false, () => {}],
+      },
+      "next/link": "a",
+      "@/components/ui/button": { Button: "button" },
+      "@/components/ui/input": { Input: "input" },
+      "@/components/ui/textarea": { Textarea: "textarea" },
+      "./actions": { saveIntakeStep: async () => ({}) },
+    });
+    return { tree: IntakeForm({ step: 8, values, benchmarks: [], units: "kg" }), get formState() { return formState; } };
+  }
+  function elements(node, type) {
+    if (!node || typeof node !== "object") return [];
+    return [...(node.type === type ? [node] : []), ...[node.props?.children].flat(Infinity).flatMap((child) => elements(child, type))];
+  }
+
+  const blank = render({ health_screening: { surgery_details: "", medications: "", conditions: "", emergency_contact: { name: "", phone: "", relationship: "" } } });
+  const blankSelects = elements(blank.tree, "select");
+  assert.equal(blankSelects.length, 9);
+  for (const select of blankSelects) {
+    assert.equal(select.props.required, true);
+    assert.equal(select.props.value, "");
+    assert.ok(elements(select, "option").some((option) => option.props.value === "" && option.props.children === "Choose…"));
+  }
+  blankSelects[0].props.onChange({ target: { value: "" } });
+  assert.equal(blank.formState.health_screening.heart_condition, undefined);
+  blankSelects[7].props.onChange({ target: { value: "" } });
+  assert.equal(blank.formState.health_screening.pregnant, undefined);
+
+  const saved = render({ health_screening: valid[7].health_screening });
+  const savedSelects = elements(saved.tree, "select");
+  assert.equal(savedSelects[0].props.value, "no");
+  assert.equal(savedSelects[7].props.value, "no");
+  assert.equal(savedSelects[8].props.value, "no");
 });
 test("canonical coach goal edits survive resend and unchanged saves submit no field edits", async () => {
   const { goalPrefill } = load("src/lib/athlete-intake.ts");

@@ -27,11 +27,19 @@ export function IntakeForm({ step, values, benchmarks, units }: { step: number; 
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   const set = (name: string, value: unknown) => setForm((v) => ({ ...v, [name]: value }));
+  const health = (form.health_screening ?? {}) as Record<string, unknown>;
+  const emergencyContact = (health.emergency_contact ?? {}) as Record<string, unknown>;
+  const setHealth = (name: string, value: unknown) => set("health_screening", { ...health, [name]: value });
+  const setEmergencyContact = (name: string, value: string) => setHealth("emergency_contact", { ...emergencyContact, [name]: value });
   const rows = (name: string) => (form[name] ?? []) as Row[];
   const updateRow = (name: string, index: number, field: string, value: string) => set(name, rows(name).map((r, i) => i === index ? { ...r, [field]: value } : r));
   const field = (name: string, label: string, type = "text", required = true) => <label className="grid gap-2 text-sm" key={name}>{label}<Input name={name} type={type} step={type === "number" ? "any" : undefined} required={required} value={String(form[name] ?? "")} onChange={(e) => set(name, e.target.value)} /></label>;
   const area = (name: string, label: string) => <label className="grid gap-2 text-sm">{label}<Textarea value={String(form[name] ?? "")} maxLength={2000} onChange={(e) => set(name, e.target.value)} /></label>;
   const select = (name: string, label: string, options: readonly (readonly [string, string])[]) => <label className="grid gap-2 text-sm">{label}<select className="h-11 rounded-md border bg-background px-3" value={String(form[name] ?? "")} onChange={(e) => set(name, e.target.value)}>{options.map(([value, title]) => <option value={value} key={value}>{title}</option>)}</select></label>;
+  const healthBoolean = (name: string, label: string) => <label className="grid gap-2 text-sm">{label}<select required className="h-11 rounded-md border bg-background px-3" value={health[name] === true ? "yes" : health[name] === false ? "no" : ""} onChange={(e) => setHealth(name, e.target.value === "" ? undefined : e.target.value === "yes")}><option value="" disabled>Choose…</option><option value="no">No</option><option value="yes">Yes</option></select></label>;
+  const healthEnum = (name: string, label: string, options: readonly (readonly [string, string])[]) => <label className="grid gap-2 text-sm">{label}<select required className="h-11 rounded-md border bg-background px-3" value={String(health[name] ?? "")} onChange={(e) => setHealth(name, e.target.value || undefined)}><option value="" disabled>Choose…</option>{options.map(([value, title]) => <option value={value} key={value}>{title}</option>)}</select></label>;
+  const healthText = (name: string, label: string, maxLength: number, required = false) => <label className="grid gap-2 text-sm">{label}<Textarea required={required} maxLength={maxLength} value={String(health[name] ?? "")} onChange={(e) => setHealth(name, e.target.value)} /></label>;
+  const contactField = (name: string, label: string, type = "text", pattern?: string) => <label className="grid gap-2 text-sm">{label}<Input type={type} required pattern={pattern} maxLength={name === "name" ? 100 : name === "phone" ? 30 : 50} value={String(emergencyContact[name] ?? "")} onChange={(e) => setEmergencyContact(name, e.target.value)} /></label>;
   const remove = (name: string, index: number) => <Button type="button" variant="ghost" onClick={() => set(name, rows(name).filter((_, i) => i !== index))}>Remove</Button>;
   const rowInput = (name: string, index: number, key: string, label: string, type = "text") => <label className="grid gap-1 text-sm">{label}<Input type={type} step={type === "number" ? "any" : undefined} value={rows(name)[index][key]} onChange={(e) => updateRow(name, index, key, e.target.value)} /></label>;
   const setGoalChoice = (index: number, choice: string) => set("goals", rows("goals").map((goal, i) => {
@@ -49,8 +57,8 @@ export function IntakeForm({ step, values, benchmarks, units }: { step: number; 
     : goal));
 
   return <section className="space-y-5">
-    <div><p className="text-sm text-muted-foreground">Your starting point · Step {step} of 7</p><h1 className="text-2xl font-semibold">{INTAKE_STEPS[step - 1]}</h1><p className="mt-2 text-sm text-muted-foreground">Help your coach tailor your training. Each step saves when you continue; come back anytime.</p></div>
-    <progress className="h-2 w-full" value={step} max={7} aria-label="Questionnaire progress" />
+    <div><p className="text-sm text-muted-foreground">Your starting point · Step {step} of 8</p><h1 className="text-2xl font-semibold">{INTAKE_STEPS[step - 1]}</h1><p className="mt-2 text-sm text-muted-foreground">Help your coach tailor your training. Each step saves when you continue; come back anytime.</p></div>
+    <progress className="h-2 w-full" value={step} max={8} aria-label="Questionnaire progress" />
     <form className="grid gap-5" onSubmit={(e) => { e.preventDefault(); setError(""); startTransition(async () => { const input = step === 3 ? { ...form, goals: rows("goals").map((g) => g.status === "achieved" ? { id: g.id, status: "achieved" } : Object.fromEntries(Object.entries(g).filter(([key]) => key !== "specific_goal_choice"))) } : form; const result = await saveIntakeStep(step, input); if (result) setError(result.error); }); }}>
       <fieldset disabled={pending} className="grid min-w-0 gap-5">
       {step === 1 && <>{field("birth_date", "Birth date", "date")}{select("sex", "Sex (optional)", [["", "Prefer not to say"], ["female", "Female"], ["male", "Male"], ["other", "Other"]])}<div className="grid grid-cols-2 gap-3">{field("height_ft", "Height (feet)", "number")}{field("height_in", "Inches", "number")}</div>{field("weight", `Current weight (${units})`, "number")}</>}
@@ -96,9 +104,28 @@ export function IntakeForm({ step, values, benchmarks, units }: { step: number; 
       {step === 5 && <>{field("days_per_week", "Training days per week (1–7)", "number")}{field("session_minutes", "Session length (minutes)", "number")}{select("location", "Training location", [["gym", "Gym"], ["home", "Home"], ["travel", "Travel"]])}<fieldset className="grid grid-cols-2 gap-3"><legend className="mb-3 text-sm font-medium">Available equipment</legend>{EQUIPMENT.map((item) => <label key={item} className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" checked={(form.equipment as string[]).includes(item)} onChange={(e) => set("equipment", e.target.checked ? [...form.equipment as string[], item] : (form.equipment as string[]).filter((v) => v !== item))} />{item}</label>)}</fieldset></>}
       {step === 6 && <>{select("diet_type", "Diet", DIET_TYPES)}{field("allergies", "Allergies (comma separated)", "text", false)}{field("dislikes", "Foods you dislike (comma separated)", "text", false)}{select("cooking_minutes", "Time available to cook", COOKING_OPTIONS)}{area("eating_habits", "Current eating habits (optional)")}</>}
       {step === 7 && <>{field("sleep_hours", "Typical sleep (hours per night)", "number")}{select("stress_level", "Stress level", [["low", "Low"], ["moderate", "Moderate"], ["high", "High"]])}{select("job_activity", "Job activity level", [["sedentary", "Mostly sitting"], ["light", "Light activity"], ["moderate", "Moderately active"], ["physical", "Physical work"]])}</>}
+      {step === 8 && <>
+        <p className="text-sm text-muted-foreground">These questions help your coach support safe training. Your answers are shared with your coach.</p>
+        {healthBoolean("heart_condition", "Has a doctor ever said you have a heart condition?")}
+        {healthBoolean("chest_pain_activity", "Do you get chest pain during physical activity?")}
+        {healthBoolean("chest_pain_rest", "Have you had chest pain at rest in the past month?")}
+        {healthBoolean("dizziness_or_fainting", "Do you lose balance from dizziness, or have you fainted?")}
+        {healthBoolean("bone_joint_problem", "Do you have a bone or joint problem that exercise could make worse?")}
+        {healthBoolean("blood_pressure_or_heart_meds", "Do you take medication for blood pressure or a heart condition?")}
+        {healthBoolean("doctor_advised_no_exercise", "Has a doctor told you not to exercise?")}
+        {healthEnum("pregnant", "Are you currently pregnant?", [["no", "No"], ["yes", "Yes"], ["prefer_not", "Prefer not to say"]])}
+        {healthBoolean("recent_surgery", "Have you had recent surgery?")}
+        {healthText("surgery_details", "If yes, please share details", 500, health.recent_surgery === true)}
+        {healthText("medications", "Medications (optional)", 1000)}
+        {healthText("conditions", "Other health conditions (optional)", 1000)}
+        <h2 className="font-medium">Emergency contact</h2>
+        {contactField("name", "Full name")}
+        {contactField("phone", "Phone", "tel", "[0-9+() -]{7,30}")}
+        {contactField("relationship", "Relationship")}
+      </>}
       </fieldset>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      <div className="flex items-center justify-between gap-3">{step > 1 ? <Button variant="ghost" asChild><Link href={`/athlete/onboarding?step=${step - 1}`}>Back</Link></Button> : <span />}<Button type="submit" disabled={pending}>{pending ? "Saving…" : step === 7 ? "Complete questionnaire" : "Save & continue"}</Button></div>
+      <div className="flex items-center justify-between gap-3">{step > 1 ? <Button variant="ghost" asChild><Link href={`/athlete/onboarding?step=${step - 1}`}>Back</Link></Button> : <span />}<Button type="submit" disabled={pending}>{pending ? "Saving…" : step === 8 ? "Complete questionnaire" : "Save & continue"}</Button></div>
     </form>
   </section>;
 }
