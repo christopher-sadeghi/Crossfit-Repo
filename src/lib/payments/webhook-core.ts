@@ -68,7 +68,7 @@ export async function processStripeEvent(event: Stripe.Event, dependencies: Depe
 
     const connectedOptions = { stripeAccount: connectedAccount.stripe_account_id };
 
-    async function upsertMembership(subscription: Stripe.Subscription, metadataFallback: Metadata = {}, deleted = false) {
+    async function upsertMembership(subscription: Stripe.Subscription, metadataFallback: Metadata = {}) {
       const metadata: Metadata = { ...metadataFallback, ...subscription.metadata };
       const athleteId = metadata.athlete_id;
       if (!athleteId || (metadata.coach_id && metadata.coach_id !== connectedAccount.coach_id)) return;
@@ -110,7 +110,7 @@ export async function processStripeEvent(event: Stripe.Event, dependencies: Depe
         plan_id: planId,
         stripe_subscription_id: subscription.id,
         stripe_customer_id: customerId,
-        status: deleted ? "canceled" : stripeStatus(subscription.status),
+        status: stripeStatus(subscription.status),
         current_period_end: periodEnd(subscription),
         cancel_at_period_end: subscription.cancel_at_period_end,
         updated_at: new Date().toISOString(),
@@ -140,11 +140,9 @@ export async function processStripeEvent(event: Stripe.Event, dependencies: Depe
       event.type === "customer.subscription.updated" ||
       event.type === "customer.subscription.deleted"
     ) {
-      await upsertMembership(
-        event.data.object as Stripe.Subscription,
-        {},
-        event.type === "customer.subscription.deleted",
-      );
+      const payload = event.data.object as Stripe.Subscription;
+      const subscription = await stripe.subscriptions.retrieve(payload.id, {}, connectedOptions);
+      await upsertMembership(subscription);
     } else if (event.type === "invoice.payment_failed") {
       const invoice = event.data.object as Stripe.Invoice & {
         subscription?: string | Stripe.Subscription | null;
@@ -154,19 +152,19 @@ export async function processStripeEvent(event: Stripe.Event, dependencies: Depe
         ?? objectId(invoice.parent?.subscription_details?.subscription);
       if (!subscriptionId) return "processed";
       const { data: membership, error: membershipError } = await admin.from("athlete_memberships")
-        .select("athlete_id, coach_id, status")
+        .select("athlete_id, coach_id")
         .eq("stripe_subscription_id", subscriptionId)
         .maybeSingle();
       if (membershipError) throw membershipError;
       if (!membership || membership.coach_id !== coachAccount.coach_id) return "processed";
 
-      if (membership.status === "active") {
-        const { error } = await admin.from("athlete_memberships")
-          .update({ status: "past_due", updated_at: new Date().toISOString() })
-          .eq("stripe_subscription_id", subscriptionId)
-          .eq("status", "active");
-        if (error) throw error;
-      }
+      const subscription = await stripe.subscriptions.retrieve(subscriptionId, {}, connectedOptions);
+      await upsertMembership(subscription);
+      if (
+        subscription.status !== "past_due" &&
+        subscription.status !== "unpaid" &&
+        subscription.status !== "incomplete"
+      ) return "processed";
 
       const { data: athlete, error: athleteError } = await admin.from("athletes")
         .select("id, user_id, first_name, last_name, coach_id, assigned_coach_id")

@@ -506,11 +506,39 @@ test("checkout and subscription lifecycle upsert membership on the connected acc
   assert.equal(fixture.calls.find(([name]) => name === "subscriptions.retrieve")[3].stripeAccount, accountId);
 
   const updated = { ...subscription, status: "past_due" };
+  fixture.subscriptions.set(subscription.id, updated);
   assert.equal((await fixture.send(stripeEvent("customer.subscription.updated", updated, "evt_update"))).status, 200);
   assert.equal(fixture.tables.athlete_memberships[0].status, "past_due");
   const deleted = { ...updated, status: "canceled" };
+  fixture.subscriptions.set(subscription.id, deleted);
   assert.equal((await fixture.send(stripeEvent("customer.subscription.deleted", deleted, "evt_delete"))).status, 200);
   assert.equal(fixture.tables.athlete_memberships[0].status, "canceled");
+});
+
+test("subscription lifecycle events use the retrieved state instead of an out-of-order payload", async () => {
+  const subscription = {
+    id: "sub_out_of_order",
+    status: "canceled",
+    customer: "cus_out_of_order",
+    metadata: { athlete_id: athleteId, plan_id: planId, coach_id: ownerId },
+    cancel_at_period_end: false,
+    items: { data: [{ price: { id: `price_${planId}` } }] },
+  };
+  const fixture = webhookRouteFixture({
+    tables: {
+      coach_stripe_accounts: [{ coach_id: ownerId, stripe_account_id: accountId }],
+      athletes: [athlete()],
+      membership_plans: [plan()],
+    },
+  });
+  fixture.subscriptions.set(subscription.id, subscription);
+  assert.equal((await fixture.send(stripeEvent("customer.subscription.updated", {
+    ...subscription,
+    status: "active",
+  }, "evt_late_active"))).status, 200);
+  assert.equal(fixture.tables.athlete_memberships[0].status, "canceled");
+  const retrieveCall = fixture.calls.find(([name]) => name === "subscriptions.retrieve");
+  assert.deepEqual(retrieveCall.slice(1), [subscription.id, {}, { stripeAccount: accountId }]);
 });
 
 test("payment failures notify the assigned coach and athlete, falling back to the owner", async () => {
@@ -523,6 +551,14 @@ test("payment failures notify the assigned coach and athlete, falling back to th
         athletes: [coachAthlete],
         athlete_memberships: [{ athlete_id: id, coach_id: ownerId, stripe_subscription_id: `sub_${id}`, status: "active" }],
       },
+    });
+    fixture.subscriptions.set(`sub_${id}`, {
+      id: `sub_${id}`,
+      status: "past_due",
+      customer: `cus_${id}`,
+      metadata: { athlete_id: id, coach_id: ownerId },
+      cancel_at_period_end: false,
+      items: { data: [{ price: { id: "price_missing" } }] },
     });
     const event = stripeEvent("invoice.payment_failed", {
       id: `in_${id}`,
@@ -542,6 +578,38 @@ test("payment failures notify the assigned coach and athlete, falling back to th
   }
 });
 
+test("payment failure notifications are skipped when the retrieved subscription has recovered", async () => {
+  const subscription = {
+    id: "sub_recovered",
+    status: "active",
+    customer: "cus_recovered",
+    metadata: { athlete_id: athleteId, coach_id: ownerId },
+    cancel_at_period_end: false,
+    items: { data: [{ price: { id: "price_missing" } }] },
+  };
+  const fixture = webhookRouteFixture({
+    tables: {
+      coach_stripe_accounts: [{ coach_id: ownerId, stripe_account_id: accountId }],
+      athletes: [athlete()],
+      athlete_memberships: [{
+        athlete_id: athleteId,
+        coach_id: ownerId,
+        stripe_subscription_id: subscription.id,
+        stripe_customer_id: subscription.customer,
+        status: "past_due",
+      }],
+    },
+  });
+  fixture.subscriptions.set(subscription.id, subscription);
+  assert.equal((await fixture.send(stripeEvent("invoice.payment_failed", {
+    id: "in_recovered",
+    subscription: subscription.id,
+  }, "evt_recovered"))).status, 200);
+  assert.equal(fixture.tables.athlete_memberships[0].status, "active");
+  assert.equal(fixture.tables.notifications.length, 0);
+  assert.equal(fixture.calls.some(([name]) => name === "push" || name === "email"), false);
+});
+
 test("duplicate event ids are a no-op and subscriptions for another coach's athlete are ignored", async () => {
   const subscription = {
     id: "sub_other",
@@ -558,6 +626,7 @@ test("duplicate event ids are a no-op and subscriptions for another coach's athl
       membership_plans: [plan(otherPlanId, otherOwnerId)],
     },
   });
+  fixture.subscriptions.set(subscription.id, subscription);
   const changed = stripeEvent("customer.subscription.created", subscription, "evt_duplicate");
   assert.equal((await fixture.send(changed)).status, 200);
   assert.equal((await fixture.send(changed)).status, 200);
