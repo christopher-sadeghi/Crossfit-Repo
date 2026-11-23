@@ -412,7 +412,7 @@ async function applyWorkoutSuggestion(
     p_workout_id: workoutId,
     p_workout: workout,
     p_movements: movements,
-    p_expected_updated_at: expectedUpdatedAt,
+    p_expected_updated_at: expectedUpdatedAt ?? undefined,
     ...(input.data.mode === "write" && input.data.athlete_id && input.data.scheduled_on
       ? { p_athlete_id: input.data.athlete_id, p_scheduled_on: input.data.scheduled_on }
       : {}),

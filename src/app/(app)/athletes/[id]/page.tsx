@@ -204,7 +204,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
     assigned: assignedProgramIds.has(program.id),
   }));
   const effectiveCoachId = coachRecipientId({ coach_id: athlete.coach_id, assigned_coach_id: athlete.assigned_coach_id });
-  const effectiveCoachName = coachesRes.data?.find((row) => row.id === effectiveCoachId)?.full_name || "Gym owner";
+  const effectiveCoachName = coachesRes.data?.find((row) => row.id === effectiveCoachId)?.full_name || "Coach owner";
 
   const days = new Map<string, { calories: number; protein: number; carbs: number; fat: number }>();
   for (const f of foodRes.data ?? []) {

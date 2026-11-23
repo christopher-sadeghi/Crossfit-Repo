@@ -81,6 +81,10 @@ export default async function AthleteMembershipPage({ searchParams }: Props) {
         .order("created_at", { ascending: true })
       : Promise.resolve({ data: [] }),
   ]);
+  const plansForDisplay = (availablePlans ?? []).map((availablePlan) => ({
+    ...availablePlan,
+    interval: availablePlan.interval as "month" | "year",
+  }));
   const endDate = membership?.current_period_end
     ? new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(new Date(membership.current_period_end))
     : null;
@@ -113,7 +117,7 @@ export default async function AthleteMembershipPage({ searchParams }: Props) {
       {!hasLiveMembership && accountResult.data?.charges_enabled && availablePlans?.length ? (
         <Card>
           <CardHeader><CardTitle>Choose a membership</CardTitle></CardHeader>
-          <CardContent><MembershipActions plans={availablePlans} /></CardContent>
+          <CardContent><MembershipActions plans={plansForDisplay} /></CardContent>
         </Card>
       ) : !hasLiveMembership ? (
         <p className="text-sm text-muted-foreground">Your coach hasn&apos;t set up payments yet.</p>

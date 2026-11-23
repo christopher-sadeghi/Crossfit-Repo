@@ -37,6 +37,13 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
     ...injuryPrefill(answers, athlete.data?.injuries), days_per_week: answers.days_per_week ?? "", session_minutes: answers.session_minutes ?? "", location: answers.location ?? "gym", equipment: answers.equipment ?? [],
     diet_type: preferences.data?.diet_type ?? "none", allergies: preferences.data?.allergies.join(", ") ?? "", dislikes: preferences.data?.dislikes.join(", ") ?? "", cooking_minutes: preferences.data?.cooking_minutes == null ? "" : String(preferences.data.cooking_minutes), eating_habits: answers.eating_habits ?? "",
     sleep_hours: answers.sleep_hours ?? "", stress_level: answers.stress_level ?? "moderate", job_activity: answers.job_activity ?? "sedentary",
+    health_screening: answers.health_screening ?? {
+      heart_condition: false, chest_pain_activity: false, chest_pain_rest: false,
+      dizziness_or_fainting: false, bone_joint_problem: false, blood_pressure_or_heart_meds: false,
+      doctor_advised_no_exercise: false, pregnant: "no", recent_surgery: false,
+      surgery_details: "", medications: "", conditions: "",
+      emergency_contact: { name: "", phone: "", relationship: "" },
+    },
   };
   return <IntakeForm key={step} step={step} values={values} benchmarks={benchmarks.data ?? []} units={viewer.units} />;
 }

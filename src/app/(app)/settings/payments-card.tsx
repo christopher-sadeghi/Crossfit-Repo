@@ -46,6 +46,10 @@ export async function PaymentsCard({ stripeReturn }: { stripeReturn?: string }) 
       .eq("active", true)
       .order("created_at", { ascending: true })
     : { data: [] };
+  const plansForDisplay = (plans ?? []).map((plan) => ({
+    ...plan,
+    interval: plan.interval as "month" | "year",
+  }));
 
   return (
     <Card className="mt-6">
@@ -72,7 +76,7 @@ export async function PaymentsCard({ stripeReturn }: { stripeReturn?: string }) 
                 <a href="https://dashboard.stripe.com" target="_blank" rel="noreferrer">Open Stripe dashboard</a>
               </Button>}
             </div>
-            {viewer.role === "owner" && <PaymentsPlans plans={plans ?? []} />}
+            {viewer.role === "owner" && <PaymentsPlans plans={plansForDisplay} />}
           </>
         ) : (
           <>

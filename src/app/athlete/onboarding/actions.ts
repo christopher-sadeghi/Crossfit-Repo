@@ -14,8 +14,11 @@ import { notify } from "@/lib/notifications";
 export async function saveIntakeStep(step: number, input: unknown): Promise<{ error: string } | undefined> {
   const viewer = await getViewer();
   if (viewer?.kind !== "athlete") return { error: "Please sign in as an athlete." };
-  if (!Number.isInteger(step) || step < 1 || step > 7) return { error: "Invalid step." };
-  const parsed = intakeSchemas[step - 1].safeParse(input);
+  if (!Number.isInteger(step) || step < 1 || step > 8) return { error: "Invalid step." };
+  const stepInput = step === 8 && input && typeof input === "object" && "health_screening" in input
+    ? input.health_screening
+    : input;
+  const parsed = intakeSchemas[step - 1].safeParse(stepInput);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check your answers." };
   const today = await getToday();
   let payload: Record<string, unknown> = { ...parsed.data };
@@ -44,12 +47,13 @@ export async function saveIntakeStep(step: number, input: unknown): Promise<{ er
     const v = intakeSchemas[2].parse(input);
     payload = { goals: v.goals.map(goalPayload) };
   }
+  if (step === 8) payload = { health_screening: parsed.data };
   const { error } = await supabase.rpc("save_athlete_intake_step", { p_athlete_id: viewer.athleteId, p_step: step, p_data: payload as Json, p_today: today });
   if (error) return { error: "Couldn't save your answers. Please try again." };
-  if (step === 7) {
+  if (step === 8) {
     await notify(supabase, { athleteId: viewer.athleteId, kind: "message", title: "Intake completed", body: "Your athlete completed their intake questionnaire.", link: `/athletes/${viewer.athleteId}?tab=intake` });
   }
   revalidatePath("/athlete", "layout");
   revalidatePath(`/athletes/${viewer.athleteId}`);
-  redirect(step === 7 ? "/athlete" : `/athlete/onboarding?step=${step + 1}`);
+  redirect(step === 8 ? "/athlete" : `/athlete/onboarding?step=${step + 1}`);
 }

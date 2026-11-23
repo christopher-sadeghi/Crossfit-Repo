@@ -8,7 +8,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { getToday } from "@/lib/time-zone";
 
 type Client = SupabaseClient<Database>;
-export type NotificationKind = "result_logged" | "workout_adjusted" | "low_readiness" | "message" | "missed_workouts" | "coach_message" | "schedule_changed" | "suggestion_approved" | "progress_report" | "progress_check_in" | "high_training_load" | "form_check" | "form_reviewed" | "assistant_red_flag" | "check_in_reminder" | "payment_failed";
+export type NotificationKind = "result_logged" | "workout_adjusted" | "low_readiness" | "message" | "missed_workouts" | "coach_message" | "schedule_changed" | "suggestion_approved" | "progress_report" | "progress_check_in" | "high_training_load" | "form_check" | "form_reviewed" | "assistant_red_flag" | "check_in_reminder" | "payment_failed" | "health_flag";
 export type NotificationInput = {
   athleteId: string;
   kind: NotificationKind;
@@ -30,9 +30,9 @@ export async function notify(supabase: Client, input: NotificationInput): Promis
       p_athlete_id: input.athleteId,
       p_kind: input.kind,
       p_title: input.title,
-      p_body: input.body ?? null,
-      p_link: input.link ?? null,
-      p_dedupe_key: input.dedupeKey ?? null,
+      p_body: input.body,
+      p_link: input.link,
+      p_dedupe_key: input.dedupeKey,
     });
     if (error) console.error("Notification failed:", error);
     else {
