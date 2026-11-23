@@ -372,6 +372,36 @@ begin
 end;
 $$;
 
+drop policy if exists "Coaches manage own rows" on public.benchmarks;
+create policy "Coaches read gym benchmarks" on public.benchmarks
+  for select to authenticated
+  using (coach_id = (select public.current_gym_id()));
+create policy "Owners insert gym benchmarks" on public.benchmarks
+  for insert to authenticated
+  with check (coach_id = (select public.current_gym_id()) and (select public.is_gym_owner()));
+create policy "Owners update gym benchmarks" on public.benchmarks
+  for update to authenticated
+  using (coach_id = (select public.current_gym_id()) and (select public.is_gym_owner()))
+  with check (coach_id = (select public.current_gym_id()) and (select public.is_gym_owner()));
+create policy "Owners delete gym benchmarks" on public.benchmarks
+  for delete to authenticated
+  using (coach_id = (select public.current_gym_id()) and (select public.is_gym_owner()));
+
+drop policy if exists "Coaches manage own rows" on public.benchmark_settings;
+create policy "Coaches read gym benchmark settings" on public.benchmark_settings
+  for select to authenticated
+  using (coach_id = (select public.current_gym_id()));
+create policy "Owners insert gym benchmark settings" on public.benchmark_settings
+  for insert to authenticated
+  with check (coach_id = (select public.current_gym_id()) and (select public.is_gym_owner()));
+create policy "Owners update gym benchmark settings" on public.benchmark_settings
+  for update to authenticated
+  using (coach_id = (select public.current_gym_id()) and (select public.is_gym_owner()))
+  with check (coach_id = (select public.current_gym_id()) and (select public.is_gym_owner()));
+create policy "Owners delete gym benchmark settings" on public.benchmark_settings
+  for delete to authenticated
+  using (coach_id = (select public.current_gym_id()) and (select public.is_gym_owner()));
+
 do $$
 declare
   f record;

@@ -2,7 +2,9 @@ begin;
 insert into auth.users(id, email, raw_user_meta_data) values
  ('32000000-0000-0000-0000-000000000001','benchmark-a@test.local','{}'),
  ('32000000-0000-0000-0000-000000000002','benchmark-b@test.local','{}'),
- ('32000000-0000-0000-0000-000000000003','benchmark-athlete@test.local','{}');
+ ('32000000-0000-0000-0000-000000000003','benchmark-athlete@test.local','{}'),
+ ('32000000-0000-0000-0000-000000000004','benchmark-staff@test.local','{}');
+update public.coaches set gym_id='32000000-0000-0000-0000-000000000001' where id='32000000-0000-0000-0000-000000000004';
 insert into public.athletes(id, coach_id, user_id, first_name, last_name) values
  ('32000000-0000-0000-0000-000000000011','32000000-0000-0000-0000-000000000001','32000000-0000-0000-0000-000000000003','Own','Athlete'),
  ('32000000-0000-0000-0000-000000000012','32000000-0000-0000-0000-000000000001',null,'Other','Athlete'),
@@ -14,6 +16,21 @@ insert into public.benchmark_settings(benchmark_id,retest_weeks) values ('320000
 insert into public.benchmark_results(athlete_id,benchmark_id,performed_on,time_seconds) values
  ('32000000-0000-0000-0000-000000000011','32000000-0000-0000-0000-000000000021','2026-11-21',300),
  ('32000000-0000-0000-0000-000000000012','32000000-0000-0000-0000-000000000021','2026-11-21',400);
+do $$ declare n integer; begin
+ assert (select count(*) = 1 from public.benchmarks where id = '32000000-0000-0000-0000-000000000021');
+ assert (select count(*) = 1 from public.benchmark_settings where benchmark_id = '32000000-0000-0000-0000-000000000021');
+ insert into public.benchmarks(id,name,kind,workout_type) values ('32000000-0000-0000-0000-000000000022','Owner temp','custom','other');
+ insert into public.benchmark_settings(benchmark_id,retest_weeks) values ('32000000-0000-0000-0000-000000000022',8);
+ update public.benchmarks set description = 'owner update' where id = '32000000-0000-0000-0000-000000000022';
+ get diagnostics n = row_count; assert n = 1;
+ update public.benchmark_settings set retest_weeks = 12 where benchmark_id = '32000000-0000-0000-0000-000000000022';
+ get diagnostics n = row_count; assert n = 1;
+ delete from public.benchmark_settings where benchmark_id = '32000000-0000-0000-0000-000000000022';
+ get diagnostics n = row_count; assert n = 1;
+ delete from public.benchmarks where id = '32000000-0000-0000-0000-000000000022';
+ get diagnostics n = row_count; assert n = 1;
+ raise notice 'PASS: gym owner can read and manage benchmarks and retest settings';
+end $$;
 select set_config('request.jwt.claims','{"sub":"32000000-0000-0000-0000-000000000002","role":"authenticated"}',true);
 do $$ declare n integer; begin
  assert (select count(*) from public.benchmark_results) = 0;
@@ -35,6 +52,32 @@ do $$ declare n integer; begin
    raise exception 'coach inserted library row';
  exception when insufficient_privilege then null; end;
  raise notice 'PASS: coach isolation, cross-coach reference rejected, library read-only (38 seeds)';
+end $$;
+select set_config('request.jwt.claims','{"sub":"32000000-0000-0000-0000-000000000004","role":"authenticated"}',true);
+do $$ declare n integer; begin
+ assert public.current_gym_id() = '32000000-0000-0000-0000-000000000001';
+ assert not public.is_gym_owner();
+ assert (select count(*) = 1 from public.benchmarks where coach_id = public.current_gym_id());
+ assert (select count(*) = 1 from public.benchmark_settings where coach_id = public.current_gym_id());
+ assert (select count(*) = 2 from public.benchmark_results);
+ begin
+   insert into public.benchmarks(name,kind,workout_type) values ('Staff benchmark','custom','other');
+   raise exception 'staff inserted a custom benchmark';
+ exception when insufficient_privilege then null; end;
+ update public.benchmarks set description = 'hacked' where id = '32000000-0000-0000-0000-000000000021';
+ get diagnostics n = row_count; assert n = 0;
+ delete from public.benchmarks where id = '32000000-0000-0000-0000-000000000021';
+ get diagnostics n = row_count; assert n = 0;
+ begin
+   insert into public.benchmark_settings(benchmark_id,retest_weeks)
+   values ('32000000-0000-0000-0000-000000000021',12);
+   raise exception 'staff inserted a retest setting';
+ exception when insufficient_privilege then null; end;
+ update public.benchmark_settings set retest_weeks = 12 where benchmark_id = '32000000-0000-0000-0000-000000000021';
+ get diagnostics n = row_count; assert n = 0;
+ delete from public.benchmark_settings where benchmark_id = '32000000-0000-0000-0000-000000000021';
+ get diagnostics n = row_count; assert n = 0;
+ raise notice 'PASS: staff can read but cannot manage benchmark configuration';
 end $$;
 select set_config('request.jwt.claims','{"sub":"32000000-0000-0000-0000-000000000003","role":"authenticated"}',true);
 do $$ declare n integer; begin
