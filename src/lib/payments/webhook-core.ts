@@ -160,11 +160,7 @@ export async function processStripeEvent(event: Stripe.Event, dependencies: Depe
 
       const subscription = await stripe.subscriptions.retrieve(subscriptionId, {}, connectedOptions);
       await upsertMembership(subscription);
-      if (
-        subscription.status !== "past_due" &&
-        subscription.status !== "unpaid" &&
-        subscription.status !== "incomplete"
-      ) return "processed";
+      if (subscription.status === "active" || subscription.status === "trialing") return "processed";
 
       const { data: athlete, error: athleteError } = await admin.from("athletes")
         .select("id, user_id, first_name, last_name, coach_id, assigned_coach_id")

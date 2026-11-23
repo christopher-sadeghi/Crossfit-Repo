@@ -665,6 +665,39 @@ test("payment failure notifications are skipped when the retrieved subscription 
   assert.equal(fixture.calls.some(([name]) => name === "push" || name === "email"), false);
 });
 
+test("final payment failures notify when the retrieved subscription is canceled", async () => {
+  const subscription = {
+    id: "sub_canceled",
+    status: "canceled",
+    customer: "cus_canceled",
+    metadata: { athlete_id: athleteId, coach_id: ownerId },
+    cancel_at_period_end: false,
+    items: { data: [{ price: { id: "price_missing" } }] },
+  };
+  const fixture = webhookRouteFixture({
+    tables: {
+      coach_stripe_accounts: [{ coach_id: ownerId, stripe_account_id: accountId }],
+      athletes: [athlete()],
+      athlete_memberships: [{
+        athlete_id: athleteId,
+        coach_id: ownerId,
+        stripe_subscription_id: subscription.id,
+        stripe_customer_id: subscription.customer,
+        status: "active",
+      }],
+    },
+  });
+  fixture.subscriptions.set(subscription.id, subscription);
+  assert.equal((await fixture.send(stripeEvent("invoice.payment_failed", {
+    id: "in_canceled",
+    subscription: subscription.id,
+  }, "evt_canceled"))).status, 200);
+  assert.equal(fixture.tables.athlete_memberships[0].status, "canceled");
+  assert.deepEqual(fixture.tables.notifications.map((row) => row.recipient_id).sort(), [ownerId, `${athleteId}-user`].sort());
+  assert.ok(fixture.calls.some(([name]) => name === "push"));
+  assert.ok(fixture.calls.some(([name]) => name === "email"));
+});
+
 test("duplicate event ids are a no-op and subscriptions for another coach's athlete are ignored", async () => {
   const subscription = {
     id: "sub_other",
