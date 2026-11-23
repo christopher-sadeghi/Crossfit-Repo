@@ -14,6 +14,7 @@ import { trainingLoadContext } from "./athlete-context";
 import { ageOn, loadWorkoutContext, workoutLibraryEntrySchema } from "./workout-context";
 import { movementIdSchema } from "./movement-schema";
 import { scaleWorkoutChangeSchema } from "./scale-workout-schema";
+import { appendProgrammingStyle, athleteProgrammingStyleNote } from "@/lib/programming-style";
 
 export { scaleWorkoutChangeSchema, scaleWorkoutDetailsSchema } from "./scale-workout-schema";
 
@@ -170,6 +171,7 @@ export async function buildScaleRequest(
   if (athleteError || !athlete) throw athleteError ?? new Error("Athlete not found.");
   if (workoutError || !workout) throw workoutError ?? new Error("Workout not found.");
   if (resultsError) throw resultsError;
+  const programmingStyle = await athleteProgrammingStyleNote(supabase, params.athleteId);
 
   const asOf = await getToday();
   const [liftMaxes, recentCheckIns, trainingLoad] = await Promise.all([
@@ -226,7 +228,7 @@ export async function buildScaleRequest(
 
   return {
     input,
-    system: SCALE_WORKOUT_SYSTEM,
+    system: appendProgrammingStyle(SCALE_WORKOUT_SYSTEM, programmingStyle),
     prompt: `Athlete, WOD, and recent result context (JSON):\n${JSON.stringify(input, null, 2)}\n\nReturn a complete scaled WOD proposal.`,
     schema: scaleWorkoutSchema.extend({
       changes: z

@@ -28,6 +28,7 @@ import { weeklyReportEntry } from "./weekly-report";
 import { athleteAdjustSchema } from "./athlete-adjust-schema";
 import { suggestFoodEntry } from "./suggest-food";
 import { draftProgramEntry } from "./draft-program";
+import { athleteProgrammingStyleNote, coachProgrammingStyleNote, writeWorkoutSystem } from "@/lib/programming-style";
 
 export { ApprovalError } from "./errors";
 
@@ -122,6 +123,8 @@ export type SuggestionParams = {
   movementId?: string;
   date?: string;
   meal?: string | null;
+  requestedBy?: string;
+  coachId?: string;
 };
 export type SuggestionApplyOptions = { saveAs?: "update" | "new" };
 type SuggestionEntry = {
@@ -289,7 +292,7 @@ async function loadAthleteProgrammingContext(supabase: SupabaseClient<Database>,
   };
 }
 
-async function buildWorkoutRequest(
+export async function buildWorkoutRequest(
   supabase: SupabaseClient<Database>,
   params: SuggestionParams,
 ): Promise<SuggestionRequest> {
@@ -331,6 +334,15 @@ async function buildWorkoutRequest(
 
   const athleteId = !workoutId && params.athleteId && params.scheduledOn ? params.athleteId : null;
   const athlete = athleteId ? await loadAthleteProgrammingContext(supabase, athleteId, units, params.session) : null;
+  let programmingStyle = athleteId ? await athleteProgrammingStyleNote(supabase, athleteId) : null;
+  if (!athleteId) {
+    const { data: requestingCoach } = params.requestedBy
+      ? await supabase.from("coaches").select("id").eq("id", params.requestedBy).maybeSingle()
+      : { data: null };
+    programmingStyle = requestingCoach
+      ? await coachProgrammingStyleNote(supabase, requestingCoach.id)
+      : params.coachId ? await coachProgrammingStyleNote(supabase, params.coachId) : null;
+  }
   const input = {
     mode: workoutId ? "adjust" : "write",
     ...(athlete ? { lift_maxes: athlete.lift_maxes } : {}),
@@ -344,7 +356,7 @@ async function buildWorkoutRequest(
   } satisfies Json;
   return {
     input,
-    system: WRITE_WORKOUT_SYSTEM.replace("<units>", units),
+    system: writeWorkoutSystem(WRITE_WORKOUT_SYSTEM, units, programmingStyle),
     prompt: `Request: ${request}\n\n${athlete ? `Athlete this WOD is for, on ${params.scheduledOn} (JSON):\n${JSON.stringify(athlete, null, 2)}\n\n` : ""}Program context (JSON):\n${JSON.stringify(input, null, 2)}\n\nReturn a complete WOD proposal.`,
     schema: writeWorkoutSchema.extend({
       movements: z

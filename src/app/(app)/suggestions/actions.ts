@@ -36,13 +36,16 @@ function revalidateSuggestion(id: string, athleteId?: string | null) {
 }
 
 export async function requestSuggestion(type: Enums<"suggestion_type">, athleteId: string): Promise<FormState & { suggestionId?: string }> {
-  if ((await getViewer())?.kind !== "coach") return { error: COACH_SESSION_ERROR };
+  const viewer = await getViewer();
+  if (viewer?.kind !== "coach") return { error: COACH_SESSION_ERROR };
   const parsedType = typeSchema.safeParse(type);
   const parsedAthleteId = idSchema.safeParse(athleteId);
   if (!parsedType.success || !parsedAthleteId.success) return { error: "Couldn't request an AI suggestion. Please try again." };
 
   const supabase = await createClient();
-  const result = await requestRegisteredSuggestion(supabase, parsedType.data, { athleteId: parsedAthleteId.data });
+  const result = await requestRegisteredSuggestion(supabase, parsedType.data, {
+    athleteId: parsedAthleteId.data, requestedBy: viewer.id, coachId: viewer.gymId,
+  });
   if ("error" in result) return { error: result.error };
 
   revalidateSuggestion(result.id, parsedAthleteId.data);
@@ -50,7 +53,8 @@ export async function requestSuggestion(type: Enums<"suggestion_type">, athleteI
 }
 
 export async function requestWorkoutSuggestion(_: FormState, formData: FormData): Promise<FormState & { suggestionId?: string }> {
-  if ((await getViewer())?.kind !== "coach") return { error: COACH_SESSION_ERROR };
+  const viewer = await getViewer();
+  if (viewer?.kind !== "coach") return { error: COACH_SESSION_ERROR };
   const request = z.string().trim().min(3).max(500).safeParse(formData.get("request"));
   const rawWorkoutId = formData.get("workout_id");
   const workoutId = z.union([z.literal(""), z.string().uuid()]).safeParse(typeof rawWorkoutId === "string" ? rawWorkoutId : "");
@@ -67,11 +71,15 @@ export async function requestWorkoutSuggestion(_: FormState, formData: FormData)
       athleteId: null,
       workoutId: workoutId.data || null,
       request: request.data,
+      requestedBy: viewer.id,
+      coachId: viewer.gymId,
     });
     const { schema: generationSchema, ...context } = requestContext;
     result = await runSuggestion({
       type: "write_workout",
       athleteId: null,
+      requestedBy: viewer.id,
+      coachId: viewer.gymId,
       ...context,
       schema: entry.proposalSchema,
       generationSchema,

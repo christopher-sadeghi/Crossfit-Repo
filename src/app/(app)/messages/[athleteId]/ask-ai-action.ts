@@ -29,6 +29,8 @@ export async function askAthleteMessageAI(athleteId: string, messageId: string):
       context: { athleteId: athlete.id },
       thread: { athleteId: athlete.id, messageId },
       today: await getToday(),
+      coachId: viewer.id,
+      scopeCoachId: viewer.gymId,
     });
     if ("error" in result) return result;
     if (result.suggestionIds.length) {

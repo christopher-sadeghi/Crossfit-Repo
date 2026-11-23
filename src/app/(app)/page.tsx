@@ -25,13 +25,14 @@ export default async function DashboardPage() {
   if (!coach) redirect("/login");
 
   const [supabase, today] = await Promise.all([createClient(), getToday()]);
-  const [roster, approvals, formChecks, athleteUsers] = await Promise.all([
+  const [roster, approvals, formChecks, athleteUsers, programmingStyle] = await Promise.all([
     loadCoachConsistency(supabase, coach.gymId, today, coach.driftDays),
     supabase.from("ai_suggestions").select("id", { count: "exact", head: true })
       .eq("coach_id", coach.gymId).eq("status", "pending"),
     supabase.from("form_reviews").select("id, athlete_id").eq("coach_id", coach.gymId)
       .eq("status", "awaiting_review").order("created_at"),
     supabase.from("athletes").select("user_id").eq("coach_id", coach.gymId),
+    supabase.from("coach_programming_styles").select("status").eq("coach_id", coach.id).maybeSingle(),
     checkMissedWorkouts(supabase, coach),
     checkProgressReminders(supabase, { coachId: coach.gymId }),
   ]);
@@ -88,6 +89,13 @@ export default async function DashboardPage() {
         title={firstName ? `Welcome back, ${firstName}` : "Welcome back"}
         description={formatDate(today)}
       />
+      {programmingStyle.data?.status !== "completed" && (
+        <Card className="mb-5 border-primary/30 bg-primary/5">
+          <CardHeader><h2 className="font-semibold">Teach the AI your programming style</h2>
+            <p className="text-sm text-muted-foreground">Help the AI create training that reflects how you coach.</p></CardHeader>
+          <CardContent><Button asChild><Link href="/setup/programming-style">Set it up</Link></Button></CardContent>
+        </Card>
+      )}
       {!roster.length && (
         <Card className="mb-5 border border-dashed bg-muted/30">
           <CardHeader>

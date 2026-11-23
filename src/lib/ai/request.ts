@@ -18,6 +18,8 @@ export async function requestRegisteredSuggestion(
     return await runSuggestionWithClient(supabase, {
       type,
       athleteId: params.athleteId,
+      ...(params.requestedBy ? { requestedBy: params.requestedBy } : {}),
+      ...(params.coachId ? { coachId: params.coachId } : {}),
       ...context,
       schema: entry.proposalSchema,
       generationSchema,
