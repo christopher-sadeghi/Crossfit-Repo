@@ -57,6 +57,14 @@ const TAB_GROUPS = [
 ] as const satisfies readonly AthleteTabGroup[];
 const TABS = TAB_GROUPS.flatMap((group) => group.tabs.map((tab) => tab.value));
 
+function membershipStatusLabel(status: string | null) {
+  if (status === "active" || status === "trialing" || status === "paused") return "Active";
+  if (status === "past_due" || status === "unpaid") return "Past due";
+  if (status === "canceled") return "Canceled";
+  if (status === "incomplete" || status === "incomplete_expired") return "Incomplete";
+  return "None";
+}
+
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string; week?: string; date?: string; checkins?: string }> };
 type ProfileScheduleWorkout = WhiteboardWorkout & {
   id: string;
@@ -98,6 +106,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
     journalRes,
     library,
     checkInsRes,
+    membershipRes,
   ] = await Promise.all([
     loadLiftMaxes(supabase, id),
     supabase.from("athletes").select("*").eq("id", id).maybeSingle(),
@@ -150,11 +159,23 @@ export default async function AthletePage({ params, searchParams }: Props) {
       .lte("entry_on", today)
       .order("entry_on", { ascending: false })
       .limit(checkins === "all" ? 10_000 : 365),
+    supabase.from("athlete_memberships")
+      .select("id, plan_id, status, current_period_end, cancel_at_period_end, created_at")
+      .eq("athlete_id", id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const athlete = athleteRes.data;
   if (!athlete) notFound();
-  const [activities, load] = await Promise.all([loadActivities(supabase, id), loadTrainingLoad(supabase, id, today)]);
+  const [activities, load, membershipPlanRes] = await Promise.all([
+    loadActivities(supabase, id),
+    loadTrainingLoad(supabase, id, today),
+    membershipRes.data?.plan_id
+      ? supabase.from("membership_plans").select("name").eq("id", membershipRes.data.plan_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
   const calendarActivities = activities.filter((activity) => activity.performed_on >= weekStart && activity.performed_on <= addDays(weekStart, 6));
   const metrics = metricsRes.data ?? [];
   const latestWeight = latestMetric(metrics, "weight_kg");
@@ -239,6 +260,20 @@ export default async function AthletePage({ params, searchParams }: Props) {
                 coaches={(coachesRes.data ?? []).map((row) => ({ id: row.id, fullName: row.full_name || "Coach" }))}
               />
               <p className="mt-2 text-xs text-muted-foreground">Coach alerts go to {effectiveCoachName}.</p>
+            </CardContent>
+          </Card>
+          <Card className="md:col-span-3">
+            <CardHeader><CardTitle>Membership</CardTitle></CardHeader>
+            <CardContent className="flex flex-wrap items-center gap-3">
+              <Badge variant={membershipRes.data?.status === "past_due" || membershipRes.data?.status === "unpaid" ? "destructive" : membershipRes.data?.status === "active" || membershipRes.data?.status === "trialing" ? "default" : "secondary"}>
+                {membershipStatusLabel(membershipRes.data?.status ?? null)}
+              </Badge>
+              <span className="font-medium">{membershipPlanRes.data?.name ?? "No membership plan"}</span>
+              {membershipRes.data?.current_period_end && (
+                <span className="text-sm text-muted-foreground">
+                  {membershipRes.data.cancel_at_period_end ? "Ends" : "Renews"} {formatDate(membershipRes.data.current_period_end)}
+                </span>
+              )}
             </CardContent>
           </Card>
           {attention.flagged && (

@@ -42,7 +42,7 @@ export default async function AthletesPage({ searchParams }: Props) {
     const like = `ilike."%${word}%"`;
     query = query.or(`first_name.${like},last_name.${like},email.${like}`);
   }
-  const [athleteRows, inviteRows, resultRows, checkInAttention, coachRows] = await Promise.all([
+  const [athleteRows, inviteRows, resultRows, checkInAttention, coachRows, membershipRows] = await Promise.all([
     query,
     supabase
       .from("athlete_invites")
@@ -57,13 +57,18 @@ export default async function AthletesPage({ searchParams }: Props) {
       .or("pain_notes.not.is.null,rpe.gte.9"),
     loadCheckInAttention(supabase, todayIso),
     supabase.from("coaches").select("id, full_name").eq("gym_id", coach?.gymId ?? ""),
+    supabase.from("athlete_memberships").select("athlete_id, status, created_at").order("created_at", { ascending: false }),
   ]);
-  const error = athleteRows.error ?? inviteRows.error ?? resultRows.error;
+  const error = athleteRows.error ?? inviteRows.error ?? resultRows.error ?? membershipRows.error;
   if (error) throw new Error("Couldn't load athletes.", { cause: error });
   const { data: athletes } = athleteRows;
   const { data: invites } = inviteRows;
   const { data: results } = resultRows;
   const coachNames = new Map((coachRows.data ?? []).map((row) => [row.id, row.full_name || "Coach"]));
+  const latestMembershipStatus = new Map<string, string>();
+  for (const membership of membershipRows.data ?? []) {
+    if (!latestMembershipStatus.has(membership.athlete_id)) latestMembershipStatus.set(membership.athlete_id, membership.status);
+  }
   const invitedAthletes = new Set((invites ?? []).map((invite) => invite.athlete_id));
   const attentionResults = new Map<string, typeof results>();
   for (const result of results ?? []) {
@@ -142,6 +147,9 @@ export default async function AthletesPage({ searchParams }: Props) {
                           >
                             Needs attention
                           </Badge>
+                        )}
+                        {(latestMembershipStatus.get(a.id) === "past_due" || latestMembershipStatus.get(a.id) === "unpaid") && (
+                          <Badge variant="destructive">Past due</Badge>
                         )}
                         {a.assigned_coach_id && coachNames.has(a.assigned_coach_id) && (
                           <span className="text-xs font-normal text-muted-foreground">Coach: {coachNames.get(a.assigned_coach_id)}</span>

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { siteOrigin } from "@/lib/email/origin";
 import { ftInToCm } from "@/lib/height";
+import { LIVE_MEMBERSHIP_STATUSES } from "@/lib/payments/athlete-core";
 import { createClient } from "@/lib/supabase/server";
 
 import { LEVELS, SEXES } from "./options";
@@ -92,16 +93,30 @@ export async function saveAthlete(_: FormState, formData: FormData): Promise<For
   redirect(`/athletes/${data.id}`);
 }
 
-export async function setAthleteStatus(id: string, status: "active" | "archived") {
+export async function setAthleteStatus(id: string, status: "active" | "archived"): Promise<{ error?: string }> {
   const supabase = await createClient();
+  if (status === "archived") {
+    const { data: membership, error: membershipError } = await supabase.from("athlete_memberships")
+      .select("id")
+      .eq("athlete_id", id)
+      .in("status", [...LIVE_MEMBERSHIP_STATUSES])
+      .limit(1)
+      .maybeSingle();
+    if (membershipError) return { error: "Couldn't check this athlete's membership. Please try again." };
+    if (membership) {
+      return { error: "This athlete has an active membership. Cancel it in your Stripe dashboard before archiving." };
+    }
+  }
+
   const { error } = await supabase
     .from("athletes")
     .update({ status, updated_at: new Date().toISOString() })
     .eq("id", id);
-  if (error) throw new Error("Couldn't update the athlete.");
+  if (error) return { error: "Couldn't update the athlete." };
 
   revalidatePath("/athletes");
   revalidatePath(`/athletes/${id}`);
+  return {};
 }
 
 const athleteIdSchema = z.string().uuid();
