@@ -16,16 +16,17 @@ const text = z.string().trim().max(2000);
 const requiredNumber = (schema: z.ZodNumber) => z.preprocess((v) => v === "" || v == null ? undefined : v, z.coerce.number().pipe(schema));
 const optionalNumber = z.preprocess((v) => v === "" || v == null ? null : v, z.coerce.number().finite().nullable());
 export const injurySchema = z.object({ area: z.string().trim().min(1).max(80), severity: z.enum(["mild", "moderate", "severe"]), notes: text });
+const requiredYesNo = z.boolean({ error: "Choose Yes or No." });
 export const healthScreeningSchema = z.object({
-  heart_condition: z.boolean(),
-  chest_pain_activity: z.boolean(),
-  chest_pain_rest: z.boolean(),
-  dizziness_or_fainting: z.boolean(),
-  bone_joint_problem: z.boolean(),
-  blood_pressure_or_heart_meds: z.boolean(),
-  doctor_advised_no_exercise: z.boolean(),
-  pregnant: z.enum(["no", "yes", "prefer_not"]),
-  recent_surgery: z.boolean(),
+  heart_condition: requiredYesNo,
+  chest_pain_activity: requiredYesNo,
+  chest_pain_rest: requiredYesNo,
+  dizziness_or_fainting: requiredYesNo,
+  bone_joint_problem: requiredYesNo,
+  blood_pressure_or_heart_meds: requiredYesNo,
+  doctor_advised_no_exercise: requiredYesNo,
+  pregnant: z.enum(["no", "yes", "prefer_not"], { error: "Choose an answer." }),
+  recent_surgery: requiredYesNo,
   surgery_details: z.string().trim().max(500),
   medications: z.string().trim().max(1000).optional(),
   conditions: z.string().trim().max(1000).optional(),

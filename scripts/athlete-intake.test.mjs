@@ -78,6 +78,12 @@ test("health screening validates required answers and flags only higher-risk res
   assert.equal(healthFlag({ ...screening, pregnant: "yes" }), true);
   assert.equal(healthFlag({ ...screening, recent_surgery: true }), true);
   assert.equal(healthFlag(null), false);
+  const unanswered = schemas[7].safeParse({ ...screening, heart_condition: undefined });
+  assert.equal(unanswered.success, false);
+  assert.equal(unanswered.error.issues.find((issue) => issue.path[0] === "heart_condition").message, "Choose Yes or No.");
+  const unansweredPregnancy = schemas[7].safeParse({ ...screening, pregnant: undefined });
+  assert.equal(unansweredPregnancy.success, false);
+  assert.equal(unansweredPregnancy.error.issues.find((issue) => issue.path[0] === "pregnant").message, "Choose an answer.");
   assert.equal(schemas[7].safeParse({ ...screening, recent_surgery: true }).success, false);
   assert.equal(schemas[7].safeParse({ ...screening, emergency_contact: { ...screening.emergency_contact, phone: "not a phone" } }).success, false);
   assert.equal(schemas[7].safeParse({ ...screening, medications: "x".repeat(1001) }).success, false);
@@ -249,6 +255,50 @@ test("goal editor offers category-specific options and keeps unknown saved targe
   assert.equal(elements(tree, "input").some((input) => input.props.value === "Work toward a strict ring dip"), true);
   selects[0].props.onChange({ target: { value: "Conditioning" } });
   assert.deepEqual(formState.goals[0], { category: "Conditioning", target: "", target_value: "", target_date: "", specific_goal_choice: "" });
+});
+test("new health screening selects start unanswered while saved answers stay prefilled", () => {
+  function render(values) {
+    let formState = values;
+    let stateCalls = 0;
+    const { IntakeForm } = load("src/app/athlete/onboarding/intake-form.tsx", {
+      react: {
+        useState(initial) {
+          stateCalls += 1;
+          return stateCalls === 1 ? [formState, (next) => { formState = typeof next === "function" ? next(formState) : next; }] : [initial, () => {}];
+        },
+        useTransition: () => [false, () => {}],
+      },
+      "next/link": "a",
+      "@/components/ui/button": { Button: "button" },
+      "@/components/ui/input": { Input: "input" },
+      "@/components/ui/textarea": { Textarea: "textarea" },
+      "./actions": { saveIntakeStep: async () => ({}) },
+    });
+    return { tree: IntakeForm({ step: 8, values, benchmarks: [], units: "kg" }), get formState() { return formState; } };
+  }
+  function elements(node, type) {
+    if (!node || typeof node !== "object") return [];
+    return [...(node.type === type ? [node] : []), ...[node.props?.children].flat(Infinity).flatMap((child) => elements(child, type))];
+  }
+
+  const blank = render({ health_screening: { surgery_details: "", medications: "", conditions: "", emergency_contact: { name: "", phone: "", relationship: "" } } });
+  const blankSelects = elements(blank.tree, "select");
+  assert.equal(blankSelects.length, 9);
+  for (const select of blankSelects) {
+    assert.equal(select.props.required, true);
+    assert.equal(select.props.value, "");
+    assert.ok(elements(select, "option").some((option) => option.props.value === "" && option.props.children === "Choose…"));
+  }
+  blankSelects[0].props.onChange({ target: { value: "" } });
+  assert.equal(blank.formState.health_screening.heart_condition, undefined);
+  blankSelects[7].props.onChange({ target: { value: "" } });
+  assert.equal(blank.formState.health_screening.pregnant, undefined);
+
+  const saved = render({ health_screening: valid[7].health_screening });
+  const savedSelects = elements(saved.tree, "select");
+  assert.equal(savedSelects[0].props.value, "no");
+  assert.equal(savedSelects[7].props.value, "no");
+  assert.equal(savedSelects[8].props.value, "no");
 });
 test("canonical coach goal edits survive resend and unchanged saves submit no field edits", async () => {
   const { goalPrefill } = load("src/lib/athlete-intake.ts");
