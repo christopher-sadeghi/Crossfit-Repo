@@ -29,9 +29,17 @@ const valid = [
 test("coach intake summary renders goal titles then categories, never bookkeeping ids", async () => {
   const goalId = "35000000-0000-4000-8000-000000000001";
   const staleId = "35000000-0000-4000-8000-000000000002";
+  const healthScreening = {
+    ...valid[7].health_screening,
+    emergency_contact: { name: "Alex Emergency Contact", phone: "555-010-2222", relationship: "Sibling" },
+  };
   function text(node) {
     if (typeof node === "string" || typeof node === "number") return String(node);
     return [node?.props?.children].flat(Infinity).map((child) => child && typeof child === "object" ? text(child) : typeof child === "string" ? child : "").join("");
+  }
+  function elements(node, type) {
+    if (!node || typeof node !== "object") return [];
+    return [...(node.type === type ? [node] : []), ...[node.props?.children].flat(Infinity).flatMap((child) => elements(child, type))];
   }
   for (const { categories, title, expected } of [
     { categories: { [goalId]: "Competition", [staleId]: "Strength" }, title: "Coach approved squat 205 lb", expected: "Coach approved squat 205 lb · Competition · 205" },
@@ -41,7 +49,7 @@ test("coach intake summary renders goal titles then categories, never bookkeepin
     { categories: { [goalId]: "Strength" }, title: "Strength", expected: "Strength · 205" },
   ]) {
     const db = { from(table) {
-      const data = table === "athlete_intakes" ? { status: "completed", current_step: 7, requested_at: "2026-11-23", answers: { goal_ids: [goalId], goal_categories: categories } }
+      const data = table === "athlete_intakes" ? { status: "completed", current_step: 8, requested_at: "2026-11-23", answers: { goal_ids: [goalId], goal_categories: categories, health_screening: healthScreening } }
         : table === "goals" ? [{ id: goalId, title, target_value: 205, target_date: null }]
         : ["body_metrics", "benchmark_results"].includes(table) ? [] : null;
       const q = { select() { return q; }, eq() { return q; }, order() { return q; }, limit() { return q; }, single() { return q; }, maybeSingle() { return q; }, then(resolve) { return Promise.resolve({ data, error: null }).then(resolve); } };
@@ -56,8 +64,11 @@ test("coach intake summary renders goal titles then categories, never bookkeepin
       "@/components/ui/card": { Card: "section", CardContent: "div", CardHeader: "header", CardTitle: "h2" },
       "@/components/suggestions/request-forms": { RequestIntakeAiForm: "form" },
     });
-    const rendered = text(await IntakeTab({ athleteId: "athlete", units: "lb" }));
+    const tree = await IntakeTab({ athleteId: "athlete", units: "lb" });
+    const rendered = text(tree);
     assert.ok(rendered.includes(expected));
+    assert.ok(rendered.includes("Alex Emergency Contact (Sibling) · 555-010-2222"));
+    assert.ok(elements(tree, "a").some((element) => element.props.href === "tel:5550102222" && element.props.children === "555-010-2222"));
     assert.ok(!rendered.includes(goalId));
     assert.ok(!rendered.includes(staleId));
     assert.ok(!rendered.includes("goal categories"));

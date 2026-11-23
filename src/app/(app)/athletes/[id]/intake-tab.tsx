@@ -64,6 +64,7 @@ export async function IntakeTab({ athleteId, units }: { athleteId: string; units
   });
   const health = answers.health_screening && typeof answers.health_screening === "object" && !Array.isArray(answers.health_screening)
     ? answers.health_screening as Partial<HealthScreening> : null;
+  const emergencyContact = health?.emergency_contact;
   const goalCategories = answers.goal_categories && typeof answers.goal_categories === "object" && !Array.isArray(answers.goal_categories)
     ? answers.goal_categories as Record<string, unknown> : {};
   const preferences = readPreferences(prefs.data);
@@ -94,7 +95,7 @@ export async function IntakeTab({ athleteId, units }: { athleteId: string; units
         <div><dt className="text-sm font-medium">Recent surgery</dt><dd className="whitespace-pre-wrap text-sm text-muted-foreground">{health.recent_surgery ? `Yes${health.surgery_details ? ` · ${health.surgery_details}` : ""}` : "No"}</dd></div>
         <div><dt className="text-sm font-medium">Medications</dt><dd className="whitespace-pre-wrap text-sm text-muted-foreground">{display(health.medications)}</dd></div>
         <div><dt className="text-sm font-medium">Other health conditions</dt><dd className="whitespace-pre-wrap text-sm text-muted-foreground">{display(health.conditions)}</dd></div>
-        <div><dt className="text-sm font-medium">Emergency contact</dt><dd className="text-sm text-muted-foreground">{display(health.emergency_contact)}</dd></div>
+        <div><dt className="text-sm font-medium">Emergency contact</dt><dd className="text-sm text-muted-foreground">{emergencyContact ? <>{emergencyContact.name} ({emergencyContact.relationship}) · <a className="underline underline-offset-4" href={`tel:${emergencyContact.phone.replace(/[^\d+]/g, "")}`}>{emergencyContact.phone}</a></> : "—"}</dd></div>
       </dl> : <p className="text-sm text-muted-foreground">No health screening answers on file.</p>}
     </section>}
     <section className="space-y-2 rounded-lg border p-4">
