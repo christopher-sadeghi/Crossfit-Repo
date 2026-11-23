@@ -11,6 +11,8 @@ test("coach invite email escapes user text and creates an absolute join link", (
     origin: "https://fitcoach.example/",
   });
   assert.match(email.subject, /coach invitation/i);
+  assert.ok(email.text.includes("/join-coach/token"));
+  assert.ok(email.html.includes("/join-coach/token"));
   assert.match(email.text, /https:\/\/fitcoach\.example\/join-coach\/token/);
   assert.match(email.html, /&lt;Coach&gt;/);
   assert.match(email.html, /A&amp;B/);

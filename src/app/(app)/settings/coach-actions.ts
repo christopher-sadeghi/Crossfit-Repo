@@ -32,7 +32,12 @@ export async function createCoachInvite(_: CoachInviteState, formData: FormData)
 
   const origin = siteOrigin();
   const link = `${origin}/join-coach/${invite.token}`;
-  const content = coachInviteEmail({ coachName: viewer.fullName, gymName: viewer.gymName, link, origin });
+  const content = coachInviteEmail({
+    coachName: viewer.fullName,
+    gymName: viewer.gymName,
+    link: `/join-coach/${invite.token}`,
+    origin,
+  });
   const result = await sendEmail({ to: email, ...content });
   revalidatePath("/settings");
   return {
