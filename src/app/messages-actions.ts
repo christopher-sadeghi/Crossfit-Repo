@@ -50,10 +50,19 @@ export async function markThreadRead(athleteId: string): Promise<{ error?: strin
   if (!viewer || viewer.kind === "none") return { error: "Sign in to read messages." };
   const supabase = await createClient();
   try {
-    if (!await messageAthlete(supabase, viewer, athleteId)) return { error: "Conversation unavailable." };
+    const athlete = await messageAthlete(supabase, viewer, athleteId);
+    if (!athlete) return { error: "Conversation unavailable." };
     const { data } = await supabase.auth.getClaims();
     const userId = data?.claims?.sub;
     if (typeof userId !== "string") return { error: "Sign in to read messages." };
+    if (viewer.kind === "coach") {
+      const athleteUserId = athlete.user_id;
+      if (!athleteUserId) return {};
+      const { error } = await supabase.from("messages").update({ read_at: new Date().toISOString() })
+        .eq("athlete_id", athleteId).eq("sender_id", athleteUserId).is("read_at", null);
+      if (error) return { error: "Couldn't mark messages read." };
+      return {};
+    }
     const { error } = await supabase.from("messages").update({ read_at: new Date().toISOString() })
       .eq("athlete_id", athleteId).neq("sender_id", userId).is("read_at", null);
     if (error) return { error: "Couldn't mark messages read." };

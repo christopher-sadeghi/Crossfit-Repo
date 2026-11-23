@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import type { Database } from "@/lib/supabase/database.types";
+import { gymOwnerRow } from "@/lib/gym-owner";
 import type { Units } from "@/lib/units";
 
 export const workoutLibraryEntrySchema = z.object({
@@ -49,10 +50,11 @@ export function ageOn(birthDate: string, asOf: string) {
 
 export async function loadWorkoutContext(supabase: SupabaseClient<Database>, session?: { units: Units }) {
   if (session) return { units: session.units, library: await loadWorkoutMovementLibrary(supabase) };
-  const [{ data: coach, error: coachError }, library] = await Promise.all([
-    supabase.from("coaches").select("units").maybeSingle(),
+  const [{ data: coachRows, error: coachError }, library] = await Promise.all([
+    supabase.from("coaches").select("id, gym_id, units"),
     loadWorkoutMovementLibrary(supabase),
   ]);
+  const coach = gymOwnerRow(coachRows ?? []);
   if (coachError || !coach) throw coachError ?? new Error("Coach not found.");
 
   return { units: coach.units as Units, library };

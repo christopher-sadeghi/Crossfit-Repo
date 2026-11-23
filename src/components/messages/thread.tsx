@@ -28,19 +28,28 @@ export async function MessageThread({ athleteId: requestedAthleteId, requestedLi
   const { data: auth } = await supabase.auth.getClaims();
   const userId = auth?.claims?.sub;
   if (typeof userId !== "string") redirect("/login");
-  const [{ data: coach }, { data: messages, error }, { count: unreadCount, error: unreadError }, { data: coachSuggestions, error: suggestionsError }, today, timeZone] = await Promise.all([
-    supabase.from("coaches").select("full_name").eq("id", athlete.coach_id).maybeSingle(),
+  const unreadQuery = viewer.kind === "coach"
+    ? athlete.user_id
+      ? supabase.from("messages").select("id", { count: "exact", head: true }).eq("athlete_id", athleteId).eq("sender_id", athlete.user_id).is("read_at", null)
+      : Promise.resolve({ count: 0, error: null })
+    : supabase.from("messages").select("id", { count: "exact", head: true }).eq("athlete_id", athleteId).neq("sender_id", userId).is("read_at", null);
+  const coachesQuery = viewer.kind === "coach"
+    ? supabase.from("coaches").select("id, full_name").eq("gym_id", viewer.gymId)
+    : supabase.from("coaches").select("id, full_name").eq("id", athlete.coach_id);
+  const [{ data: coachRows }, { data: messages, error }, { count: unreadCount, error: unreadError }, { data: coachSuggestions, error: suggestionsError }, today, timeZone] = await Promise.all([
+    coachesQuery,
     supabase.from("messages").select("*").eq("athlete_id", athleteId).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(100),
-    supabase.from("messages").select("id", { count: "exact", head: true }).eq("athlete_id", athleteId).neq("sender_id", userId).is("read_at", null),
+    unreadQuery,
     viewer.kind === "coach" ? supabase.from("ai_suggestions").select("*")
-      .eq("coach_id", viewer.id).eq("athlete_id", athleteId)
+      .eq("coach_id", viewer.gymId).eq("athlete_id", athleteId)
       .or("suggestion_type.eq.athlete_adjust_workout,input->>source_message_id.not.is.null")
       .order("created_at", { ascending: true }).order("id") : { data: null, error: null },
     getToday(), getTimeZone(),
   ]);
   if (error || unreadError || suggestionsError) throw new Error("Couldn't load your messages. Please try again.");
   const athleteName = `${athlete.first_name} ${athlete.last_name}`;
-  const coachName = coach?.full_name || "Coach";
+  const coachNames = new Map((coachRows ?? []).map(({ id, full_name }) => [id, full_name || "Coach"] as const));
+  const coachName = coachNames.get(athlete.coach_id) ?? "Coach";
   const rows = [...(messages ?? [])].reverse();
   const visibleMessageIds = new Set(rows.map(({ id }) => id));
   const cardsByMessage = new Map<string, Tables<"ai_suggestions">[]>();
@@ -92,11 +101,14 @@ export async function MessageThread({ athleteId: requestedAthleteId, requestedLi
           const previousDay = index ? dateFormat.format(new Date(rows[index - 1].created_at)) : null;
           const linked = row.link_type && row.link_id ? resolved.get(`${row.link_type}:${row.link_id}`) : null;
           const suggestions = cardsByMessage.get(row.id) ?? [];
+          const senderName = row.sender_id === athlete.user_id
+            ? athleteName
+            : mine ? "You" : coachNames.get(row.sender_id) ?? "Coach";
           return (
             <li key={row.id} className="grid gap-3">
               {day !== previousDay && <p className="text-center text-xs text-muted-foreground">{day === today ? "Today" : dayFormat.format(date)}</p>}
               <article className={`max-w-[90%] rounded-xl px-4 py-3 ${mine ? "justify-self-end bg-primary text-primary-foreground" : "justify-self-start border bg-background"}`}>
-                <p className="mb-1 text-xs opacity-75">{mine ? "You" : row.sender_id === athlete.coach_id ? coachName : athleteName}</p>
+                <p className="mb-1 text-xs opacity-75">{senderName}</p>
                 <p className="whitespace-pre-wrap break-words text-sm [overflow-wrap:anywhere]">{row.body}</p>
                 {row.link_type && (row.link_type === "suggestion" && !isCoach ? <p className="mt-2 text-xs opacity-75">AI suggestion (your coach is reviewing it)</p> : linked ? <Link href={linked.href} className="mt-2 block break-words text-sm underline underline-offset-4">{linked.label}</Link> : <p className="mt-2 text-xs opacity-75">Linked item unavailable</p>)}
                 <p className="mt-2 text-right text-xs opacity-75"><time dateTime={row.created_at}>{timeFormat.format(date)}</time>{mine && row.read_at ? " · Read" : ""}</p>

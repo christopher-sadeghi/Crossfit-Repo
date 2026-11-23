@@ -22,7 +22,7 @@ export async function askAthleteMessageAI(athleteId: string, messageId: string):
     const athlete = await messageAthlete(supabase, viewer, athleteId);
     if (!athlete) return { error: "This athlete message is unavailable." };
     const { data: message } = await supabase.from("messages").select("body, link_type, link_id")
-      .eq("id", messageId).eq("athlete_id", athlete.id).eq("coach_id", viewer.id).neq("sender_id", viewer.id).maybeSingle();
+      .eq("id", messageId).eq("athlete_id", athlete.id).eq("coach_id", viewer.gymId).neq("sender_id", viewer.id).maybeSingle();
     if (!message) return { error: "This athlete message is unavailable." };
     const result = await runChatWithClient(supabase, {
       message: `Help me with this athlete message: ${JSON.stringify(message.body)}${message.link_type === "workout" && message.link_id ? `\nLinked workout ID: ${message.link_id}` : ""}`,

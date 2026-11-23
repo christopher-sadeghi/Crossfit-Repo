@@ -13,6 +13,7 @@ import { getToday } from "@/lib/time-zone";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/units";
 import { cn } from "@/lib/utils";
+import { getCoach } from "@/lib/coach";
 
 import { LEVEL_LABELS } from "./options";
 
@@ -22,6 +23,7 @@ export default async function AthletesPage({ searchParams }: Props) {
   const { q = "", status: rawStatus } = await searchParams;
   const status = rawStatus === "archived" ? "archived" : "active";
   const supabase = await createClient();
+  const coach = await getCoach();
   const todayIso = await getToday();
   const sevenDaysAgo = new Date(`${todayIso}T00:00:00Z`);
   sevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 6);
@@ -29,7 +31,7 @@ export default async function AthletesPage({ searchParams }: Props) {
 
   let query = supabase
     .from("athletes")
-    .select("id, first_name, last_name, email, experience_level, injuries, user_id")
+    .select("id, first_name, last_name, email, experience_level, injuries, user_id, assigned_coach_id")
     .eq("status", status)
     .order("first_name")
     .order("last_name");
@@ -40,7 +42,7 @@ export default async function AthletesPage({ searchParams }: Props) {
     const like = `ilike."%${word}%"`;
     query = query.or(`first_name.${like},last_name.${like},email.${like}`);
   }
-  const [athleteRows, inviteRows, resultRows, checkInAttention] = await Promise.all([
+  const [athleteRows, inviteRows, resultRows, checkInAttention, coachRows] = await Promise.all([
     query,
     supabase
       .from("athlete_invites")
@@ -54,12 +56,14 @@ export default async function AthletesPage({ searchParams }: Props) {
       .lte("performed_on", todayIso)
       .or("pain_notes.not.is.null,rpe.gte.9"),
     loadCheckInAttention(supabase, todayIso),
+    supabase.from("coaches").select("id, full_name").eq("gym_id", coach?.gymId ?? ""),
   ]);
   const error = athleteRows.error ?? inviteRows.error ?? resultRows.error;
   if (error) throw new Error("Couldn't load athletes.", { cause: error });
   const { data: athletes } = athleteRows;
   const { data: invites } = inviteRows;
   const { data: results } = resultRows;
+  const coachNames = new Map((coachRows.data ?? []).map((row) => [row.id, row.full_name || "Coach"]));
   const invitedAthletes = new Set((invites ?? []).map((invite) => invite.athlete_id));
   const attentionResults = new Map<string, typeof results>();
   for (const result of results ?? []) {
@@ -138,6 +142,9 @@ export default async function AthletesPage({ searchParams }: Props) {
                           >
                             Needs attention
                           </Badge>
+                        )}
+                        {a.assigned_coach_id && coachNames.has(a.assigned_coach_id) && (
+                          <span className="text-xs font-normal text-muted-foreground">Coach: {coachNames.get(a.assigned_coach_id)}</span>
                         )}
                       </div>
                     </TableCell>

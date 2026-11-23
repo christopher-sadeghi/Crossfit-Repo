@@ -61,7 +61,7 @@ export async function saveBenchmarkResult(
   if (
     !athlete ||
     !benchmark ||
-    (viewer.kind === "coach" && athlete.coach_id !== viewer.id) ||
+    (viewer.kind === "coach" && athlete.coach_id !== viewer.gymId) ||
     (benchmark.coach_id != null && benchmark.coach_id !== athlete.coach_id)
   )
     return failure(data, "Athlete or benchmark not available.");
@@ -138,8 +138,8 @@ export async function saveCustomBenchmark(
   data: FormData,
 ): Promise<FormState> {
   const viewer = await getViewer();
-  if (viewer?.kind !== "coach")
-    return failure(data, "Only coaches manage benchmarks.");
+  if (viewer?.kind !== "coach" || viewer.role !== "owner")
+    return failure(data, "Only the gym owner can manage benchmarks.");
   const parsed = customSchema.safeParse(Object.fromEntries(data));
   if (!parsed.success) return failure(data, parsed.error.issues[0].message);
   const { id, ...input } = parsed.data;
@@ -164,10 +164,10 @@ export async function saveCustomBenchmark(
         .from("benchmarks")
         .update(row)
         .eq("id", id)
-        .eq("coach_id", viewer.id)
+        .eq("coach_id", viewer.gymId)
         .select("id")
         .maybeSingle()
-    : await supabase.from("benchmarks").insert(row).select("id").single();
+    : await supabase.from("benchmarks").insert({ ...row, coach_id: viewer.gymId }).select("id").single();
   if (result.error || !result.data)
     return failure(data, "Could not save benchmark. Check the name is unique.");
   refresh();
@@ -179,14 +179,14 @@ export async function deleteCustomBenchmark(
 ): Promise<FormState> {
   const viewer = await getViewer();
   const id = z.uuid().safeParse(data.get("id"));
-  if (viewer?.kind !== "coach" || !id.success)
+  if (viewer?.kind !== "coach" || viewer.role !== "owner" || !id.success)
     return failure(data, "Invalid benchmark.");
   const supabase = await createClient();
   const { data: deleted, error } = await supabase
     .from("benchmarks")
     .delete()
     .eq("id", id.data)
-    .eq("coach_id", viewer.id)
+    .eq("coach_id", viewer.gymId)
     .select("id")
     .maybeSingle();
   if (error || !deleted)
@@ -199,8 +199,8 @@ export async function saveRetestInterval(
   data: FormData,
 ): Promise<FormState> {
   const viewer = await getViewer();
-  if (viewer?.kind !== "coach")
-    return failure(data, "Only coaches manage retest intervals.");
+  if (viewer?.kind !== "coach" || viewer.role !== "owner")
+    return failure(data, "Only the gym owner can manage retest intervals.");
   const parsed = z
     .object({
       benchmark_id: z.uuid(),
@@ -215,7 +215,7 @@ export async function saveRetestInterval(
   const supabase = await createClient();
   const { error } = await supabase
     .from("benchmark_settings")
-    .upsert({ ...parsed.data, coach_id: viewer.id });
+    .upsert({ ...parsed.data, coach_id: viewer.gymId });
   if (error) return failure(data, "Could not save retest interval.");
   refresh();
   return { message: "Retest interval saved." };

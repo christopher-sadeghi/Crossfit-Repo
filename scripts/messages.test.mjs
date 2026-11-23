@@ -33,10 +33,11 @@ function loader(mocks = {}) {
 
 const athleteId = "29000000-0000-4000-8000-000000000011";
 const coachId = "29000000-0000-4000-8000-000000000001";
+const staffCoachId = "29000000-0000-4000-8000-000000000002";
 const userId = "29000000-0000-4000-8000-000000000003";
 const itemId = "29000000-0000-4000-8000-000000000021";
 const athlete = { id: athleteId, coach_id: coachId, user_id: userId, first_name: "Sam", last_name: "Athlete", status: "active" };
-const coach = { kind: "coach", id: coachId };
+const coach = { kind: "coach", id: coachId, gymId: coachId, role: "owner" };
 
 function clientFixture(tables = {}, queryError = null) {
   const calls = [];
@@ -93,7 +94,7 @@ test("link validation enforces athlete ownership, assignment and coach-only sugg
   const { validateMessageLink, messageAthlete } = loader()("src/lib/messages.ts");
   const { client } = clientFixture({ athletes: [athlete], workouts: [{ id: itemId, athlete_id: athleteId }], workout_results: [{ id: itemId, athlete_id: "other" }], ai_suggestions: [{ id: itemId, athlete_id: athleteId }] });
   assert.equal((await messageAthlete(client, coach, athleteId)).id, athleteId);
-  assert.equal(await messageAthlete(client, { kind: "coach", id: "stranger" }, athleteId), null);
+  assert.equal(await messageAthlete(client, { kind: "coach", id: "stranger", gymId: "stranger", role: "coach" }, athleteId), null);
   assert.equal(await messageAthlete(client, { kind: "athlete", athleteId: "other" }, athleteId), null);
   assert.equal(await validateMessageLink(client, athleteId, { type: "workout", id: itemId }, false), true);
   assert.equal(await validateMessageLink(client, athleteId, { type: "result", id: itemId }, true), false);
@@ -137,7 +138,12 @@ function form(body = "Hello Sam", link = "") {
 }
 
 test("send action inserts with current client and notifies once, and read action updates receipts", async () => {
-  const { actions, calls, notifications } = actionsFixture();
+  const messages = [
+    { athlete_id: athleteId, sender_id: userId, read_at: null },
+    { athlete_id: athleteId, sender_id: coachId, read_at: null },
+    { athlete_id: athleteId, sender_id: "staff-coach", read_at: null },
+  ];
+  const { actions, calls, notifications } = actionsFixture({ tables: { messages } });
   const state = await actions.sendMessage(athleteId, {}, form());
   assert.equal(state.sentId, itemId);
   assert.equal(calls[0].insert.athlete_id, athleteId);
@@ -147,13 +153,78 @@ test("send action inserts with current client and notifies once, and read action
   assert.equal(notifications[0][3], "coach");
   assert.deepEqual(await actions.markThreadRead(athleteId), {});
   assert.ok(calls[1].update.read_at);
+  assert.ok(messages[0].read_at);
+  assert.equal(messages[1].read_at, null);
+  assert.equal(messages[2].read_at, null);
+});
+
+test("coach does not mark messages read before an athlete has an account", async () => {
+  const messages = [{ athlete_id: athleteId, sender_id: coachId, read_at: null }];
+  const { actions, calls } = actionsFixture({
+    tables: { athletes: [{ ...athlete, user_id: null }], messages },
+  });
+  assert.deepEqual(await actions.markThreadRead(athleteId), {});
+  assert.ok(!calls.some((call) => call.table === "messages" && call.update));
+  assert.equal(messages[0].read_at, null);
+});
+
+test("athlete read marking still selects coach messages", async () => {
+  const messages = [
+    { athlete_id: athleteId, sender_id: userId, read_at: null },
+    { athlete_id: athleteId, sender_id: coachId, read_at: null },
+  ];
+  const { actions } = actionsFixture({
+    viewer: { kind: "athlete", athleteId },
+    tables: { messages },
+  });
+  assert.deepEqual(await actions.markThreadRead(athleteId), {});
+  assert.equal(messages[0].read_at, null);
+  assert.ok(messages[1].read_at);
+});
+
+test("coach unread badge counts only athlete senders while athlete behavior stays unchanged", async () => {
+  const coachMessages = [
+    { sender_id: userId, read_at: null },
+    { sender_id: "another-athlete", read_at: null },
+    { sender_id: coachId, read_at: null },
+    { sender_id: userId, read_at: "2026-11-21T10:00:00Z" },
+  ];
+  const { client: coachClient } = clientFixture({
+    athletes: [
+      { coach_id: coachId, user_id: userId },
+      { coach_id: coachId, user_id: "another-athlete" },
+      { coach_id: coachId, user_id: null },
+    ],
+    messages: coachMessages,
+  });
+  const loadCoachActions = loader({
+    "next/cache": { revalidatePath() {} },
+    "@/lib/supabase/server": { createClient: async () => coachClient },
+    "@/lib/viewer": { getViewer: async () => coach },
+  });
+  const coachFeed = await loadCoachActions("src/app/notification-actions.ts").getNotifications();
+  assert.equal(coachFeed.unreadMessages, 2);
+
+  const { client: athleteClient } = clientFixture({
+    messages: [
+      { sender_id: userId, read_at: null },
+      { sender_id: coachId, read_at: null },
+    ],
+  });
+  const loadAthleteActions = loader({
+    "next/cache": { revalidatePath() {} },
+    "@/lib/supabase/server": { createClient: async () => athleteClient },
+    "@/lib/viewer": { getViewer: async () => ({ kind: "athlete", athleteId }) },
+  });
+  const athleteFeed = await loadAthleteActions("src/app/notification-actions.ts").getNotifications();
+  assert.equal(athleteFeed.unreadMessages, 1);
 });
 
 test("send rejects empty, oversized, forged links, strangers and database failures without notifying", async () => {
   for (const [options, data] of [
     [{}, form("   ")], [{}, form("x".repeat(2001))], [{}, form("Hello", "bad")],
     [{}, form("Hello", `result:${itemId}`)], [{ viewer: null }, form()],
-    [{ viewer: { kind: "coach", id: "stranger" } }, form()], [{ error: { message: "offline" } }, form()],
+    [{ viewer: { kind: "coach", id: "stranger", gymId: "stranger", role: "coach" } }, form()], [{ error: { message: "offline" } }, form()],
   ]) {
     const { actions, notifications } = actionsFixture(options);
     assert.ok((await actions.sendMessage(athleteId, {}, data)).error);
@@ -270,6 +341,38 @@ test("coach conversation activity includes applied athlete adjustments and flags
   assert.deepEqual(rows.map((row) => row.some((node) => node.props.children === "Adjustment to review")), [true, false, false]);
   assert.ok(rows[0].some((node) => node.props.children === "Athlete adjusted a workout"));
   assert.ok(rows[2].some((node) => node.props["aria-label"] === "1 unread messages"));
+});
+
+test("message labels identify gym coaches for coaches and fall back for hidden staff rows", async () => {
+  const coaches = [
+    { id: coachId, gym_id: coachId, full_name: "Owner Coach" },
+    { id: staffCoachId, gym_id: coachId, full_name: "Staff Coach" },
+  ];
+  const messages = [
+    { id: "athlete", athlete_id: athleteId, sender_id: userId, body: "Athlete", created_at: "2026-11-21T10:00:00Z" },
+    { id: "owner", athlete_id: athleteId, sender_id: coachId, body: "Owner", created_at: "2026-11-21T10:01:00Z" },
+    { id: "staff", athlete_id: athleteId, sender_id: staffCoachId, body: "Staff", created_at: "2026-11-21T10:02:00Z" },
+    { id: "unknown", athlete_id: athleteId, sender_id: "unknown-coach", body: "Unknown", created_at: "2026-11-21T10:03:00Z" },
+  ];
+
+  for (const { viewer, user, expected } of [
+    { viewer: { kind: "coach", id: staffCoachId, gymId: coachId, role: "coach" }, user: staffCoachId, expected: ["Sam Athlete", "Owner Coach", "You", "Coach"] },
+    { viewer: { kind: "athlete", athleteId }, user: userId, expected: ["Sam Athlete", "Owner Coach", "Coach", "Coach"] },
+  ]) {
+    const { client } = clientFixture({ athletes: [athlete], coaches, messages });
+    client.auth.getClaims = async () => ({ data: { claims: { sub: user } } });
+    const { MessageThread } = loader({
+      "@/lib/supabase/server": { createClient: async () => client },
+      "@/lib/viewer": { getViewer: async () => viewer },
+      "@/lib/time-zone": { getToday: async () => "2026-11-21", getTimeZone: async () => "UTC" },
+      "@/lib/messages": { messageAthlete: async () => athlete, resolveMessageLinks: async () => new Map(), messageLinkOptions: async () => [] },
+      "@/components/messages/composer": { MessageComposer: "composer" },
+      "@/components/messages/thread-live": { ThreadLive: "thread-live" },
+      ...threadCardMocks,
+    })("src/components/messages/thread.tsx");
+    const nodes = treeNodes(await MessageThread(viewer.kind === "coach" ? { athleteId } : {}));
+    assert.deepEqual(nodes.filter((node) => node.type === "p" && node.props.className === "mb-1 text-xs opacity-75").map((node) => node.props.children), expected);
+  }
 });
 
 test("athlete suggestion attachments are neutral unlinked text; coach picker warns suggestions are private", async () => {

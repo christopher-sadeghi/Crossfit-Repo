@@ -14,6 +14,6 @@ export async function getActivityActor(athleteId: string) {
     if (!data) return null;
     return { supabase, coachId: viewer.coachId, units: viewer.units };
   }
-  const { data } = await supabase.from("athletes").select("id").eq("id", athleteId).eq("coach_id", viewer.id).maybeSingle();
-  return data ? { supabase, coachId: viewer.id, units: viewer.units } : null;
+  const { data } = await supabase.from("athletes").select("id").eq("id", athleteId).eq("coach_id", viewer.gymId).maybeSingle();
+  return data ? { supabase, coachId: viewer.gymId, units: viewer.units } : null;
 }

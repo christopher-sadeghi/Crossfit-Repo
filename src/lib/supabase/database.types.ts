@@ -583,6 +583,7 @@ export type Database = {
       athletes: {
         Row: {
           assistant_rules: string | null;
+          assigned_coach_id: string | null;
           birth_date: string | null;
           coach_id: string;
           created_at: string;
@@ -602,6 +603,7 @@ export type Database = {
         ComputedFields: never;
         Insert: {
           assistant_rules?: string | null;
+          assigned_coach_id?: string | null;
           birth_date?: string | null;
           coach_id?: string;
           created_at?: string;
@@ -620,6 +622,7 @@ export type Database = {
         };
         Update: {
           assistant_rules?: string | null;
+          assigned_coach_id?: string | null;
           birth_date?: string | null;
           coach_id?: string;
           created_at?: string;
@@ -647,6 +650,13 @@ export type Database = {
           {
             foreignKeyName: "athletes_coach_id_fkey";
             columns: ["coach_id"];
+            isOneToOne: false;
+            referencedRelation: "coaches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "athletes_assigned_coach_id_fkey";
+            columns: ["assigned_coach_id"];
             isOneToOne: false;
             referencedRelation: "coaches";
             referencedColumns: ["id"];
@@ -867,6 +877,7 @@ export type Database = {
           assistant_recovery: boolean;
           athlete_ai_daily_limit: number;
           drift_days: number;
+          gym_id: string;
           load_warning_ratio: number;
           created_at: string;
           full_name: string | null;
@@ -883,6 +894,7 @@ export type Database = {
           assistant_recovery?: boolean;
           athlete_ai_daily_limit?: number;
           drift_days?: number;
+          gym_id?: string;
           load_warning_ratio?: number;
           created_at?: string;
           full_name?: string | null;
@@ -898,6 +910,7 @@ export type Database = {
           assistant_recovery?: boolean;
           athlete_ai_daily_limit?: number;
           drift_days?: number;
+          gym_id?: string;
           load_warning_ratio?: number;
           created_at?: string;
           full_name?: string | null;
@@ -906,7 +919,63 @@ export type Database = {
           units?: Database["public"]["Enums"]["weight_unit"];
           updated_at?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "coaches_gym_id_fkey";
+            columns: ["gym_id"];
+            isOneToOne: false;
+            referencedRelation: "coaches";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      coach_invites: {
+        Row: {
+          accepted_at: string | null;
+          created_at: string | null;
+          email: string;
+          gym_id: string;
+          id: string;
+          invited_by: string | null;
+          revoked_at: string | null;
+          token: string;
+        };
+        Insert: {
+          accepted_at?: string | null;
+          created_at?: string | null;
+          email: string;
+          gym_id: string;
+          id?: string;
+          invited_by?: string | null;
+          revoked_at?: string | null;
+          token?: string;
+        };
+        Update: {
+          accepted_at?: string | null;
+          created_at?: string | null;
+          email?: string;
+          gym_id?: string;
+          id?: string;
+          invited_by?: string | null;
+          revoked_at?: string | null;
+          token?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "coach_invites_gym_id_fkey";
+            columns: ["gym_id"];
+            isOneToOne: false;
+            referencedRelation: "coaches";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "coach_invites_invited_by_fkey";
+            columns: ["invited_by"];
+            isOneToOne: false;
+            referencedRelation: "coaches";
+            referencedColumns: ["id"];
+          }
+        ];
       };
       attendance: {
         Row: {
@@ -1712,6 +1781,10 @@ export type Database = {
     };
     Functions: {
       complete_athlete_ai_card: { Args: { p_message_id: string; p_card_index: number; p_action: string; p_values: Json }; Returns: { ref_id: string; already_completed: boolean }[] };
+      current_gym_id: { Args: Record<PropertyKey, never>; Returns: string };
+      get_coach_invite: { Args: { p_token: string }; Returns: { gym_name: string | null; email: string; usable: boolean }[] };
+      is_gym_owner: { Args: Record<PropertyKey, never>; Returns: boolean };
+      remove_gym_coach: { Args: { p_coach_id: string }; Returns: undefined };
       athlete_assistant_settings: {
         Args: Record<PropertyKey, never>;
         Returns: { coach_rules: string | null; athlete_rules: string | null; assistant_training: boolean; assistant_nutrition: boolean; assistant_recovery: boolean; athlete_ai_daily_limit: number; drift_days: number }[];

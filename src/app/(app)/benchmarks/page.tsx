@@ -28,12 +28,12 @@ export default async function BenchmarkLibraryPage() {
     supabase
       .from("benchmark_settings")
       .select("benchmark_id, retest_weeks")
-      .eq("coach_id", viewer.id),
+      .eq("coach_id", viewer.gymId),
     supabase.from("movements").select("id, name").order("name"),
     supabase
       .from("athletes")
       .select("id, first_name, last_name")
-      .eq("coach_id", viewer.id)
+      .eq("coach_id", viewer.gymId)
       .eq("status", "active")
       .order("first_name"),
   ]);
@@ -61,7 +61,7 @@ export default async function BenchmarkLibraryPage() {
           rhythm for your athletes.
         </p>
       </header>
-      <Card>
+      {viewer.role === "owner" && <Card>
         <CardHeader>
           <CardTitle>Due for retest</CardTitle>
         </CardHeader>
@@ -93,15 +93,15 @@ export default async function BenchmarkLibraryPage() {
             </p>
           )}
         </CardContent>
-      </Card>
-      <Card>
+      </Card>}
+      {viewer.role === "owner" && <Card>
         <CardHeader>
           <CardTitle>Add custom benchmark</CardTitle>
         </CardHeader>
         <CardContent>
           <CustomBenchmarkForm movements={movements.data ?? []} />
         </CardContent>
-      </Card>
+      </Card>}
       {(
         [
           ["girl", "Girls"],
@@ -132,7 +132,7 @@ export default async function BenchmarkLibraryPage() {
                     <p className="whitespace-pre-wrap text-sm">
                       {b.description || "No description."}
                     </p>
-                    <BenchmarkActionForm
+                    {viewer.role === "owner" ? <BenchmarkActionForm
                       action={saveRetestInterval}
                       label="Save interval"
                     >
@@ -156,8 +156,10 @@ export default async function BenchmarkLibraryPage() {
                         1–104 weeks. Clear for no reminder. Applies to all your
                         athletes.
                       </p>
-                    </BenchmarkActionForm>
-                    {b.coach_id === viewer.id && (
+                    </BenchmarkActionForm> : <p className="text-xs text-muted-foreground">
+                      Retest every {settings.data?.find((s) => s.benchmark_id === b.id)?.retest_weeks ?? "—"} weeks
+                    </p>}
+                    {viewer.role === "owner" && b.coach_id === viewer.gymId && (
                       <details>
                         <summary className="cursor-pointer text-sm font-medium">
                           Edit or delete custom benchmark

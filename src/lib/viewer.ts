@@ -6,6 +6,8 @@ import type { Units } from "@/lib/units";
 export type CoachViewer = {
   kind: "coach";
   id: string;
+  gymId: string;
+  role: "owner" | "coach";
   email: string;
   fullName: string;
   gymName: string;
@@ -32,18 +34,25 @@ export const getViewer = cache(async (): Promise<Viewer> => {
   const email = (claims.email as string | undefined) ?? "";
   const { data: coach } = await supabase
     .from("coaches")
-    .select("id, full_name, gym_name, units")
+    .select("id, gym_id, full_name")
     .eq("id", userId)
     .maybeSingle();
 
   if (coach) {
+    const { data: owner } = await supabase
+      .from("coaches")
+      .select("gym_name, units")
+      .eq("id", coach.gym_id)
+      .maybeSingle();
     return {
       kind: "coach",
       id: coach.id,
+      gymId: coach.gym_id,
+      role: coach.gym_id === coach.id ? "owner" : "coach",
       email,
       fullName: coach.full_name ?? "",
-      gymName: coach.gym_name ?? "",
-      units: coach.units,
+      gymName: owner?.gym_name ?? "",
+      units: owner?.units ?? "lb",
     };
   }
 

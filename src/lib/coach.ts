@@ -12,17 +12,25 @@ export const getCoach = cache(async () => {
 
   const { data: coach } = await supabase
     .from("coaches")
-    .select("id, full_name, gym_name, units, drift_days, load_warning_ratio")
+    .select("id, gym_id, full_name")
     .eq("id", userId)
+    .maybeSingle();
+  if (!coach) return null;
+  const { data: owner } = await supabase
+    .from("coaches")
+    .select("gym_name, units, drift_days, load_warning_ratio")
+    .eq("id", coach.gym_id)
     .maybeSingle();
 
   return {
     id: userId,
+    gymId: coach.gym_id,
+    role: coach.gym_id === coach.id ? "owner" as const : "coach" as const,
     email: (claims.claims.email as string | undefined) ?? "",
     fullName: coach?.full_name ?? "",
-    gymName: coach?.gym_name ?? "",
-    units: coach?.units ?? "lb",
-    driftDays: coach?.drift_days ?? 5,
-    loadWarningRatio: coach?.load_warning_ratio ?? DEFAULT_LOAD_WARNING_RATIO,
+    gymName: owner?.gym_name ?? "",
+    units: owner?.units ?? "lb",
+    driftDays: owner?.drift_days ?? 5,
+    loadWarningRatio: owner?.load_warning_ratio ?? DEFAULT_LOAD_WARNING_RATIO,
   };
 });

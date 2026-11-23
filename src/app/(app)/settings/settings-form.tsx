@@ -15,6 +15,7 @@ type Props = {
   units: "lb" | "kg";
   driftDays: number;
   loadWarningRatio: number;
+  role: "owner" | "coach";
 };
 
 const UNIT_OPTIONS = [
@@ -22,7 +23,7 @@ const UNIT_OPTIONS = [
   { value: "kg", label: "Kilograms (kg)" },
 ] as const;
 
-export function SettingsForm({ fullName, gymName, units, driftDays, loadWarningRatio }: Props) {
+export function SettingsForm({ fullName, gymName, units, driftDays, loadWarningRatio, role }: Props) {
   const [state, formAction, pending] = useActionState(updateProfile, {});
   const values = state.values;
 
@@ -32,11 +33,11 @@ export function SettingsForm({ fullName, gymName, units, driftDays, loadWarningR
         <Label htmlFor="full_name">Your name</Label>
         <Input id="full_name" name="full_name" defaultValue={values?.full_name ?? fullName} required />
       </div>
-      <div className="grid gap-2">
+      {role === "owner" && <div className="grid gap-2">
         <Label htmlFor="gym_name">Gym name</Label>
         <Input id="gym_name" name="gym_name" defaultValue={values?.gym_name ?? gymName} placeholder="e.g. CrossFit Riverside" />
-      </div>
-      <fieldset className="grid gap-2">
+      </div>}
+      {role === "owner" && <fieldset className="grid gap-2">
         <legend className="mb-2 text-sm font-medium">Weight units</legend>
         <div className="flex gap-3">
           {UNIT_OPTIONS.map((o) => (
@@ -49,17 +50,17 @@ export function SettingsForm({ fullName, gymName, units, driftDays, loadWarningR
             </label>
           ))}
         </div>
-      </fieldset>
-      <div className="grid gap-2">
+      </fieldset>}
+      {role === "owner" && <div className="grid gap-2">
         <Label htmlFor="drift_days">Flag athletes as drifting after X days with no activity</Label>
         <Input id="drift_days" name="drift_days" type="number" min={1} max={60} step={1} required defaultValue={values?.drift_days ?? driftDays} />
         <p className="text-xs text-muted-foreground">Choose 1–60 days. A drop in completion can also flag an athlete.</p>
-      </div>
-      <div className="grid gap-2">
+      </div>}
+      {role === "owner" && <div className="grid gap-2">
         <Label htmlFor="load_warning_ratio">Training load warning ratio</Label>
         <Input id="load_warning_ratio" name="load_warning_ratio" type="number" min={0} step="any" required defaultValue={values?.load_warning_ratio ?? loadWarningRatio} />
         <p className="text-xs text-muted-foreground">Warn when last week&apos;s load is above this multiple of the 28-day weekly average and reaches {MIN_WARNING_LOAD} load. Default: {DEFAULT_LOAD_WARNING_RATIO}×.</p>
-      </div>
+      </div>}
       {state.error && (
         <p role="alert" className="text-sm text-destructive">
           {state.error}

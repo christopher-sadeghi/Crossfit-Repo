@@ -32,6 +32,7 @@ import { DEFAULT_LOAD_WARNING_RATIO, gymSessionLoad } from "@/lib/training-load"
 import { loadActivities, loadTrainingLoad } from "@/lib/training-load-data";
 import { formatDate, formatScore, formatWeight, type Units } from "@/lib/units";
 import { loadWorkoutLibrary } from "@/lib/workout-library";
+import { coachRecipientId } from "@/lib/coach-recipient";
 
 import { ArchiveButton } from "../archive-button";
 import { CheckInsTab } from "./check-ins-tab";
@@ -45,6 +46,7 @@ import { addDays, monday } from "./calendar-dates";
 import { LEVEL_LABELS } from "../options";
 import { AthleteTabNav, type AthleteTabGroup } from "./athlete-tab-nav";
 import { AssistantTab } from "./assistant-tab";
+import { AssignedCoachForm } from "./assigned-coach-form";
 
 const TAB_GROUPS = [
   { label: "Overview", tabs: [{ value: "overview", label: "Overview" }, { value: "intake", label: "Intake" }, { value: "ai", label: "AI History" }, { value: "assistant", label: "AI chat" }] },
@@ -91,6 +93,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
     scheduleItems,
     inviteRes,
     groupProgramsRes,
+    coachesRes,
     athleteAssignmentsRes,
     journalRes,
     library,
@@ -130,6 +133,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
       .is("revoked_at", null)
       .maybeSingle(),
     supabase.from("programs").select("id, name").is("athlete_id", null).order("name"),
+    supabase.from("coaches").select("id, full_name").eq("gym_id", coach?.gymId ?? "").order("full_name"),
     supabase.from("program_assignments").select("program_id, programs(id, name, athlete_id)").eq("athlete_id", id),
     supabase
       .from("athlete_journal_entries")
@@ -178,6 +182,8 @@ export default async function AthletePage({ params, searchParams }: Props) {
     ...program,
     assigned: assignedProgramIds.has(program.id),
   }));
+  const effectiveCoachId = coachRecipientId({ coach_id: athlete.coach_id, assigned_coach_id: athlete.assigned_coach_id });
+  const effectiveCoachName = coachesRes.data?.find((row) => row.id === effectiveCoachId)?.full_name || "Gym owner";
 
   const days = new Map<string, { calories: number; protein: number; carbs: number; fat: number }>();
   for (const f of foodRes.data ?? []) {
@@ -224,6 +230,17 @@ export default async function AthletePage({ params, searchParams }: Props) {
       >
 
         <TabsContent value="overview" className="grid gap-4 md:grid-cols-3">
+          <Card className="md:col-span-3">
+            <CardHeader><CardTitle>Assigned coach</CardTitle></CardHeader>
+            <CardContent>
+              <AssignedCoachForm
+                athleteId={athlete.id}
+                assignedCoachId={athlete.assigned_coach_id}
+                coaches={(coachesRes.data ?? []).map((row) => ({ id: row.id, fullName: row.full_name || "Coach" }))}
+              />
+              <p className="mt-2 text-xs text-muted-foreground">Coach alerts go to {effectiveCoachName}.</p>
+            </CardContent>
+          </Card>
           {attention.flagged && (
             <Card className="border-amber-300/70 md:col-span-3">
               <CardHeader className="pb-2">

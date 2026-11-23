@@ -26,8 +26,8 @@ export async function requestMovementGuide(_: FormState, form: FormData): Promis
   if (viewer?.kind !== "coach" || !id.success) return { error: "Movement not found." };
   const supabase = await createClient();
   const [guide, pending] = await Promise.all([
-    supabase.from("movement_guides").select("*").eq("coach_id", viewer.id).eq("movement_id", id.data).maybeSingle(),
-    supabase.from("ai_suggestions").select("id").eq("coach_id", viewer.id)
+    supabase.from("movement_guides").select("*").eq("coach_id", viewer.gymId).eq("movement_id", id.data).maybeSingle(),
+    supabase.from("ai_suggestions").select("id").eq("coach_id", viewer.gymId)
       .eq("suggestion_type", "movement_guide").eq("status", "pending").eq("input->>movement_id", id.data).limit(1),
   ]);
   if (guide.error || pending.error) return { error: "Couldn't check existing how-to suggestions. Please try again." };
@@ -54,7 +54,7 @@ export async function saveMovementGuide(_: FormState, form: FormData): Promise<F
   const harder = uuid.nullable().safeParse(form.get("harder_movement_id") || null);
   if (!easier.success || !harder.success) return failure(form, "Choose a movement from your library.");
   const supabase = await createClient();
-  const source = await loadMovementDemoSource(supabase, id.data, viewer.id).catch(() => null);
+  const source = await loadMovementDemoSource(supabase, id.data, viewer.gymId).catch(() => null);
   if (!source) return failure(form, "Couldn't find this movement.");
   const { movement, guide } = source;
   if (!canSaveDemoCues(text.data.cues, guide?.cues)) return failure(form, "Enter 3–5 coaching cues or leave your existing cues unchanged.");
@@ -74,13 +74,13 @@ export async function saveMovementGuide(_: FormState, form: FormData): Promise<F
   }
   const storage = supabase.storage.from(MOVEMENT_DEMO_BUCKET);
   if (uploaded) {
-    const prefix = `${viewer.id}/${id.data}/`;
+    const prefix = `${viewer.gymId}/${id.data}/`;
     if (!uploaded.startsWith(prefix) || !/^[a-f0-9-]+\.(mp4|webm)$/.test(uploaded.slice(prefix.length)) ||
       (await storage.info(uploaded)).error) return failure(form, "Couldn't find the uploaded clip. Upload it again.");
   }
   const clipPath = uploaded || (keepClip ? currentClip : null);
   const { error } = await supabase.from("movement_guides").upsert({
-    coach_id: viewer.id, movement_id: id.data, video_url: rawVideo || null, clip_path: clipPath,
+    coach_id: viewer.gymId, movement_id: id.data, video_url: rawVideo || null, clip_path: clipPath,
     easier_movement_id: easier.data, harder_movement_id: harder.data, ...text.data,
   }, { onConflict: "coach_id,movement_id" });
   if (error?.code === "23514" || error?.code === "23503") return failure(form, "Choose variations that are in your library.");
@@ -97,7 +97,7 @@ export async function decideMovementGuide(_: FormState, form: FormData): Promise
   if (viewer?.kind !== "coach" || !id.success || !movementId.success) return failure(form, "Suggestion not found.");
   const supabase = await createClient();
   const { data: suggestion, error } = await supabase.from("ai_suggestions").select("*")
-    .eq("id", id.data).eq("coach_id", viewer.id).eq("suggestion_type", "movement_guide")
+    .eq("id", id.data).eq("coach_id", viewer.gymId).eq("suggestion_type", "movement_guide")
     .eq("input->>movement_id", movementId.data).eq("status", "pending").maybeSingle();
   if (error || !suggestion) return failure(form, "This suggestion was already decided or could not be found.");
   if (form.get("decision") === "reject") {

@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import type { Database } from "./database.types";
 
-const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/auth", "/join", "/api/foods"];
+const PUBLIC_PATHS = ["/login", "/signup", "/forgot-password", "/auth", "/join", "/join-coach", "/api/foods"];
 const LOGGED_OUT_ONLY_PATHS = ["/login", "/signup"];
 
 function matches(path: string, prefixes: string[]) {

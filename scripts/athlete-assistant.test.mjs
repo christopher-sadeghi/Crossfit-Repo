@@ -480,7 +480,7 @@ test("coach transcript and settings actions guard roles, validate inputs and sco
   assert.match((await actions.saveAssistantSettings({}, form)).error, /signed in as an athlete/);
   assert.match((await actions.saveAthleteAssistantRules(athleteId, {}, form)).error, /signed in as an athlete/);
   assert.deepEqual(operations, []);
-  currentViewer = { kind: "coach", id: coachId };
+  currentViewer = { kind: "coach", id: coachId, gymId: coachId, role: "owner" };
   assert.deepEqual(await actions.loadAthleteAssistantTranscript(athleteId), { messages: [] });
   assert.ok(operations.some((row) => row.join() === "athlete_ai_messages,eq,coach_id," + coachId));
   assert.ok(operations.some((row) => row.join() === "athlete_ai_messages,eq,athlete_id," + athleteId));

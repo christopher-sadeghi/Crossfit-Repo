@@ -10,7 +10,7 @@ const root = path.resolve(import.meta.dirname, "..");
 const athleteId = "32000000-0000-4000-8000-000000000011";
 const benchmarkId = "32000000-0000-4000-8000-000000000021";
 const userId = "32000000-0000-4000-8000-000000000001";
-function fixture({ kind = "coach", workoutType = "strength", benchmarkKind = "lift", dbError = false, isPr = true } = {}) {
+function fixture({ kind = "coach", role = kind === "coach" ? "owner" : undefined, workoutType = "strength", benchmarkKind = "lift", dbError = false, isPr = true } = {}) {
   const writes = [];
   const filters = [];
   const invalidations = [];
@@ -32,7 +32,7 @@ function fixture({ kind = "coach", workoutType = "strength", benchmarkKind = "li
   };
   const overrides = {
     "next/cache": { revalidatePath: (...args) => invalidations.push(args) },
-    "@/lib/viewer": { getViewer: async () => kind == null ? null : { kind, id: userId, athleteId, coachId: userId, units: "lb" } },
+    "@/lib/viewer": { getViewer: async () => kind == null ? null : { kind, id: userId, gymId: userId, role, athleteId, coachId: userId, units: "lb" } },
     "@/lib/time-zone": { getToday: async () => "2026-11-21" },
     "@/lib/supabase/server": { createClient: async () => client },
     "@/lib/benchmarks": { loadAthleteBenchmarks: async () => [{ id: benchmarkId, attempts: [{ id: benchmarkId, source: "direct", isPr }] }] },
@@ -102,6 +102,8 @@ test("custom benchmark mutations and intervals validate role, lift type and rang
   custom.set("workout_type", "amrap");
   assert.ok((await f.actions.saveCustomBenchmark({}, custom)).error);
   assert.ok((await fixture({ kind: "athlete" }).actions.saveCustomBenchmark({}, custom)).error);
+  assert.ok((await fixture({ role: "coach" }).actions.saveCustomBenchmark({}, custom)).error);
+  assert.ok((await fixture({ role: "coach" }).actions.saveRetestInterval({}, form({ retest_weeks: "6" }))).error);
   for (const interval of ["0", "105", "1.5"]) assert.ok((await f.actions.saveRetestInterval({}, form({ retest_weeks: interval }))).error);
   assert.ok((await f.actions.saveRetestInterval({}, form({ retest_weeks: "" }))).message);
   assert.equal(f.writes.at(-1).retest_weeks, null);

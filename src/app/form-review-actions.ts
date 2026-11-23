@@ -55,7 +55,7 @@ async function reviewAccess(reviewId: string, coachOnly = false) {
   const { data: review, error } = await supabase.from("form_reviews")
     .select("id, coach_id, athlete_id, storage_path, duration_seconds, movement_id, status").eq("id", reviewId).maybeSingle();
   if (error || !review) throw new Error("Couldn't find that form check. Refresh and try again.");
-  if (viewer.kind === "coach" ? review.coach_id !== viewer.id : review.athlete_id !== viewer.athleteId) throw new Error("You can't access this form check.");
+  if (viewer.kind === "coach" ? review.coach_id !== viewer.gymId : review.athlete_id !== viewer.athleteId) throw new Error("You can't access this form check.");
   return { supabase, viewer, review: { ...review, duration_seconds: Number(review.duration_seconds) } };
 }
 

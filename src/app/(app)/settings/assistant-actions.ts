@@ -17,7 +17,7 @@ export async function loadAthleteAssistantTranscript(athleteId: string) {
   const messages: (Tables<"athlete_ai_messages"> & { actions: { card_index: number; action: string; ref_id: string }[] })[] = [];
   for (let offset = 0; ; offset += 500) {
     const { data, error } = await supabase.from("athlete_ai_messages").select("*, actions:athlete_ai_card_actions(card_index, action, ref_id)")
-      .eq("athlete_id", athleteId).eq("coach_id", viewer.id).order("created_at").order("id").range(offset, offset + 499);
+      .eq("athlete_id", athleteId).eq("coach_id", viewer.gymId).order("created_at").order("id").range(offset, offset + 499);
     if (error) return { error: "Couldn't load the conversation." };
     messages.push(...data);
     if (data.length < 500) return { messages };
@@ -27,6 +27,7 @@ export async function loadAthleteAssistantTranscript(athleteId: string) {
 export async function saveAssistantSettings(_: FormState, formData: FormData): Promise<FormState> {
   const viewer = await getViewer();
   if (viewer?.kind !== "coach") return { error: COACH_SESSION_ERROR };
+  if (viewer.role !== "owner") return failure(formData, "Only the gym owner can change assistant settings.");
   const parsed = assistantSettingsSchema.safeParse({
     assistant_rules: formData.get("assistant_rules") || null,
     assistant_training: formData.get("assistant_training") === "on",
@@ -36,7 +37,7 @@ export async function saveAssistantSettings(_: FormState, formData: FormData): P
   });
   if (!parsed.success) return failure(formData, parsed.error.issues[0]?.message ?? "Check your settings.");
   const supabase = await createClient();
-  const { data, error } = await supabase.from("coaches").update(parsed.data).eq("id", viewer.id).select("id").single();
+  const { data, error } = await supabase.from("coaches").update(parsed.data).eq("id", viewer.gymId).select("id").single();
   if (error || !data) return failure(formData, "Couldn't save assistant settings.");
   revalidatePath("/settings");
   return { message: "Assistant settings saved." };
@@ -50,7 +51,7 @@ export async function saveAthleteAssistantRules(athleteId: string, _: FormState,
     return failure(formData, "Choose an athlete and enter at most 2000 characters.");
   const supabase = await createClient();
   const { data, error } = await supabase.from("athletes").update({ assistant_rules: rules.data })
-    .eq("id", athleteId).eq("coach_id", viewer.id).select("id").single();
+    .eq("id", athleteId).eq("coach_id", viewer.gymId).select("id").single();
   if (error || !data) return failure(formData, "Couldn't save athlete assistant rules.");
   revalidatePath(`/athletes/${athleteId}`);
   return { message: "Athlete assistant rules saved." };
