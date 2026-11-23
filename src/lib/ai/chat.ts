@@ -6,6 +6,7 @@ import { z } from "zod";
 import { CHECK_IN_COLUMNS, CHECK_IN_FILTER, checkInAttention, isCheckIn } from "@/lib/check-in";
 import { addDays } from "@/lib/nutrition";
 import { validateMessageLink } from "@/lib/messages";
+import { gymOwnerRow } from "@/lib/gym-owner";
 import { fromKgPrecise } from "@/lib/units";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
@@ -263,8 +264,8 @@ export async function runChatWithClient(supabase: Supabase, opts: ChatOptions): 
     return { error: FRIENDLY_ERROR };
   }
 
-  const [{ data: coach }, { data: library, error: libraryError }, { data: history, error: historyError }] = await Promise.all([
-    supabase.from("coaches").select("units").maybeSingle(),
+  const [{ data: coachRows }, { data: library, error: libraryError }, { data: history, error: historyError }] = await Promise.all([
+    supabase.from("coaches").select("id, gym_id, units"),
     supabase.from("movements").select("name, category").order("name"),
     opts.thread ? { data: [], error: null } : supabase
       .from("ai_chat_messages")
@@ -277,6 +278,7 @@ export async function runChatWithClient(supabase: Supabase, opts: ChatOptions): 
     console.error("AI chat context failed:", libraryError ?? historyError);
     return { error: FRIENDLY_ERROR };
   }
+  const coach = gymOwnerRow(coachRows ?? []);
   const units: Units = coach?.units ?? "lb";
 
   const { data: userMessage, error: insertError } = await supabase

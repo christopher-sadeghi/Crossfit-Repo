@@ -4,15 +4,16 @@ import { loadLiftMaxes } from "@/lib/benchmarks";
 import { CHECK_IN_LABELS, loadRecentCheckIns } from "@/lib/check-in";
 import { addDays } from "@/lib/nutrition";
 import { formatGoalValue, goalProgress, TRACKING_LABELS } from "@/lib/progress";
+import { gymOwnerRow } from "@/lib/gym-owner";
 import type { Database } from "@/lib/supabase/database.types";
 import { getTimeZone } from "@/lib/time-zone";
 import { loadMeasurementTrendRows, measurementTrends } from "@/lib/measurements";
 
 /** Shared goal tracking and result data for progress notes and weekly reports. */
 export async function loadProgressData(supabase: SupabaseClient<Database>, athleteId: string, asOf: string) {
-  const [liftMaxes, coach, athlete, goals, metrics, results, timeZone, measurements] = await Promise.all([
+  const [liftMaxes, coachRows, athlete, goals, metrics, results, timeZone, measurements] = await Promise.all([
     loadLiftMaxes(supabase, athleteId, asOf),
-    supabase.from("coaches").select("units").maybeSingle(),
+    supabase.from("coaches").select("id, gym_id, units"),
     supabase.from("athletes").select("first_name, experience_level").eq("id", athleteId).single(),
     supabase
       .from("goals")
@@ -36,10 +37,11 @@ export async function loadProgressData(supabase: SupabaseClient<Database>, athle
     getTimeZone(),
     loadMeasurementTrendRows(supabase, athleteId, asOf),
   ]);
-  for (const response of [coach, athlete, goals, metrics, results]) if (response.error) throw response.error;
-  if (!coach.data || !athlete.data) throw new Error("Athlete or coach not found.");
+  for (const response of [coachRows, athlete, goals, metrics, results]) if (response.error) throw response.error;
+  const coach = gymOwnerRow(coachRows.data ?? []);
+  if (!coach || !athlete.data) throw new Error("Athlete or coach not found.");
 
-  const units = coach.data.units;
+  const units = coach.units;
   const data = { metrics: metrics.data ?? [], results: results.data ?? [], liftMaxes };
   const formatter = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
   const localDate = (stamp: string) => formatter.format(new Date(stamp));
