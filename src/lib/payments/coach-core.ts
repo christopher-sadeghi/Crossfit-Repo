@@ -72,6 +72,23 @@ export function createCoachPaymentActions(dependencies: Dependencies) {
     }
   }
 
+  async function refreshConnectLink(): Promise<ActionResult> {
+    const viewer = await dependencies.getViewer();
+    if (!isOwner(viewer)) return { error: OWNER_ONLY };
+    const stripe = dependencies.getStripe();
+    if (!stripe) return { error: NOT_CONFIGURED };
+
+    try {
+      const admin = dependencies.createAdminClient();
+      const account = await getConnectedAccount(viewer, admin);
+      if (!account) return {};
+      const link = await createAccountLink(account.stripe_account_id, stripe);
+      return { url: link.url };
+    } catch {
+      return { error: "Couldn't start Stripe setup. Please try again." };
+    }
+  }
+
   async function createPlan(formData: FormData): Promise<ActionResult> {
     const viewer = await dependencies.getViewer();
     if (!isOwner(viewer)) return { error: OWNER_ONLY };
@@ -151,7 +168,7 @@ export function createCoachPaymentActions(dependencies: Dependencies) {
     }
   }
 
-  return { startConnect, createPlan, archivePlan };
+  return { startConnect, refreshConnectLink, createPlan, archivePlan };
 }
 
 export const PAYMENTS_NOT_CONFIGURED = NOT_CONFIGURED;

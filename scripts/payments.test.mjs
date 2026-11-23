@@ -220,11 +220,13 @@ function athleteActionsFixture({ viewer = athleteViewer(), configured = true, ta
 test("only the owner can connect or create plans, and missing Stripe configuration is reported", async () => {
   const staff = coachActionsFixture({ viewer: ownerViewer("coach") });
   assert.match((await staff.actions.startConnect()).error, /owner coach/i);
+  assert.match((await staff.actions.refreshConnectLink()).error, /owner coach/i);
   assert.match((await staff.actions.createPlan(new FormData())).error, /owner coach/i);
   assert.equal(staff.calls.length, 0);
 
   const unconfigured = coachActionsFixture({ configured: false });
   assert.equal((await unconfigured.actions.startConnect()).error, "Payments aren't switched on yet.");
+  assert.equal((await unconfigured.actions.refreshConnectLink()).error, "Payments aren't switched on yet.");
   assert.equal((await unconfigured.actions.createPlan(new FormData())).error, "Payments aren't switched on yet.");
   assert.equal(unconfigured.calls.length, 0);
 
@@ -236,6 +238,19 @@ test("only the owner can connect or create plans, and missing Stripe configurati
   }]);
   assert.equal(owner.tables.coach_stripe_accounts[0].coach_id, ownerId);
   assert.equal(owner.calls.find(([name]) => name === "accountLinks.create")[2], undefined);
+});
+
+test("Connect refresh links never create a Stripe account", async () => {
+  const noAccount = coachActionsFixture();
+  assert.deepEqual(await noAccount.actions.refreshConnectLink(), {});
+  assert.deepEqual(noAccount.calls, []);
+
+  const existingAccount = coachActionsFixture({
+    tables: { coach_stripe_accounts: [{ coach_id: ownerId, stripe_account_id: accountId, charges_enabled: false }] },
+  });
+  assert.deepEqual(await existingAccount.actions.refreshConnectLink(), { url: "https://connect.stripe.test/onboarding" });
+  assert.equal(existingAccount.calls.some(([name]) => name === "accounts.create"), false);
+  assert.equal(existingAccount.calls.some(([name]) => name === "accountLinks.create"), true);
 });
 
 test("plan validation is strict and valid plan creation uses the connected account", async () => {

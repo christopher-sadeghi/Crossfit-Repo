@@ -12,7 +12,7 @@ export async function GET() {
     createAdminClient,
     getStripe,
     siteOrigin,
-  }).startConnect();
+  }).refreshConnectLink();
   if (result.url) return NextResponse.redirect(result.url);
   return NextResponse.redirect(new URL("/settings", siteOrigin()));
 }
