@@ -219,6 +219,41 @@ function athleteActionsFixture({ viewer = athleteViewer(), configured = true, ta
   };
 }
 
+function demoResetFixture({ membership = null } = {}) {
+  const state = { reset: null, table: null, coachId: null, statuses: null };
+  const query = {
+    select() { return query; },
+    eq(column, value) {
+      if (column === "coach_id") state.coachId = value;
+      return query;
+    },
+    in(column, values) {
+      if (column === "status") state.statuses = values;
+      return query;
+    },
+    limit() { return query; },
+    async maybeSingle() { return { data: membership ? { id: "membership" } : null, error: null }; },
+  };
+  const supabase = {
+    from(table) {
+      state.table = table;
+      return query;
+    },
+  };
+  const { loadDemoData } = loader({
+    "next/cache": { revalidatePath() {} },
+    "@/lib/reset-demo-data.mjs": {
+      async loadDemoDataWithClipCleanup(_supabase, reset) {
+        state.reset = reset;
+        return { data: { athletes: 12, workouts: 20, results: 30 }, error: null, clipError: null };
+      },
+    },
+    "@/lib/supabase/server": { createClient: async () => supabase },
+    "@/lib/viewer": { getViewer: async () => ownerViewer() },
+  })("src/app/(app)/settings/demo-actions.ts");
+  return { loadDemoData, state };
+}
+
 test("only the owner can connect or create plans, and missing Stripe configuration is reported", async () => {
   const staff = coachActionsFixture({ viewer: ownerViewer("coach") });
   assert.match((await staff.actions.startConnect()).error, /owner coach/i);
@@ -253,6 +288,25 @@ test("Connect refresh links never create a Stripe account", async () => {
   assert.deepEqual(await existingAccount.actions.refreshConnectLink(), { url: "https://connect.stripe.test/onboarding" });
   assert.equal(existingAccount.calls.some(([name]) => name === "accounts.create"), false);
   assert.equal(existingAccount.calls.some(([name]) => name === "accountLinks.create"), true);
+});
+
+test("demo reset is blocked while any gym athlete has a live membership", async () => {
+  const fixture = demoResetFixture({ membership: { id: "membership" } });
+  const formData = new FormData();
+  formData.set("mode", "reset");
+  assert.deepEqual(await fixture.loadDemoData({}, formData), {
+    error: "Some athletes have active memberships. Cancel them in your Stripe dashboard before resetting demo data.",
+  });
+  assert.equal(fixture.state.table, "athlete_memberships");
+  assert.equal(fixture.state.coachId, ownerId);
+  assert.deepEqual(fixture.state.statuses, ["trialing", "active", "past_due", "unpaid", "incomplete", "paused"]);
+  assert.equal(fixture.state.reset, null);
+
+  const safe = demoResetFixture();
+  assert.deepEqual(await safe.loadDemoData({}, formData), {
+    message: "Loaded 12 athletes, 20 workouts and 30 results.",
+  });
+  assert.equal(safe.state.reset, true);
 });
 
 test("plan validation is strict and valid plan creation uses the connected account", async () => {
