@@ -285,6 +285,7 @@ begin
     where table_schema = 'public'
       and column_name = 'coach_id'
       and column_default ~* 'uid\(\)'
+      and table_name <> 'ai_chat_messages'
   loop
     execute format(
       'alter table public.%I alter column coach_id set default public.current_gym_id()',

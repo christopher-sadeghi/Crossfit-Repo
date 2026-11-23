@@ -57,7 +57,7 @@ do $$ declare program_id uuid; begin
 end $$;
 
 select set_config('request.jwt.claims', '{"sub":"55000000-0000-0000-0000-000000000002","role":"authenticated"}', true);
-do $$ declare token uuid := '55000000-0000-0000-0000-000000000099'; begin
+do $$ declare token uuid := '55000000-0000-0000-0000-000000000099'; chat_coach_id uuid; begin
   assert public.current_gym_id() = '55000000-0000-0000-0000-000000000001';
   assert not public.is_gym_owner();
   assert (select count(*) = 2 from public.coaches where gym_id = public.current_gym_id());
@@ -79,7 +79,17 @@ do $$ declare token uuid := '55000000-0000-0000-0000-000000000099'; begin
     raise exception 'staff removed a coach';
   exception when insufficient_privilege then null;
   end;
+  insert into public.ai_chat_messages(role, content)
+  values ('user', 'Private staff chat')
+  returning coach_id into chat_coach_id;
+  assert chat_coach_id = auth.uid();
 end $$;
+
+select set_config('request.jwt.claims', '{"sub":"55000000-0000-0000-0000-000000000001","role":"authenticated"}', true);
+do $$ begin
+  assert not exists (select 1 from public.ai_chat_messages);
+end $$;
+
 select set_config('request.jwt.claims', '{"sub":"55000000-0000-0000-0000-000000000004","role":"authenticated"}', true);
 do $$ begin
   begin
