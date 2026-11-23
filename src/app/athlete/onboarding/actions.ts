@@ -2,14 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { goalPayload, intakeSchemas } from "@/lib/athlete-intake";
+import { goalPayload, healthFlag, intakeSchemas } from "@/lib/athlete-intake";
 import { ftInToCm } from "@/lib/height";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/database.types";
 import { getToday } from "@/lib/time-zone";
 import { toKg } from "@/lib/units";
 import { getViewer } from "@/lib/viewer";
-import { notify } from "@/lib/notifications";
+import { dispatchNewNotifications, notify } from "@/lib/notifications";
 
 export async function saveIntakeStep(step: number, input: unknown): Promise<{ error: string } | undefined> {
   const viewer = await getViewer();
@@ -20,6 +20,7 @@ export async function saveIntakeStep(step: number, input: unknown): Promise<{ er
     : input;
   const parsed = intakeSchemas[step - 1].safeParse(stepInput);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check your answers." };
+  const healthScreening = step === 8 ? intakeSchemas[7].parse(stepInput) : undefined;
   const today = await getToday();
   let payload: Record<string, unknown> = { ...parsed.data };
   const supabase = await createClient();
@@ -47,10 +48,11 @@ export async function saveIntakeStep(step: number, input: unknown): Promise<{ er
     const v = intakeSchemas[2].parse(input);
     payload = { goals: v.goals.map(goalPayload) };
   }
-  if (step === 8) payload = { health_screening: parsed.data };
+  if (healthScreening) payload = { health_screening: healthScreening };
   const { error } = await supabase.rpc("save_athlete_intake_step", { p_athlete_id: viewer.athleteId, p_step: step, p_data: payload as Json, p_today: today });
   if (error) return { error: "Couldn't save your answers. Please try again." };
   if (step === 8) {
+    if (healthScreening && healthFlag(healthScreening)) dispatchNewNotifications(viewer.athleteId, "health_flag");
     await notify(supabase, { athleteId: viewer.athleteId, kind: "message", title: "Intake completed", body: "Your athlete completed their intake questionnaire.", link: `/athletes/${viewer.athleteId}?tab=intake` });
   }
   revalidatePath("/athlete", "layout");

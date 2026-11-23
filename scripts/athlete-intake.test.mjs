@@ -164,17 +164,27 @@ test("goal choices accept six goals and repeated categories but reject seven and
 
 function actionHarness({ kind = "athlete", dbError = null, notificationError = null, notificationThrows = false } = {}) {
   const writes = [];
+  const dispatches = [];
+  const notifications = load("src/lib/notifications.ts", {
+    "next/server": { after() {} },
+    "@/lib/athlete-schedule": { loadAthleteSchedule: async () => [] },
+    "@/lib/consistency-data": { loadDriftingAthletes: async () => [] },
+    "@/lib/program-dates": { programDate: () => "" },
+    "@/lib/time-zone": { getToday: async () => "2026-11-21" },
+  });
+  notifications.dispatchNewNotifications = (athleteId, notificationKind) => dispatches.push({ athleteId, kind: notificationKind });
   const { saveIntakeStep } = load("src/app/athlete/onboarding/actions.ts", {
     "next/cache": { revalidatePath() {} },
     "next/navigation": { redirect(path) { throw new Error(`REDIRECT:${path}`); } },
     "@/lib/viewer": { getViewer: async () => ({ kind, athleteId: "own-athlete", units: "lb" }) },
     "@/lib/time-zone": { getToday: async () => "2026-11-21" },
+    "@/lib/notifications": notifications,
     "@/lib/supabase/server": { createClient: async () => ({
       rpc: async (name, args) => { writes.push({ name, ...args }); if (name === "create_notification" && notificationThrows) throw new Error("Notification offline"); return { error: name === "create_notification" ? notificationError : dbError }; },
       from: (table) => table === "athletes" ? { select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: { first_name: "Alex", last_name: "Athlete" }, error: null }) } : ({ select: async () => ({ data: [], error: null }) }),
     }) },
   });
-  return { saveIntakeStep, writes };
+  return { saveIntakeStep, writes, dispatches };
 }
 test("server action uses canonical fields, coach units and local today", async () => {
   const { saveIntakeStep, writes } = actionHarness();
@@ -202,9 +212,22 @@ test("completed intake notifies the coach only after saving, links intake, and t
   const failed = actionHarness({ dbError: new Error("Save failed") });
   assert.ok((await failed.saveIntakeStep(8, valid[7])).error);
   assert.deepEqual(failed.writes.map((write) => write.name), ["save_athlete_intake_step"]);
+  assert.deepEqual(failed.dispatches, []);
   const partial = actionHarness();
   await assert.rejects(partial.saveIntakeStep(1, valid[0]), /REDIRECT/);
   assert.deepEqual(partial.writes.map((write) => write.name), ["save_athlete_intake_step"]);
+});
+test("successful flagged health screenings dispatch notifications after the intake RPC", async () => {
+  const screening = { ...valid[7].health_screening, heart_condition: true };
+  const flagged = actionHarness();
+  await assert.rejects(flagged.saveIntakeStep(8, { health_screening: screening }), /REDIRECT:\/athlete$/);
+  assert.equal(flagged.dispatches[0].athleteId, "own-athlete");
+  assert.equal(flagged.dispatches[0].kind, "health_flag");
+  assert.equal(flagged.writes[0].name, "save_athlete_intake_step");
+
+  const unflagged = actionHarness();
+  await assert.rejects(unflagged.saveIntakeStep(8, valid[7]), /REDIRECT:\/athlete$/);
+  assert.equal(unflagged.dispatches.some((dispatch) => dispatch.kind === "health_flag"), false);
 });
 test("achieved goals render without edit controls, occupy picks and submit identity only", async () => {
   const goalIds = Array.from({ length: 6 }, (_, index) => `35000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`);

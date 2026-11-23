@@ -18,6 +18,27 @@ export type NotificationInput = {
   dedupeKey?: string;
 };
 
+export function dispatchNewNotifications(athleteId: string, kind: NotificationKind): void {
+  try {
+    after(async () => {
+      await Promise.all([
+        (async () => {
+          try {
+            const { pushNewNotifications } = await import("@/lib/push/send");
+            await pushNewNotifications({ athleteId, kind });
+          } catch { console.error("Push scheduling failed"); }
+        })(),
+        (async () => {
+          try {
+            const { emailNewNotifications } = await import("@/lib/email/notifications");
+            await emailNewNotifications({ athleteId, kind });
+          } catch { console.error("Email scheduling failed"); }
+        })(),
+      ]);
+    });
+  } catch { /* Outside a request, notification creation still succeeds. */ }
+}
+
 export async function notify(supabase: Client, input: NotificationInput): Promise<void> {
   try {
     if (["result_logged", "workout_adjusted", "low_readiness", "message", "form_check"].includes(input.kind)) {
@@ -35,26 +56,7 @@ export async function notify(supabase: Client, input: NotificationInput): Promis
       p_dedupe_key: input.dedupeKey,
     });
     if (error) console.error("Notification failed:", error);
-    else {
-      try {
-        after(async () => {
-          await Promise.all([
-            (async () => {
-              try {
-                const { pushNewNotifications } = await import("@/lib/push/send");
-                await pushNewNotifications({ athleteId: input.athleteId, kind: input.kind });
-              } catch { console.error("Push scheduling failed"); }
-            })(),
-            (async () => {
-              try {
-                const { emailNewNotifications } = await import("@/lib/email/notifications");
-                await emailNewNotifications({ athleteId: input.athleteId, kind: input.kind });
-              } catch { console.error("Email scheduling failed"); }
-            })(),
-          ]);
-        });
-      } catch { /* Outside a request, notification creation still succeeds. */ }
-    }
+    else dispatchNewNotifications(input.athleteId, input.kind);
   } catch (error) {
     console.error("Notification failed:", error);
   }

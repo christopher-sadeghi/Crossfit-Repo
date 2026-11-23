@@ -14,6 +14,7 @@ function fixture({ athletes = [], schedules = {}, results = [], drifting = [], d
   const queries = [];
   const messages = [];
   const driftCalls = [];
+  const afterCallbacks = [];
   const exports = {};
   const client = {
     rpc: async (name, args) => {
@@ -36,7 +37,7 @@ function fixture({ athletes = [], schedules = {}, results = [], drifting = [], d
     exports,
     console: { error: (...args) => errors.push(args) },
     require: (name) => {
-      if (name === "next/server") return { after: () => {} };
+      if (name === "next/server") return { after: (callback) => afterCallbacks.push(callback) };
       if (name.endsWith("consistency-data")) return { loadDriftingAthletes: async (...args) => {
         driftCalls.push(args);
         if (driftError) throw driftError;
@@ -55,7 +56,7 @@ function fixture({ athletes = [], schedules = {}, results = [], drifting = [], d
       throw new Error(`Unexpected import ${name}`);
     },
   });
-  return { helpers: exports, client, calls, errors, queries, messages, driftCalls };
+  return { helpers: exports, client, calls, errors, queries, messages, driftCalls, afterCallbacks };
 }
 
 test("drifting notifications include unlinked athletes, coach settings, reasons and episode keys", async () => {
@@ -92,13 +93,20 @@ test("drifting check handles no flags and swallows loader and notification error
   assert.equal(offline.errors.length, 1);
 });
 
-test("notify sends RPC parameters and null optional values", async () => {
-  const { helpers, client, calls } = fixture();
+test("notify sends RPC parameters and omits unset optional values", async () => {
+  const { helpers, client, calls, afterCallbacks } = fixture();
   await helpers.notify(client, { athleteId: "a", kind: "message", title: "Hello" });
   assert.equal(calls[0].name, "create_notification");
   assert.equal(calls[0].args.p_athlete_id, "a");
-  assert.equal(calls[0].args.p_body, null);
-  assert.equal(calls[0].args.p_dedupe_key, null);
+  assert.equal(calls[0].args.p_body, undefined);
+  assert.equal(calls[0].args.p_dedupe_key, undefined);
+  assert.equal(afterCallbacks.length, 1);
+});
+
+test("health-flag notifications can schedule delivery after their RPC inserts the row", () => {
+  const { helpers, afterCallbacks } = fixture();
+  helpers.dispatchNewNotifications("a", "health_flag");
+  assert.equal(afterCallbacks.length, 1);
 });
 
 test("notification RPC errors and thrown failures never escape", async () => {
@@ -133,7 +141,7 @@ test("wrappers use the appropriate audience and kinds", async () => {
   assert.equal(calls[0].args.p_kind, "coach_message");
   assert.equal(calls[1].args.p_link, "/messages/a");
   assert.equal(calls[1].args.p_kind, "message");
-  assert.equal(calls[4].args.p_dedupe_key, null);
+  assert.equal(calls[4].args.p_dedupe_key, undefined);
   assert.equal(calls[3].args.p_link, "/athletes/a?tab=check-ins");
   assert.deepEqual(calls.slice(2).map(({ args }) => args.p_kind), ["workout_adjusted", "low_readiness", "schedule_changed", "suggestion_approved", "progress_report"]);
 });
@@ -202,7 +210,7 @@ test("schedule dates and pain notifications include actionable details", async (
   await helpers.notifyScheduleChanged(client, "a", { action: "moved", date: "2026-11-22" });
   await helpers.notifyWorkoutAdjusted(client, "a", "s", { applied: false, checkWithCoach: true });
   assert.match(calls[0].args.p_body, /moved.*2026-11-22/);
-  assert.equal(calls[0].args.p_dedupe_key, null);
+  assert.equal(calls[0].args.p_dedupe_key, undefined);
   assert.match(calls[1].args.p_body, /reported pain.*No adjustment was applied/);
   assert.equal(calls[1].args.p_link, "/suggestions/s");
 });
