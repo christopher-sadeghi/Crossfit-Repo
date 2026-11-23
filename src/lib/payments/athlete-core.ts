@@ -22,7 +22,7 @@ function isAthlete(viewer: Viewer): viewer is AthleteViewer {
 }
 
 export function createAthletePaymentActions(dependencies: Dependencies) {
-  async function athleteContext() {
+  async function athleteContext(requireActive: boolean) {
     const viewer = await dependencies.getViewer();
     if (!isAthlete(viewer)) return { error: "Only athletes can manage memberships." } as const;
     const admin = dependencies.createAdminClient();
@@ -30,7 +30,7 @@ export function createAthletePaymentActions(dependencies: Dependencies) {
       .select("id, coach_id, first_name, last_name, email, status")
       .eq("id", viewer.athleteId)
       .maybeSingle();
-    if (athleteError || !athlete || athlete.status !== "active" || athlete.coach_id !== viewer.coachId) {
+    if (athleteError || !athlete || (requireActive && athlete.status !== "active") || athlete.coach_id !== viewer.coachId) {
       return { error: "Your athlete account isn't active." } as const;
     }
     const { data: account, error: accountError } = await admin.from("coach_stripe_accounts")
@@ -53,7 +53,7 @@ export function createAthletePaymentActions(dependencies: Dependencies) {
   }
 
   async function createCheckout(planId: string): Promise<ActionResult> {
-    const context = await athleteContext();
+    const context = await athleteContext(true);
     if ("error" in context) return context;
     const stripe = dependencies.getStripe();
     if (!stripe) return { error: NOT_CONFIGURED };
@@ -122,7 +122,7 @@ export function createAthletePaymentActions(dependencies: Dependencies) {
   }
 
   async function createBillingPortal(): Promise<ActionResult> {
-    const context = await athleteContext();
+    const context = await athleteContext(false);
     if ("error" in context) return context;
     const stripe = dependencies.getStripe();
     if (!stripe) return { error: NOT_CONFIGURED };

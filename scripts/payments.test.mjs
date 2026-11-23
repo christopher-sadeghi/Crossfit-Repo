@@ -411,6 +411,31 @@ test("billing portal configuration is created once and reused for live membershi
   assert.equal(fixture.calls.filter(([name]) => name === "billingPortal.sessions.create").length, 2);
 });
 
+test("archived athletes can manage billing but cannot start checkout", async () => {
+  const fixture = athleteActionsFixture({
+    tables: {
+      athletes: [athlete(athleteId, ownerId, { status: "archived" })],
+      coach_stripe_accounts: [{
+        coach_id: ownerId,
+        stripe_account_id: accountId,
+        charges_enabled: true,
+        portal_configuration_id: "bpc_existing",
+      }],
+      athlete_memberships: [{
+        athlete_id: athleteId,
+        coach_id: ownerId,
+        stripe_customer_id: "cus_existing",
+        status: "active",
+        created_at: "2026-11-21",
+      }],
+      membership_plans: [plan()],
+    },
+  });
+  assert.equal((await fixture.actions.createBillingPortal()).url, "https://billing.stripe.test/session");
+  assert.match((await fixture.actions.createCheckout(planId)).error, /isn't active/i);
+  assert.equal(fixture.calls.some(([name]) => name === "checkout.sessions.create"), false);
+});
+
 function stripeEvent(type, object, id, account = accountId) {
   return {
     id,
