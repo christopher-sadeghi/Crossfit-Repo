@@ -62,7 +62,6 @@ export async function sendChatMessage(
       context: parsedContext.success ? parsedContext.data : {},
       today: await getToday(),
       coachId: viewer.id,
-      scopeCoachId: viewer.gymId,
     });
     if ("error" in result) return result;
     if (result.suggestionIds.length) revalidatePath("/settings/ai-history");

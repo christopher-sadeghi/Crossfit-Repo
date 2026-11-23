@@ -124,7 +124,6 @@ export type SuggestionParams = {
   date?: string;
   meal?: string | null;
   requestedBy?: string;
-  coachId?: string;
 };
 export type SuggestionApplyOptions = { saveAs?: "update" | "new" };
 type SuggestionEntry = {
@@ -334,15 +333,9 @@ export async function buildWorkoutRequest(
 
   const athleteId = !workoutId && params.athleteId && params.scheduledOn ? params.athleteId : null;
   const athlete = athleteId ? await loadAthleteProgrammingContext(supabase, athleteId, units, params.session) : null;
-  let programmingStyle = athleteId ? await athleteProgrammingStyleNote(supabase, athleteId) : null;
-  if (!athleteId) {
-    const { data: requestingCoach } = params.requestedBy
-      ? await supabase.from("coaches").select("id").eq("id", params.requestedBy).maybeSingle()
-      : { data: null };
-    programmingStyle = requestingCoach
-      ? await coachProgrammingStyleNote(supabase, requestingCoach.id)
-      : params.coachId ? await coachProgrammingStyleNote(supabase, params.coachId) : null;
-  }
+  const programmingStyle = athleteId
+    ? await athleteProgrammingStyleNote(supabase, athleteId)
+    : params.requestedBy ? await coachProgrammingStyleNote(supabase, params.requestedBy) : null;
   const input = {
     mode: workoutId ? "adjust" : "write",
     ...(athlete ? { lift_maxes: athlete.lift_maxes } : {}),
@@ -422,7 +415,7 @@ async function applyWorkoutSuggestion(
     load_kg: load == null ? null : toKg(load, input.data.units),
   })) satisfies Json;
   const { data: targetId, error } = await supabase.rpc("save_ai_workout", {
-    p_workout_id: workoutId,
+    p_workout_id: workoutId as string,
     p_workout: workout,
     p_movements: movements,
     p_expected_updated_at: expectedUpdatedAt ?? undefined,

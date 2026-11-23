@@ -123,11 +123,11 @@ export async function requestAthleteDayWorkout(_: FormState, formData: FormData)
     }));
     const { schema: generationSchema, ...context } = await entry.buildRequest!(supabase, {
       athleteId: athlete_id, workoutId: null, scheduledOn: date,
-      requestedBy: viewer.id, coachId: viewer.gymId,
+      requestedBy: viewer.id,
       request: `${request || `Write a WOD for this athlete on ${date} that fits their program week, goals and injuries.`}\n\nAthlete's scheduled WODs for ${weekStart} through ${weekEnd} (JSON; empty means no scheduled WODs):\n${JSON.stringify(week, null, 2)}\nPlan around these sessions to balance the week and avoid duplicating their movements or training stress.`,
     });
-    result = await runSuggestion({ type: "write_workout", athleteId: athlete_id, requestedBy: viewer.id,
-      coachId: viewer.gymId, ...context, schema: entry.proposalSchema, generationSchema, validate: entry.validate });
+    result = await runSuggestion({ type: "write_workout", athleteId: athlete_id,
+      ...context, schema: entry.proposalSchema, generationSchema, validate: entry.validate });
   } catch {
     return failure(formData, "The AI couldn't make a suggestion right now. Please try again in a minute.");
   }

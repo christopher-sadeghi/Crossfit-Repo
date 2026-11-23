@@ -247,7 +247,6 @@ type ChatOptions = {
   model?: LanguageModel;
   thread?: { athleteId: string; messageId: string };
   coachId?: string;
-  scopeCoachId?: string;
 };
 
 export type ChatResult = { reply: string; suggestionIds: string[] } | { error: string };
@@ -319,7 +318,6 @@ export async function runChatWithClient(supabase: Supabase, opts: ChatOptions): 
       const request = await entry.buildRequest(supabase, {
         ...params,
         ...(opts.coachId ? { requestedBy: opts.coachId } : {}),
-        ...(opts.scopeCoachId ? { coachId: opts.scopeCoachId } : {}),
       });
       const input = opts.thread && request.input && typeof request.input === "object" && !Array.isArray(request.input)
         ? { ...request.input, source_message_id: opts.thread.messageId }
@@ -327,8 +325,6 @@ export async function runChatWithClient(supabase: Supabase, opts: ChatOptions): 
       const result = await runSuggestionWithClient(supabase, {
         type,
         athleteId: params.athleteId,
-        ...(opts.coachId ? { requestedBy: opts.coachId } : {}),
-        ...(opts.scopeCoachId ? { coachId: opts.scopeCoachId } : {}),
         ...request,
         input,
         prompt: type === "adjust_macros" && params.request ? `${request.prompt}\n\nCoach request and athlete context: ${params.request}` : request.prompt,

@@ -44,7 +44,7 @@ export async function requestSuggestion(type: Enums<"suggestion_type">, athleteI
 
   const supabase = await createClient();
   const result = await requestRegisteredSuggestion(supabase, parsedType.data, {
-    athleteId: parsedAthleteId.data, requestedBy: viewer.id, coachId: viewer.gymId,
+    athleteId: parsedAthleteId.data, requestedBy: viewer.id,
   });
   if ("error" in result) return { error: result.error };
 
@@ -72,14 +72,11 @@ export async function requestWorkoutSuggestion(_: FormState, formData: FormData)
       workoutId: workoutId.data || null,
       request: request.data,
       requestedBy: viewer.id,
-      coachId: viewer.gymId,
     });
     const { schema: generationSchema, ...context } = requestContext;
     result = await runSuggestion({
       type: "write_workout",
       athleteId: null,
-      requestedBy: viewer.id,
-      coachId: viewer.gymId,
       ...context,
       schema: entry.proposalSchema,
       generationSchema,
