@@ -14,8 +14,10 @@ import { DemoDataSection } from "./demo-data-section";
 import { SettingsForm } from "./settings-form";
 import { AssistantSettings } from "./assistant-settings";
 import { CoachesCard } from "./coaches-card";
+import { PaymentsCard } from "./payments-card";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ stripe?: string }> }) {
+  const { stripe } = await searchParams;
   const coach = await getCoach();
   const supabase = await createClient();
   const { count } = coach?.role === "owner" ? await supabase
@@ -38,6 +40,7 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
       <CoachesCard />
+      <PaymentsCard stripeReturn={stripe} />
       <AssistantSettings />
       <div className="mt-6"><NotificationSettings /></div>
       <div className="mt-6"><PushSettings role="coach" /></div>

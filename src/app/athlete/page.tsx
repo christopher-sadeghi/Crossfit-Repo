@@ -75,7 +75,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
   const recentStart = new Date(`${currentDate}T00:00:00Z`);
   recentStart.setUTCDate(recentStart.getUTCDate() - 7);
   const recentStartIso = recentStart.toISOString().slice(0, 10);
-  const [scheduled, activities] = await Promise.all([
+  const [scheduled, activities, membershipResult] = await Promise.all([
     loadAthleteSchedule<TodayWorkout>(
       supabase,
       viewer.athleteId,
@@ -83,7 +83,14 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
       "id, source_workout_id, title, workout_type, time_cap_seconds, rounds, description, notes, week_number, day_number, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(id, name))",
     ),
     loadActivities(supabase, viewer.athleteId, { from: activityWeekStart, to: currentDate }),
+    supabase.from("athlete_memberships")
+      .select("status")
+      .eq("athlete_id", viewer.athleteId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
+  const latestMembershipStatus = membershipResult.data?.status;
 
   const todayWods = scheduled
     .filter((item) => item.date === currentDate)
@@ -154,6 +161,11 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
 
   return (
     <div className="grid gap-6">
+      {(latestMembershipStatus === "past_due" || latestMembershipStatus === "unpaid") && (
+        <p className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          Your last payment failed — <Link className="font-medium underline underline-offset-4" href="/athlete/membership">update your card</Link>
+        </p>
+      )}
       <section className="grid gap-3">
         <h1 className="text-xl font-semibold tracking-tight">Today&apos;s WOD</h1>
         {todayWods.length ? (
