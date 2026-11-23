@@ -254,6 +254,35 @@ function demoResetFixture({ membership = null } = {}) {
   return { loadDemoData, state };
 }
 
+test("Stripe payments require both non-empty server secrets", () => {
+  const originalSecretKey = process.env.STRIPE_SECRET_KEY;
+  const originalWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const { getStripe } = loader({ "server-only": {} })("src/lib/payments/stripe.ts");
+  try {
+    delete process.env.STRIPE_SECRET_KEY;
+    delete process.env.STRIPE_WEBHOOK_SECRET;
+    assert.equal(getStripe(), null);
+
+    process.env.STRIPE_SECRET_KEY = "sk_test_fitcoach_offline";
+    assert.equal(getStripe(), null);
+
+    process.env.STRIPE_WEBHOOK_SECRET = "whsec_test_offline";
+    assert.ok(getStripe());
+
+    process.env.STRIPE_WEBHOOK_SECRET = "  ";
+    assert.equal(getStripe(), null);
+
+    process.env.STRIPE_SECRET_KEY = "  ";
+    process.env.STRIPE_WEBHOOK_SECRET = "whsec_test_offline";
+    assert.equal(getStripe(), null);
+  } finally {
+    if (originalSecretKey === undefined) delete process.env.STRIPE_SECRET_KEY;
+    else process.env.STRIPE_SECRET_KEY = originalSecretKey;
+    if (originalWebhookSecret === undefined) delete process.env.STRIPE_WEBHOOK_SECRET;
+    else process.env.STRIPE_WEBHOOK_SECRET = originalWebhookSecret;
+  }
+});
+
 test("only the owner can connect or create plans, and missing Stripe configuration is reported", async () => {
   const staff = coachActionsFixture({ viewer: ownerViewer("coach") });
   assert.match((await staff.actions.startConnect()).error, /owner coach/i);

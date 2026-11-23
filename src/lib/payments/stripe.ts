@@ -19,5 +19,6 @@ export type PaymentsGateway = {
 
 export function getStripe(): PaymentsGateway | null {
   const secretKey = process.env.STRIPE_SECRET_KEY?.trim();
-  return secretKey ? new Stripe(secretKey) : null;
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
+  return secretKey && webhookSecret ? new Stripe(secretKey) : null;
 }
