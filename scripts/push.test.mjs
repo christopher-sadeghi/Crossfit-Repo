@@ -19,7 +19,7 @@ test("endpoints allow only trusted HTTPS push hosts without ports or credentials
   for (const endpoint of ["", "not a URL", "http://fcm.googleapis.com/x", "https://127.0.0.1/x", "https://evil-fcm.googleapis.com.attacker.com/x", "https://fcm.googleapis.com.attacker.com/x", "https://evilpush.apple.com/x", "https://user@fcm.googleapis.com/x", "https://fcm.googleapis.com:443/x", "https://fcm.googleapis.com:8443/x", "https://notify.windows.com/x"]) assert.equal(payload.isAllowedPushEndpoint(endpoint), false, endpoint);
 });
 test("categories cover notification kinds and future alerts", () => {
-  for (const [category, kinds] of Object.entries({ messages: ["message", "coach_message"], schedule: ["schedule_changed"], updates: ["suggestion_approved", "progress_report"], reminders: ["progress_check_in", "check_in_reminder"], alerts: ["result_logged", "workout_adjusted", "low_readiness", "missed_workouts", "future", ""] })) {
+  for (const [category, kinds] of Object.entries({ messages: ["message", "coach_message"], schedule: ["schedule_changed"], updates: ["suggestion_approved", "progress_report"], reminders: ["progress_check_in", "check_in_reminder"], alerts: ["payment_failed", "result_logged", "workout_adjusted", "low_readiness", "missed_workouts", "future", ""] })) {
     for (const kind of kinds) assert.equal(payload.pushCategory(kind), category);
   }
 });

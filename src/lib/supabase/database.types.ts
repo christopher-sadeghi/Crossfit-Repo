@@ -1775,6 +1775,43 @@ export type Database = {
           },
         ];
       };
+      athlete_memberships: {
+        Row: { id: string; athlete_id: string; coach_id: string; plan_id: string | null; stripe_subscription_id: string; stripe_customer_id: string; status: "incomplete" | "incomplete_expired" | "trialing" | "active" | "past_due" | "canceled" | "unpaid" | "paused"; current_period_end: string | null; cancel_at_period_end: boolean; created_at: string; updated_at: string };
+        Insert: { id?: string; athlete_id: string; coach_id: string; plan_id?: string | null; stripe_subscription_id: string; stripe_customer_id: string; status: "incomplete" | "incomplete_expired" | "trialing" | "active" | "past_due" | "canceled" | "unpaid" | "paused"; current_period_end?: string | null; cancel_at_period_end?: boolean; created_at?: string; updated_at?: string };
+        Update: { id?: string; athlete_id?: string; coach_id?: string; plan_id?: string | null; stripe_subscription_id?: string; stripe_customer_id?: string; status?: "incomplete" | "incomplete_expired" | "trialing" | "active" | "past_due" | "canceled" | "unpaid" | "paused"; current_period_end?: string | null; cancel_at_period_end?: boolean; created_at?: string; updated_at?: string };
+        Relationships: [
+          { foreignKeyName: "athlete_memberships_athlete_id_fkey"; columns: ["athlete_id"]; isOneToOne: false; referencedRelation: "athletes"; referencedColumns: ["id"] },
+          { foreignKeyName: "athlete_memberships_coach_id_fkey"; columns: ["coach_id"]; isOneToOne: false; referencedRelation: "coaches"; referencedColumns: ["id"] },
+          { foreignKeyName: "athlete_memberships_plan_id_fkey"; columns: ["plan_id"]; isOneToOne: false; referencedRelation: "membership_plans"; referencedColumns: ["id"] }
+        ];
+      };
+      athlete_stripe_customers: {
+        Row: { athlete_id: string; coach_id: string; stripe_customer_id: string; created_at: string };
+        Insert: { athlete_id: string; coach_id: string; stripe_customer_id: string; created_at?: string };
+        Update: { athlete_id?: string; coach_id?: string; stripe_customer_id?: string; created_at?: string };
+        Relationships: [
+          { foreignKeyName: "athlete_stripe_customers_athlete_id_fkey"; columns: ["athlete_id"]; isOneToOne: true; referencedRelation: "athletes"; referencedColumns: ["id"] },
+          { foreignKeyName: "athlete_stripe_customers_coach_id_fkey"; columns: ["coach_id"]; isOneToOne: false; referencedRelation: "coaches"; referencedColumns: ["id"] }
+        ];
+      };
+      coach_stripe_accounts: {
+        Row: { coach_id: string; stripe_account_id: string; charges_enabled: boolean; details_submitted: boolean; portal_configuration_id: string | null; created_at: string; updated_at: string };
+        Insert: { coach_id: string; stripe_account_id: string; charges_enabled?: boolean; details_submitted?: boolean; portal_configuration_id?: string | null; created_at?: string; updated_at?: string };
+        Update: { coach_id?: string; stripe_account_id?: string; charges_enabled?: boolean; details_submitted?: boolean; portal_configuration_id?: string | null; created_at?: string; updated_at?: string };
+        Relationships: [{ foreignKeyName: "coach_stripe_accounts_coach_id_fkey"; columns: ["coach_id"]; isOneToOne: true; referencedRelation: "coaches"; referencedColumns: ["id"] }];
+      };
+      membership_plans: {
+        Row: { id: string; coach_id: string; name: string; amount_cents: number; currency: "usd"; interval: "month" | "year"; stripe_product_id: string; stripe_price_id: string; active: boolean; created_at: string };
+        Insert: { id?: string; coach_id: string; name: string; amount_cents: number; currency?: "usd"; interval: "month" | "year"; stripe_product_id: string; stripe_price_id: string; active?: boolean; created_at?: string };
+        Update: { id?: string; coach_id?: string; name?: string; amount_cents?: number; currency?: "usd"; interval?: "month" | "year"; stripe_product_id?: string; stripe_price_id?: string; active?: boolean; created_at?: string };
+        Relationships: [{ foreignKeyName: "membership_plans_coach_id_fkey"; columns: ["coach_id"]; isOneToOne: false; referencedRelation: "coaches"; referencedColumns: ["id"] }];
+      };
+      stripe_webhook_events: {
+        Row: { id: string; received_at: string };
+        Insert: { id: string; received_at?: string };
+        Update: { id?: string; received_at?: string };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
