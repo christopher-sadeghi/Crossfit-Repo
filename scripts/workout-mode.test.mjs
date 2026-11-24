@@ -325,6 +325,70 @@ test("switching timed sections records the previous section result", () => {
   assert.deepEqual(h.states[0].weights, { "0-0": 43 });
 });
 
+test("checking a strength set saves and stops the timed section", () => {
+  const h = workoutHarness({
+    workout: {
+      id: "w",
+      title: "WOD",
+      workout_type: "other",
+      time_cap_seconds: null,
+      rounds: null,
+      sections: [
+        { title: "A. AMRAP", format: "amrap", time_cap_seconds: 600, rounds: null },
+        { title: "B. Back Squat", format: "strength", time_cap_seconds: null, rounds: null },
+      ],
+      movements: [
+        {
+          movement_id: "10000000-0000-4000-8000-000000000001",
+          name: "Row",
+          sets: null,
+          reps: 10,
+          load_kg: null,
+          section: 0,
+        },
+        {
+          movement_id: "10000000-0000-4000-8000-000000000002",
+          name: "Back Squat",
+          sets: 1,
+          reps: 5,
+          load_kg: 50,
+          section: 1,
+        },
+      ],
+      isScaled: false,
+    },
+  });
+  h.states[0] = {
+    ...h.states[0],
+    timedSection: 0,
+    config: { mode: "amrap", durationSeconds: 600 },
+    clock: { startedAt: Date.now() - 30000, pausedAt: null, accumulated: 0 },
+    rounds: 3,
+    reps: 7,
+    completedAtCap: true,
+  };
+  h.states[1] = true;
+
+  const setCheckbox = elements(h.render()).find(
+    (node) =>
+      node.type === "input" &&
+      node.props.type === "checkbox" &&
+      node.props.className === "size-6" &&
+      node.props.checked === false,
+  );
+  setCheckbox.props.onChange({ target: { checked: true } });
+
+  assert.deepEqual(h.states[0].sectionResults, { "0": { rounds: 3, reps: 7 } });
+  assert.equal(h.states[0].timedSection, null);
+  assert.equal(h.states[0].rounds, 0);
+  assert.equal(h.states[0].reps, 0);
+  assert.equal(h.states[0].completedAtCap, false);
+  assert.deepEqual(h.states[0].done, ["1-0"]);
+  assert.deepEqual(h.states[0].weights, { "1-0": 50 });
+  assert.equal(h.states[0].config.mode, "rest");
+  assert.equal(h.states[0].clock.startedAt > 0, true);
+});
+
 test("finish hands section scores to the result form without an overall timer score", () => withWorkoutStorage((records, sessionRecords) => {
   const section = {
     title: "C. 10-min AMRAP",

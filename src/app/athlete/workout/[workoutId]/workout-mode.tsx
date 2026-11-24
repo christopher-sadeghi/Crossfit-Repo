@@ -863,23 +863,27 @@ export function WorkoutMode({
                                     className="size-6"
                                     checked={session.done.includes(key)}
                                     onChange={(e) => {
-                                      if (e.target.checked && value === undefined)
+                                      const checked = e.target.checked;
+                                      if (checked && value === undefined)
                                         return;
                                       const timestamp = Date.now();
                                       unlockAudio();
                                       previousElapsed.current = -1;
                                       setNow(timestamp);
-                                      setSession((s) => ({
-                                        ...s,
-                                        weights:
-                                          value === undefined
-                                            ? s.weights
-                                            : { ...s.weights, [key]: value },
-                                        done: e.target.checked
-                                          ? [...s.done, key]
-                                          : s.done.filter((id) => id !== key),
-                                        ...(e.target.checked
-                                          ? {
+                                      setSession((s) => {
+                                        const interruptedSection =
+                                          checked && s.timedSection != null;
+                                        return {
+                                          ...s,
+                                          weights:
+                                            value === undefined
+                                              ? s.weights
+                                              : { ...s.weights, [key]: value },
+                                          done: checked
+                                            ? [...s.done, key]
+                                            : s.done.filter((id) => id !== key),
+                                          ...(checked
+                                            ? {
                                               config: {
                                                 mode: "rest",
                                                 seconds:
@@ -895,8 +899,19 @@ export function WorkoutMode({
                                                 accumulated: 0,
                                               },
                                             }
-                                          : {}),
-                                      }));
+                                            : {}),
+                                          ...(interruptedSection
+                                            ? {
+                                                sectionResults:
+                                                  recordSectionResult(s, timestamp),
+                                                timedSection: null,
+                                                rounds: 0,
+                                                reps: 0,
+                                                completedAtCap: false,
+                                              }
+                                            : {}),
+                                        };
+                                      });
                                     }}
                                   />
                                 </label>
