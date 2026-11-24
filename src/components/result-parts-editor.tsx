@@ -607,7 +607,8 @@ export function ResultPartsEditor({
                         min="0"
                         step={field === "time_seconds" || field === "rounds" || field === "reps" ? "1" : "any"}
                         value={part.score[field] ?? ""}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          const value = event.currentTarget.value;
                           updateParts((current) =>
                             current.map((item) =>
                               item.position === part.position
@@ -615,13 +616,13 @@ export function ResultPartsEditor({
                                     ...item,
                                     score: {
                                       ...item.score,
-                                      [field]: event.currentTarget.value,
+                                      [field]: value,
                                     },
                                   }
                                 : item,
                             ),
-                          )
-                        }
+                          );
+                        }}
                       />
                     </div>
                   ))}
@@ -637,15 +638,16 @@ export function ResultPartsEditor({
                     min="0"
                     step="any"
                     value={part.load}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
                       updateParts((current) =>
                         current.map((item) =>
                           item.position === part.position
-                            ? { ...item, load: event.currentTarget.value }
+                            ? { ...item, load: value }
                             : item,
                         ),
-                      )
-                    }
+                      );
+                    }}
                   />
                 </label>
               )}
@@ -657,15 +659,16 @@ export function ResultPartsEditor({
                     maxLength={300}
                     rows={2}
                     value={part.notes}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
                       updateParts((current) =>
                         current.map((item) =>
                           item.position === part.position
-                            ? { ...item, notes: event.currentTarget.value }
+                            ? { ...item, notes: value }
                             : item,
                         ),
-                      )
-                    }
+                      );
+                    }}
                     onBlur={(event) => {
                       if (event.currentTarget.value.trim()) return;
                       updateParts((current) =>
