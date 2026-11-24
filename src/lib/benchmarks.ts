@@ -105,6 +105,16 @@ export function normalizeBenchmarkHistory(benchmark: Benchmark, direct: DirectRe
         );
         if (hasLoadedDoneSet) continue;
       }
+      if (
+        parsedParts.success &&
+        parsedParts.data.some(
+          (part) =>
+            part.movement_id === benchmark.movement_id &&
+            part.sets.length > 0 &&
+            part.sets.every((set) => !set.done),
+        )
+      )
+        continue;
       if (w.workout_type !== "strength" || !movement) continue;
       const rep_max = movement.reps ?? r.reps ?? 1;
       attempts.push({
