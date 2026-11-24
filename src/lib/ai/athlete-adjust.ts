@@ -13,6 +13,7 @@ import { friendlySuggestionError } from "./service-core";
 import { trainingLoadContext } from "./athlete-context";
 import { movementIdSchema } from "./movement-schema";
 import { scaleWorkoutChangeSchema, scaleWorkoutDetailsSchema } from "./scale-workout";
+import { appendProgrammingStyle, athleteProgrammingStyleNote } from "@/lib/programming-style";
 import { ageOn, loadWorkoutMovementLibrary } from "./workout-context";
 import {
   athleteAdjustSchema,
@@ -91,6 +92,7 @@ export async function buildAthleteAdjustRequest(
   if (resultsError) throw resultsError;
 
   const units = params.units;
+  const programmingStyle = await athleteProgrammingStyleNote(supabase, params.athleteId);
   const movements = workout.workout_movements.map(({ movements: movement, load_kg, ...item }) => ({
     ...item,
     name: movement?.name ?? "",
@@ -179,6 +181,7 @@ export async function buildAthleteAdjustRequest(
   const ids = input.library.map(({ id }) => id);
   return {
     input,
+    system: appendProgrammingStyle(ATHLETE_ADJUST_SYSTEM, programmingStyle),
     prompt: `How the athlete feels today: ${JSON.stringify(params.feeling)}\n\nAthlete, WOD, and recent context (JSON):\n${JSON.stringify(input, null, 2)}\n\nReturn the adjusted WOD.`,
     generationSchema: athleteAdjustSchema.extend({
       changes: z
@@ -246,7 +249,7 @@ export async function runAthleteAdjustment(
   try {
     const { output } = await generateText({
       model,
-      system: ATHLETE_ADJUST_SYSTEM,
+      system: request.system,
       prompt: request.prompt,
       output: Output.object({ schema: request.generationSchema }),
       timeout: 45_000,

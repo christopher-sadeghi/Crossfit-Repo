@@ -2,7 +2,7 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type Database = {
-
+  
   "public": {
           Tables: {
             "ai_activity_draft_requests": {
@@ -17,7 +17,7 @@ export type Database = {
                     "created_at"?: string,"id"?: string,"user_id"?: string
                   }
                   Relationships: [
-
+                    
                   ]
                 },"ai_chat_messages": {
                   Row: {
@@ -731,6 +731,26 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"coach_programming_styles": {
+                  Row: {
+                    "answers": NonNullable<Json>,"coach_id": string,"status": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "answers"?: NonNullable<Json>,"coach_id": string,"status": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "answers"?: NonNullable<Json>,"coach_id"?: string,"status"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "coach_programming_styles_coach_id_fkey"
+      columns: ["coach_id"]
+isOneToOne: true
+      referencedRelation: "coaches"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"coach_stripe_accounts": {
                   Row: {
                     "charges_enabled": boolean,"coach_id": string,"created_at": string,"details_submitted": boolean,"portal_configuration_id": string | null,"stripe_account_id": string,"updated_at": string
@@ -1059,7 +1079,7 @@ isOneToOne: false
                     "email_enabled"?: boolean,"email_frequency"?: string,"push_categories"?: (string)[],"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
-
+                    
                   ]
                 },"notifications": {
                   Row: {
@@ -1247,7 +1267,7 @@ isOneToOne: false
                     "auth"?: string,"created_at"?: string | null,"endpoint"?: string,"id"?: string,"last_used_at"?: string | null,"p256dh"?: string,"user_agent"?: string | null,"user_id"?: string
                   }
                   Relationships: [
-
+                    
                   ]
                 },"saved_foods": {
                   Row: {
@@ -1287,7 +1307,7 @@ isOneToOne: false
                     "id"?: string,"received_at"?: string
                   }
                   Relationships: [
-
+                    
                   ]
                 },"workout_movements": {
                   Row: {
@@ -1479,6 +1499,9 @@ isOneToOne: false
 "override_workout_for_athlete":
 { Args: { "p_athlete_id": string,"p_mode": string,"p_workout_id": string }; Returns: string
                            },
+"programming_style_for_athlete":
+{ Args: { "p_athlete_id": string }; Returns: Json
+                           },
 "publish_coach_waiver":
 { Args: { "p_body": string,"p_require_resign": boolean }; Returns: {
               "body": string,
@@ -1505,7 +1528,7 @@ isOneToOne: false
 { Args: { "p_athlete_id": string,"p_workout_id": string }; Returns: undefined
                            },
 "save_ai_workout":
-{ Args: { "p_athlete_id"?: string,"p_expected_updated_at"?: string,"p_movements": Json,"p_scheduled_on"?: string,"p_workout": Json,"p_workout_id": string | null }; Returns: string
+{ Args: { "p_athlete_id"?: string,"p_expected_updated_at"?: string,"p_movements": Json,"p_scheduled_on"?: string,"p_workout": Json,"p_workout_id": string }; Returns: string
                            },
 "save_athlete_intake_step":
 { Args: { "p_athlete_id": string,"p_data": Json,"p_step": number,"p_today": string }; Returns: undefined
@@ -1532,7 +1555,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "athlete_status": "active"|"archived","benchmark_kind": "girl"|"hero"|"lift"|"custom","experience_level": "beginner"|"intermediate"|"advanced"|"competitor","goal_status": "active"|"achieved"|"abandoned","goal_type": "performance"|"body_composition"|"skill","meal_type": "breakfast"|"lunch"|"dinner"|"snack","movement_category": "weightlifting"|"gymnastics"|"monostructural"|"other","movement_measure": "reps"|"load"|"distance"|"calories"|"time","suggestion_status": "pending"|"approved"|"edited"|"rejected"|"failed"|"idea","suggestion_type": "write_workout"|"scale_workout"|"adjust_macros"|"progress_summary"|"movement_guide"|"suggest_food"|"athlete_adjust_workout"|"weekly_report"|"draft_program","weight_unit": "lb"|"kg","workout_type": "for_time"|"amrap"|"emom"|"strength"|"other"
+            "athlete_status": "active"|"archived","benchmark_kind": "girl"|"hero"|"lift"|"custom","experience_level": "beginner"|"intermediate"|"advanced"|"competitor","goal_status": "active"|"achieved"|"abandoned","goal_type": "performance"|"body_composition"|"skill","meal_type": "breakfast"|"lunch"|"dinner"|"snack","movement_category": "weightlifting"|"gymnastics"|"monostructural"|"other","movement_measure": "reps"|"load"|"distance"|"calories"|"time","suggestion_status": "pending"|"approved"|"edited"|"rejected"|"failed"|"idea","suggestion_type": "write_workout"|"scale_workout"|"adjust_macros"|"progress_summary"|"movement_guide"|"suggest_food"|"athlete_adjust_workout"|"draft_program"|"weekly_report","weight_unit": "lb"|"kg","workout_type": "for_time"|"amrap"|"emom"|"strength"|"other"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -1648,7 +1671,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "athlete_status": ["active", "archived"],"benchmark_kind": ["girl", "hero", "lift", "custom"],"experience_level": ["beginner", "intermediate", "advanced", "competitor"],"goal_status": ["active", "achieved", "abandoned"],"goal_type": ["performance", "body_composition", "skill"],"meal_type": ["breakfast", "lunch", "dinner", "snack"],"movement_category": ["weightlifting", "gymnastics", "monostructural", "other"],"movement_measure": ["reps", "load", "distance", "calories", "time"],"suggestion_status": ["pending", "approved", "edited", "rejected", "failed", "idea"],"suggestion_type": ["write_workout", "scale_workout", "adjust_macros", "progress_summary", "movement_guide", "suggest_food", "athlete_adjust_workout", "weekly_report", "draft_program"],"weight_unit": ["lb", "kg"],"workout_type": ["for_time", "amrap", "emom", "strength", "other"]
+            "athlete_status": ["active", "archived"],"benchmark_kind": ["girl", "hero", "lift", "custom"],"experience_level": ["beginner", "intermediate", "advanced", "competitor"],"goal_status": ["active", "achieved", "abandoned"],"goal_type": ["performance", "body_composition", "skill"],"meal_type": ["breakfast", "lunch", "dinner", "snack"],"movement_category": ["weightlifting", "gymnastics", "monostructural", "other"],"movement_measure": ["reps", "load", "distance", "calories", "time"],"suggestion_status": ["pending", "approved", "edited", "rejected", "failed", "idea"],"suggestion_type": ["write_workout", "scale_workout", "adjust_macros", "progress_summary", "movement_guide", "suggest_food", "athlete_adjust_workout", "draft_program", "weekly_report"],"weight_unit": ["lb", "kg"],"workout_type": ["for_time", "amrap", "emom", "strength", "other"]
           }
         }
 } as const

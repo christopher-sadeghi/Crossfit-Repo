@@ -103,7 +103,8 @@ export async function addExistingWorkoutForAthlete(_: FormState, formData: FormD
 }
 
 export async function requestAthleteDayWorkout(_: FormState, formData: FormData): Promise<FormState & { suggestionId?: string }> {
-  if ((await getViewer())?.kind !== "coach") return { error: COACH_SESSION_ERROR };
+  const viewer = await getViewer();
+  if (viewer?.kind !== "coach") return { error: COACH_SESSION_ERROR };
   const parsed = z.object({ athlete_id: z.string().uuid(), date: dateSchema, request: z.string().trim().max(500).optional() }).safeParse(Object.fromEntries(formData));
   if (!parsed.success) return failure(formData, parsed.error.issues[0]?.message ?? "Check the form.");
   const { athlete_id, date, request } = parsed.data;
@@ -122,9 +123,11 @@ export async function requestAthleteDayWorkout(_: FormState, formData: FormData)
     }));
     const { schema: generationSchema, ...context } = await entry.buildRequest!(supabase, {
       athleteId: athlete_id, workoutId: null, scheduledOn: date,
+      requestedBy: viewer.id,
       request: `${request || `Write a WOD for this athlete on ${date} that fits their program week, goals and injuries.`}\n\nAthlete's scheduled WODs for ${weekStart} through ${weekEnd} (JSON; empty means no scheduled WODs):\n${JSON.stringify(week, null, 2)}\nPlan around these sessions to balance the week and avoid duplicating their movements or training stress.`,
     });
-    result = await runSuggestion({ type: "write_workout", athleteId: athlete_id, ...context, schema: entry.proposalSchema, generationSchema, validate: entry.validate });
+    result = await runSuggestion({ type: "write_workout", athleteId: athlete_id,
+      ...context, schema: entry.proposalSchema, generationSchema, validate: entry.validate });
   } catch {
     return failure(formData, "The AI couldn't make a suggestion right now. Please try again in a minute.");
   }

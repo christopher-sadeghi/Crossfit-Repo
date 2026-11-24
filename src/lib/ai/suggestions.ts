@@ -28,6 +28,7 @@ import { weeklyReportEntry } from "./weekly-report";
 import { athleteAdjustSchema } from "./athlete-adjust-schema";
 import { suggestFoodEntry } from "./suggest-food";
 import { draftProgramEntry } from "./draft-program";
+import { athleteProgrammingStyleNote, coachProgrammingStyleNote, writeWorkoutSystem } from "@/lib/programming-style";
 
 export { ApprovalError } from "./errors";
 
@@ -122,6 +123,7 @@ export type SuggestionParams = {
   movementId?: string;
   date?: string;
   meal?: string | null;
+  requestedBy?: string;
 };
 export type SuggestionApplyOptions = { saveAs?: "update" | "new" };
 type SuggestionEntry = {
@@ -289,7 +291,7 @@ async function loadAthleteProgrammingContext(supabase: SupabaseClient<Database>,
   };
 }
 
-async function buildWorkoutRequest(
+export async function buildWorkoutRequest(
   supabase: SupabaseClient<Database>,
   params: SuggestionParams,
 ): Promise<SuggestionRequest> {
@@ -300,18 +302,20 @@ async function buildWorkoutRequest(
   let workoutId: string | null = null;
   let workoutUpdatedAt: string | null = null;
   let currentWorkout: Json | null = null;
+  let existingWorkout: { athlete_id: string | null } | null = null;
 
   if (params.workoutId) {
     const { data: workout, error: workoutError } = await supabase
       .from("workouts")
       .select(
-        "id, title, workout_type, time_cap_seconds, rounds, description, notes, updated_at, workout_movements(position, movement_id, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(name))",
+        "id, athlete_id, title, workout_type, time_cap_seconds, rounds, description, notes, updated_at, workout_movements(position, movement_id, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(name))",
       )
       .eq("id", params.workoutId)
       .order("position", { referencedTable: "workout_movements" })
       .maybeSingle();
     if (workoutError || !workout) throw workoutError ?? new Error("Workout not found.");
 
+    existingWorkout = workout;
     workoutId = workout.id;
     workoutUpdatedAt = workout.updated_at;
     currentWorkout = {
@@ -331,6 +335,10 @@ async function buildWorkoutRequest(
 
   const athleteId = !workoutId && params.athleteId && params.scheduledOn ? params.athleteId : null;
   const athlete = athleteId ? await loadAthleteProgrammingContext(supabase, athleteId, units, params.session) : null;
+  const styleAthleteId = athleteId ?? existingWorkout?.athlete_id ?? null;
+  const programmingStyle = styleAthleteId
+    ? await athleteProgrammingStyleNote(supabase, styleAthleteId)
+    : params.requestedBy ? await coachProgrammingStyleNote(supabase, params.requestedBy) : null;
   const input = {
     mode: workoutId ? "adjust" : "write",
     ...(athlete ? { lift_maxes: athlete.lift_maxes } : {}),
@@ -344,7 +352,7 @@ async function buildWorkoutRequest(
   } satisfies Json;
   return {
     input,
-    system: WRITE_WORKOUT_SYSTEM.replace("<units>", units),
+    system: writeWorkoutSystem(WRITE_WORKOUT_SYSTEM, units, programmingStyle),
     prompt: `Request: ${request}\n\n${athlete ? `Athlete this WOD is for, on ${params.scheduledOn} (JSON):\n${JSON.stringify(athlete, null, 2)}\n\n` : ""}Program context (JSON):\n${JSON.stringify(input, null, 2)}\n\nReturn a complete WOD proposal.`,
     schema: writeWorkoutSchema.extend({
       movements: z
@@ -410,7 +418,7 @@ async function applyWorkoutSuggestion(
     load_kg: load == null ? null : toKg(load, input.data.units),
   })) satisfies Json;
   const { data: targetId, error } = await supabase.rpc("save_ai_workout", {
-    p_workout_id: workoutId,
+    p_workout_id: workoutId as string,
     p_workout: workout,
     p_movements: movements,
     p_expected_updated_at: expectedUpdatedAt ?? undefined,

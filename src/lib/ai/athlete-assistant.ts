@@ -13,6 +13,7 @@ import { assistantSafety } from "./assistant-safety";
 import { assistantCardSchema, coachMessageDraftSchema, type AssistantCard } from "./assistant-schema";
 import { FRIENDLY_ERROR, resolveModel } from "./chat";
 import { aiLimitMessage } from "./service-core";
+import { athleteProgrammingStyleNote } from "@/lib/programming-style";
 
 type Client = SupabaseClient<Database>;
 const jsonError = (error: string, status: number) => Response.json({ error }, { status });
@@ -37,6 +38,7 @@ export async function streamAthleteAssistant(
   const settings = rows?.[0];
   if (!settings) return jsonError("Your active athlete profile could not be found.", 403);
   const config = { ...defaultAssistantSettings, ...settings };
+  const programmingStyle = await athleteProgrammingStyleNote(supabase, viewer.athleteId);
   const reserveUserMessage = () => supabase.from("athlete_ai_messages").insert({
     athlete_id: viewer.athleteId, coach_id: viewer.coachId, role: "user", content: message, red_flag: safety.flagged,
   }).select("id").single();
@@ -164,7 +166,7 @@ export async function streamAthleteAssistant(
   };
   try {
     const result = streamText({
-      model, system: buildAssistantPrompt(config, today, safety),
+      model, system: buildAssistantPrompt(config, today, safety, programmingStyle),
       messages: [...(history.data ?? []).reverse().map((row) => ({ role: row.role as "user" | "assistant", content: row.content })), { role: "user", content: message }],
       tools, stopWhen: isStepCount(6), maxOutputTokens: 1800,
       timeout: 60_000, maxRetries: 1,

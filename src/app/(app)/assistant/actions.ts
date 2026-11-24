@@ -49,7 +49,8 @@ export async function sendChatMessage(
   message: string,
   context: ChatContext,
 ): Promise<{ reply: ChatMessage } | { error: string }> {
-  if ((await getViewer())?.kind !== "coach") return { error: COACH_SESSION_ERROR };
+  const viewer = await getViewer();
+  if (viewer?.kind !== "coach") return { error: COACH_SESSION_ERROR };
   const text = chatMessageSchema.safeParse(message);
   if (!text.success) return { error: "Type a message of up to 2000 characters." };
   const parsedContext = chatContextSchema.safeParse(context);
@@ -60,6 +61,7 @@ export async function sendChatMessage(
       message: text.data,
       context: parsedContext.success ? parsedContext.data : {},
       today: await getToday(),
+      coachId: viewer.id,
     });
     if ("error" in result) return result;
     if (result.suggestionIds.length) revalidatePath("/settings/ai-history");
