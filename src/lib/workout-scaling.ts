@@ -1,4 +1,4 @@
-type ScalingRow = {
+export type ScalingRow = {
   modifications: string;
   details: unknown;
   athlete_adjusted_at: string | null;

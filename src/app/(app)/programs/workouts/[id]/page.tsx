@@ -14,7 +14,10 @@ import { loadFormReviews } from "@/lib/form-review-data";
 import { createClient } from "@/lib/supabase/server";
 import { getToday } from "@/lib/time-zone";
 import { compareScores } from "@/lib/results";
+import { loadResultPrSetLocations } from "@/lib/result-part-prs";
+import { resultPartsSchema } from "@/lib/result-parts";
 import { formatDate, formatScore } from "@/lib/units";
+import { WorkoutResultPartsDisplay } from "@/components/workout-result-parts-display";
 
 import { WORKOUT_TYPE_LABELS } from "../../options";
 import { DeleteResultButton, LogResultForm } from "../log-result-form";
@@ -34,12 +37,12 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
       .maybeSingle(),
     supabase
       .from("workout_results")
-      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, logged_by, rpe, athletes(id, first_name, last_name, user_id)")
+      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, logged_by, rpe, parts, athletes(id, first_name, last_name, user_id)")
       .eq("workout_id", id),
     supabase.from("athletes").select("id, first_name, last_name").eq("status", "active").order("first_name").order("last_name"),
     supabase
       .from("athlete_workout_scalings")
-      .select("id, athlete_id, modifications, details, athlete_suggestion_id, athlete_adjusted_at")
+      .select("id, athlete_id, modifications, details, coach_modifications, coach_details, athlete_suggestion_id, athlete_adjusted_at")
       .eq("workout_id", id)
       .order("updated_at", { ascending: false }),
   ]);
@@ -48,13 +51,23 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
   const units = coach?.units ?? "lb";
   const results = (resultRows ?? []).sort(compareScores(workout.workout_type));
   const resultCount = results.length;
-  const formReviews = await loadFormReviews(supabase, { resultIds: results.map((result) => result.id) });
+  const [formReviews, prSetsByResult, today] = await Promise.all([
+    loadFormReviews(supabase, { resultIds: results.map((result) => result.id) }),
+    loadResultPrSetLocations(supabase, results),
+    getToday(),
+  ]);
 
   const movements = workout.workout_movements.map(({ movements: mv, ...m }) => ({
     ...m,
-    movement_id: mv?.id,
+    movement_id: mv?.id ?? "",
     name: mv?.name ?? "",
   }));
+  const baseVersion = {
+    movements,
+    rounds: workout.rounds,
+    time_cap_seconds: workout.time_cap_seconds,
+    workout_type: workout.workout_type,
+  };
   const scalingAthleteIds = [...new Set((scalingRows ?? []).map((row) => row.athlete_id))];
   const { data: scalingAthletes } = scalingAthleteIds.length
     ? await supabase.from("athletes").select("id, first_name, last_name").in("id", scalingAthleteIds)
@@ -141,8 +154,10 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
               workoutId={workout.id}
               workoutType={workout.workout_type}
               units={units}
-              today={await getToday()}
+              today={today}
               athletes={(athletes ?? []).map((a) => ({ id: a.id, name: `${a.first_name} ${a.last_name}` }))}
+              baseVersion={baseVersion}
+              scalings={scalingRows ?? []}
             />
           </CardContent>
         </Card>
@@ -170,6 +185,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
               <TableBody>
                 {results.map((r, i) => {
                   const name = r.athletes ? `${r.athletes.first_name} ${r.athletes.last_name}` : "Athlete";
+                  const parts = resultPartsSchema.safeParse(r.parts);
                   return (
                     <TableRow key={r.id}>
                       <TableCell className="pl-4 font-medium">{i + 1}</TableCell>
@@ -186,7 +202,18 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
                           {formReviews.filter((review) => review.workout_result_id === r.id).map((review) => <Link key={review.id} href={`/form-checks/${review.id}`}><Badge variant={review.status === "reviewed" ? "outline" : "default"}>{review.status === "reviewed" ? "Form video" : "Form video · review"}</Badge></Link>)}
                         </div>
                       </TableCell>
-                      <TableCell>{formatScore(r, units)}</TableCell>
+                      <TableCell>
+                        <div className="grid gap-2">
+                          <span>{formatScore(r, units)}</span>
+                          {parts.success && (
+                            <WorkoutResultPartsDisplay
+                              parts={parts.data}
+                              units={units}
+                              newPrSets={prSetsByResult.get(r.id)}
+                            />
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <Badge variant={r.is_rx ? "default" : "outline"}>{r.is_rx ? "Rx" : "Scaled"}</Badge>
                       </TableCell>

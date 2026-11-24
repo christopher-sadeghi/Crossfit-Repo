@@ -27,6 +27,8 @@ import ConsistencyTab from "./consistency-tab";
 import { WeeklyReportsTab } from "./weekly-reports-tab";
 import { FormChecksTab } from "./form-checks-tab";
 import { personalRecords } from "@/lib/results";
+import { loadResultPrSetLocations } from "@/lib/result-part-prs";
+import { resultPartsSchema } from "@/lib/result-parts";
 import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_LOAD_WARNING_RATIO, gymSessionLoad } from "@/lib/training-load";
 import { loadActivities, loadTrainingLoad } from "@/lib/training-load-data";
@@ -47,6 +49,7 @@ import { LEVEL_LABELS } from "../options";
 import { AthleteTabNav, type AthleteTabGroup } from "./athlete-tab-nav";
 import { AssistantTab } from "./assistant-tab";
 import { AssignedCoachForm } from "./assigned-coach-form";
+import { WorkoutResultPartsDisplay } from "@/components/workout-result-parts-display";
 
 const TAB_GROUPS = [
   { label: "Overview", tabs: [{ value: "overview", label: "Overview" }, { value: "intake", label: "Intake" }, { value: "ai", label: "AI History" }, { value: "assistant", label: "AI chat" }] },
@@ -113,7 +116,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
     supabase.from("body_metrics").select("measured_on, weight_kg, body_fat_pct").eq("athlete_id", id).order("measured_on", { ascending: false }),
     supabase
       .from("workout_results")
-      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, workout_id, logged_by, rpe, energy, sleep_hours, soreness, pain_notes, workouts(title, workout_type, time_cap_seconds, workout_movements(movement_id))")
+      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, workout_id, logged_by, rpe, energy, sleep_hours, soreness, pain_notes, parts, workouts(title, workout_type, time_cap_seconds, workout_movements(movement_id))")
       .eq("athlete_id", id)
       .order("performed_on", { ascending: false })
       .order("created_at", { ascending: false }),
@@ -180,6 +183,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
   const metrics = metricsRes.data ?? [];
   const latestWeight = latestMetric(metrics, "weight_kg");
   const results = resultsRes.data ?? [];
+  const resultPrSets = await loadResultPrSetLocations(supabase, results);
   const prs = personalRecords(results);
   const checkIns = checkInsRes.data ?? [];
   if (checkInsRes.error) throw checkInsRes.error;
@@ -394,6 +398,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
               <TableBody>
                 {results.map((r) => {
                   const session = gymSessionLoad(r, r.workouts);
+                  const parts = resultPartsSchema.safeParse(r.parts);
                   return (
                   <TableRow key={r.id}>
                     <TableCell className="pl-4">{formatDate(r.performed_on)}</TableCell>
@@ -405,7 +410,18 @@ export default async function AthletePage({ params, searchParams }: Props) {
                         {r.logged_by != null && r.logged_by !== coach?.id && <Badge variant="secondary">Logged by athlete</Badge>}
                       </div>
                     </TableCell>
-                    <TableCell>{formatScore(r, units)}</TableCell>
+                    <TableCell>
+                      <div className="grid gap-2">
+                        <span>{formatScore(r, units)}</span>
+                        {parts.success && (
+                          <WorkoutResultPartsDisplay
+                            parts={parts.data}
+                            units={units}
+                            newPrSets={resultPrSets.get(r.id)}
+                          />
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>{Math.round(session.load)}{session.estimated && " (estimated)"}</TableCell>
                     <TableCell>
                       <Badge variant={r.is_rx ? "default" : "outline"}>{r.is_rx ? "Rx" : "Scaled"}</Badge>

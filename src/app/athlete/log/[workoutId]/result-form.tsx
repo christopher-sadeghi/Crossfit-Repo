@@ -1,6 +1,7 @@
 "use client";
 
 import { startTransition, useActionState } from "react";
+import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,8 +10,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { FEEDBACK_LABELS } from "@/lib/feedback";
 import type { FormState } from "@/lib/auth/form-state";
 import type { Enums, Tables } from "@/lib/supabase/database.types";
+import type { LiftPrSetLocation, ResultPart, ResultPartMovement } from "@/lib/result-parts";
 import { fromKgPrecise, type Units } from "@/lib/units";
 import { FIELDS } from "@/app/(app)/programs/workouts/log-result-form";
+import { ResultPartsEditor } from "@/components/result-parts-editor";
+import { WorkoutResultPartsDisplay } from "@/components/workout-result-parts-display";
 
 import { saveAthleteResult } from "../../actions";
 
@@ -29,8 +33,15 @@ type WorkoutResult = Pick<
   | "energy"
   | "soreness"
   | "logged_by"
+  | "parts"
 >;
-type Tracked = FormState & { successes?: number };
+type Tracked = FormState & {
+  successes?: number;
+  savedParts?: ResultPart[];
+  newPrSets?: LiftPrSetLocation[];
+  prError?: boolean;
+  savedResultId?: string;
+};
 
 export function AthleteResultForm({
   workoutId,
@@ -40,6 +51,9 @@ export function AthleteResultForm({
   defaultDate,
   units,
   existingResult,
+  initialParts,
+  movements,
+  partsHandoffToken,
   prefill,
   inline = false,
 }: {
@@ -50,6 +64,9 @@ export function AthleteResultForm({
   defaultDate: string;
   units: Units;
   existingResult: WorkoutResult | null;
+  initialParts: ResultPart[];
+  movements: ResultPartMovement[];
+  partsHandoffToken?: string;
   prefill?: Record<string, string>;
   inline?: boolean;
 }) {
@@ -103,6 +120,35 @@ export function AthleteResultForm({
             defaultValue={values.performed_on ?? today}
             required
           />
+        </div>
+      )}
+      <ResultPartsEditor
+        initialParts={state.savedParts ?? initialParts}
+        movements={movements}
+        units={units}
+        workoutType={workoutType}
+        inputId={id("parts")}
+        initialRawParts={state.error ? state.values?.parts : undefined}
+        handoffToken={partsHandoffToken}
+        newPrSets={state.newPrSets}
+      />
+      {state.message && (
+        <div className="grid gap-2">
+          <p role="status" className="text-sm text-emerald-600">
+            {state.message}
+          </p>
+          {state.prError && (
+            <p role="status" className="text-sm text-amber-700">
+              The result was saved, but automatic lift PRs could not be updated.
+            </p>
+          )}
+          {state.savedParts && (
+            <WorkoutResultPartsDisplay
+              parts={state.savedParts}
+              units={units}
+              newPrSets={state.newPrSets}
+            />
+          )}
         </div>
       )}
       {fields.includes("time") && (
@@ -179,9 +225,15 @@ export function AthleteResultForm({
           {state.error}
         </p>
       )}
-      <Button type="submit" disabled={pending}>
-        {pending ? "Saving…" : existingResult ? "Save changes" : "Save result"}
-      </Button>
+      {inline && state.savedResultId ? (
+        <Button asChild variant="outline">
+          <Link href={`/athlete/history?result=${state.savedResultId}`}>View saved result</Link>
+        </Button>
+      ) : (
+        <Button type="submit" disabled={pending}>
+          {pending ? "Saving…" : existingResult ? "Save changes" : "Save result"}
+        </Button>
+      )}
     </form>
   );
 }

@@ -7,10 +7,22 @@ import { z } from "zod";
 import { checkTrainingLoad } from "@/lib/activity-training-warning";
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { notifyResultLogged } from "@/lib/notifications";
+import {
+  maxDoneSetLoad,
+  submittedParts,
+  syncResultLiftPrs,
+} from "@/lib/result-part-prs";
+import {
+  partsForVersion,
+  resultPartsSchema,
+  type LiftPrSetLocation,
+  type ResultPart,
+} from "@/lib/result-parts";
 import { buildScore, feedbackFields, scoreFields } from "@/lib/result-score";
 import { createClient } from "@/lib/supabase/server";
 import { fromKgPrecise } from "@/lib/units";
 import { getViewer } from "@/lib/viewer";
+import { workoutVersion } from "@/lib/workout-version";
 
 const resultSchema = z.object({
   result_id: z.preprocess((v) => (v == null || v === "" ? null : v), z.string().uuid().nullable()),
@@ -19,11 +31,19 @@ const resultSchema = z.object({
   ...scoreFields,
   is_rx: z.enum(["rx", "scaled"], { message: "Choose Rx or Scaled." }),
   notes: z.string().trim().max(500).transform((v) => v || null),
+  parts: z.string().default("[]"),
   ...feedbackFields,
   return_to: z.enum(["/athlete", "/athlete/history"]).catch("/athlete/history"),
 });
 
 const uuidSchema = z.string().uuid();
+
+export type AthleteResultState = FormState & {
+  newPrSets?: LiftPrSetLocation[];
+  savedParts?: ResultPart[];
+  prError?: boolean;
+  savedResultId?: string;
+};
 
 function revalidateResultPaths(workoutId: string, athleteId: string) {
   revalidatePath("/athlete");
@@ -31,6 +51,7 @@ function revalidateResultPaths(workoutId: string, athleteId: string) {
   revalidatePath("/athlete/prs");
   revalidatePath(`/programs/workouts/${workoutId}`);
   revalidatePath(`/athletes/${athleteId}`);
+  revalidatePath(`/athletes/${athleteId}/progress`);
   revalidatePath("/athletes");
 }
 
@@ -41,7 +62,7 @@ async function getAthleteUserId() {
   return typeof userId === "string" ? userId : null;
 }
 
-export async function saveAthleteResult(_: FormState, formData: FormData): Promise<FormState> {
+export async function saveAthleteResult(_: FormState, formData: FormData): Promise<AthleteResultState> {
   const parsed = resultSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return failure(formData, parsed.error.issues[0]?.message ?? "Please check the form.");
 
@@ -55,17 +76,61 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
   const r = parsed.data;
   const { data: canView } = await supabase.rpc("athlete_can_view_workout", { p_workout_id: r.workout_id });
   if (!canView) return failure(formData, "That WOD is no longer available.");
-  const { data: workout } = await supabase
+  const [{ data: workout }, { data: scaling }] = await Promise.all([
+    supabase
     .from("workouts")
-    .select("workout_type")
+    .select("id, title, workout_type, rounds, time_cap_seconds, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(id, name))")
     .eq("id", r.workout_id)
-    .maybeSingle();
+    .order("position", { referencedTable: "workout_movements" })
+    .maybeSingle(),
+    supabase
+      .from("athlete_workout_scalings")
+      .select("id, athlete_id, modifications, details, coach_modifications, coach_details, athlete_adjusted_at, athlete_suggestion_id")
+      .eq("workout_id", r.workout_id)
+      .eq("athlete_id", viewer.athleteId)
+      .maybeSingle(),
+  ]);
   if (!workout) return failure(formData, "That WOD is no longer available.");
 
-  const scoreResult = buildScore(r, workout.workout_type, viewer.units);
+  const version = workoutVersion(
+    {
+      movements: workout.workout_movements.map(({ movements: movement, ...row }) => ({
+        ...row,
+        movement_id: movement?.id ?? "",
+        name: movement?.name ?? "",
+      })),
+      rounds: workout.rounds,
+      time_cap_seconds: workout.time_cap_seconds,
+    },
+    scaling,
+    r.performed_on,
+  );
+  const submitted = submittedParts(r.parts, viewer.units);
+  if ("error" in submitted && submitted.error)
+    return failure(formData, submitted.error);
+  const parsedParts = resultPartsSchema.safeParse(submitted.value);
+  if (!parsedParts.success)
+    return failure(formData, parsedParts.error.issues[0]?.message ?? "Check the part results.");
+  const parts = partsForVersion(parsedParts.data, version);
+  if (!parts) return failure(formData, "The workout parts changed. Refresh and try again.");
+
+  const fallbackLoadKg = maxDoneSetLoad(parts);
+  const scoreResult = buildScore(
+    {
+      ...r,
+      load:
+        r.load ??
+        (fallbackLoadKg == null
+          ? null
+          : fromKgPrecise(fallbackLoadKg, viewer.units)),
+    },
+    workout.workout_type,
+    viewer.units,
+  );
   if ("error" in scoreResult) return failure(formData, scoreResult.error);
   const score = { ...scoreResult.score };
-  if (r.result_id && score.load_kg != null) {
+  if (r.load == null && fallbackLoadKg != null) score.load_kg = fallbackLoadKg;
+  if (r.result_id && r.load != null && score.load_kg != null) {
     // Keep the stored load when the athlete didn't change the value the edit form showed.
     const { data: existing } = await supabase.from("workout_results").select("load_kg").eq("id", r.result_id).maybeSingle();
     const existingKg = existing?.load_kg == null ? null : Number(existing.load_kg);
@@ -79,6 +144,7 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
     coach_id: viewer.coachId,
     logged_by: loggedBy,
     performed_on: r.performed_on,
+    parts,
     ...score,
     is_rx: r.is_rx === "rx",
     notes: r.notes,
@@ -87,29 +153,64 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
     soreness: r.soreness,
   };
 
+  let savedResult: {
+    id: string;
+    workout_id: string;
+    athlete_id: string;
+    coach_id: string | null;
+    performed_on: string;
+    is_rx: boolean;
+    logged_by: string | null;
+  };
   if (r.result_id) {
     const { data, error } = await supabase
       .from("workout_results")
       .update({ ...values, updated_at: new Date().toISOString() })
       .eq("id", r.result_id)
       .eq("logged_by", loggedBy)
-      .select("workout_id, athlete_id")
+      .select("id, workout_id, athlete_id, coach_id, performed_on, is_rx, logged_by")
       .maybeSingle();
     if (error || !data) return failure(formData, "Couldn't update the result. Please try again.");
+    savedResult = data;
     await checkTrainingLoad(supabase, data.athlete_id);
     revalidateResultPaths(data.workout_id, data.athlete_id);
   } else {
     const { data, error } = await supabase
       .from("workout_results")
       .insert(values)
-      .select("id, workout_id, athlete_id")
+      .select("id, workout_id, athlete_id, coach_id, performed_on, is_rx, logged_by")
       .maybeSingle();
     if (error || !data) return failure(formData, "Couldn't save the result. Please try again.");
+    savedResult = data;
     await Promise.all([notifyResultLogged(supabase, data.athlete_id, data.id), checkTrainingLoad(supabase, data.athlete_id)]);
     revalidateResultPaths(data.workout_id, data.athlete_id);
   }
 
-  redirect(r.return_to === "/athlete" ? `/athlete?saved=${r.workout_id}` : r.return_to);
+  const prSync = await syncResultLiftPrs(
+    supabase,
+    {
+      ...savedResult,
+      coach_id: savedResult.coach_id ?? viewer.coachId,
+    },
+    parts,
+    workout.title,
+  );
+  revalidateResultPaths(savedResult.workout_id, savedResult.athlete_id);
+  const successState: AthleteResultState = {
+    message: "Result saved.",
+    savedParts: parts,
+    savedResultId: savedResult.id,
+    newPrSets: prSync.candidates.map(({ position, set_index }) => ({
+      position,
+      set_index,
+    })),
+    prError: Boolean(prSync.error),
+  };
+  if (r.return_to === "/athlete") return successState;
+
+  const query = new URLSearchParams({ result: savedResult.id });
+  if (prSync.error) query.set("pr_error", "1");
+  redirect(`/athlete/history?${query.toString()}`);
 }
 
 export async function deleteAthleteResult(id: string): Promise<FormState> {

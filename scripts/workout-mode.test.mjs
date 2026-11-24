@@ -48,9 +48,15 @@ function workoutHarness(extra = {}) {
 
 function withWorkoutStorage(run) {
   const previous = globalThis.localStorage;
+  const previousSession = globalThis.sessionStorage;
   const records = new Map();
+  const sessionRecords = new Map();
   globalThis.localStorage = { getItem: (key) => records.get(key) ?? null, setItem: (key, value) => records.set(key, value), removeItem: (key) => records.delete(key) };
-  try { run(records); } finally { if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous; }
+  globalThis.sessionStorage = { getItem: (key) => sessionRecords.get(key) ?? null, setItem: (key, value) => sessionRecords.set(key, value), removeItem: (key) => sessionRecords.delete(key) };
+  try { run(records, sessionRecords); } finally {
+    if (previous === undefined) delete globalThis.localStorage; else globalThis.localStorage = previous;
+    if (previousSession === undefined) delete globalThis.sessionStorage; else globalThis.sessionStorage = previousSession;
+  }
 }
 
 test("finish retains paused progress until a result newer than the session is saved", () => withWorkoutStorage((records) => {
@@ -86,6 +92,37 @@ test("capped For Time handoff includes cap time plus reps accepted by buildScore
   const { buildScore, scoreSchema } = load("src/lib/result-score.ts");
   assert.deepEqual(buildScore(scoreSchema.parse(workoutPrefill(query)), "for_time", "kg"), { score: { time_seconds: 600, reps: 42, rounds: null, load_kg: null } });
 });
+
+test("finish hands off completed part sets through session storage", () => withWorkoutStorage((_records, sessionRecords) => {
+  const movementId = "10000000-0000-4000-8000-000000000001";
+  const h = workoutHarness({
+    workout: {
+      id: "w",
+      title: "WOD",
+      workout_type: "strength",
+      time_cap_seconds: null,
+      rounds: null,
+      movements: [{ movement_id: movementId, name: "Back Squat", sets: 3, reps: 5, load_kg: 100 }],
+      isScaled: false,
+    },
+  });
+  h.states[0] = { ...h.states[0], weights: { "0-0": 100, "0-1": 105, "0-2": 110 }, done: ["0-0", "0-2"] };
+  h.states[1] = true;
+  elements(h.render()).find((node) => node.type === "button" && node.props.children === "Finish & review result").props.onClick();
+  const query = new URL(h.navigations[0], "https://example.test").searchParams;
+  const token = query.get("parts_handoff");
+  assert.ok(token);
+  assert.equal(query.has("load"), false);
+  assert.equal(query.has("summary"), false);
+  assert.deepEqual(
+    JSON.parse(sessionRecords.get(`workout-result-parts:${token}`))[0].sets,
+    [
+      { reps: 5, load_kg: 100, done: true },
+      { reps: 5, load_kg: 105, done: false },
+      { reps: 5, load_kg: 110, done: true },
+    ],
+  );
+}));
 
 test("saved display-unit weights are isolated by units", () => withWorkoutStorage((records) => {
   const kg = workoutHarness({ units: "kg" });
@@ -332,6 +369,8 @@ test("result form prefills new results but preserves edited results and validati
     "@/components/ui/input": { Input: "input" },
     "@/components/ui/label": { Label: "label" },
     "@/components/ui/textarea": { Textarea: "textarea" },
+    "@/components/result-parts-editor": { ResultPartsEditor: "result-parts-editor" },
+    "@/components/workout-result-parts-display": { WorkoutResultPartsDisplay: "parts-display" },
     "@/app/(app)/programs/workouts/log-result-form": { FIELDS: { other: ["time", "rounds", "reps", "load"] } },
     "../../actions": {},
   });

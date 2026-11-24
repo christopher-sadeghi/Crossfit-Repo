@@ -6,8 +6,21 @@ import { z } from "zod";
 import { checkTrainingLoad } from "@/lib/activity-training-warning";
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { getCoach } from "@/lib/coach";
+import {
+  maxDoneSetLoad,
+  submittedParts,
+  syncResultLiftPrs,
+} from "@/lib/result-part-prs";
+import {
+  partsForVersion,
+  resultPartsSchema,
+  type LiftPrSetLocation,
+  type ResultPart,
+} from "@/lib/result-parts";
 import { buildScore, scoreFields } from "@/lib/result-score";
 import { createClient } from "@/lib/supabase/server";
+import { fromKgPrecise } from "@/lib/units";
+import { workoutVersion } from "@/lib/workout-version";
 
 const resultSchema = z.object({
   workout_id: z.string().uuid(),
@@ -16,37 +29,113 @@ const resultSchema = z.object({
   ...scoreFields,
   is_rx: z.enum(["rx", "scaled"], { message: "Choose Rx or Scaled." }),
   notes: z.string().trim().max(500).transform((v) => v || null),
+  parts: z.string().default("[]"),
 });
 
-export async function logResult(_: FormState, formData: FormData): Promise<FormState> {
+export type CoachResultState = FormState & {
+  savedParts?: ResultPart[];
+  newPrSets?: LiftPrSetLocation[];
+  prError?: boolean;
+};
+
+export async function logResult(_: FormState, formData: FormData): Promise<CoachResultState> {
   const parsed = resultSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return failure(formData, parsed.error.issues[0]?.message ?? "Please check the form.");
   const r = parsed.data;
 
   const supabase = await createClient();
-  const [{ data: workout }, coach] = await Promise.all([
-    supabase.from("workouts").select("workout_type").eq("id", r.workout_id).maybeSingle(),
+  const [{ data: workout }, coach, { data: athlete }] = await Promise.all([
+    supabase
+      .from("workouts")
+      .select("id, title, workout_type, rounds, time_cap_seconds, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(id, name))")
+      .eq("id", r.workout_id)
+      .order("position", { referencedTable: "workout_movements" })
+      .maybeSingle(),
     getCoach(),
+    supabase.from("athletes").select("id, coach_id").eq("id", r.athlete_id).maybeSingle(),
   ]);
   if (!workout) return failure(formData, "That WOD no longer exists.");
+  if (!coach || !athlete || athlete.coach_id !== coach.gymId)
+    return failure(formData, "Choose an athlete in your coaching scope.");
 
-  const scoreResult = buildScore(r, workout.workout_type, coach?.units ?? "lb");
+  const { data: scaling } = await supabase
+    .from("athlete_workout_scalings")
+    .select("id, athlete_id, modifications, details, coach_modifications, coach_details, athlete_adjusted_at, athlete_suggestion_id")
+    .eq("workout_id", r.workout_id)
+    .eq("athlete_id", r.athlete_id)
+    .maybeSingle();
+  const version = workoutVersion(
+    {
+      movements: workout.workout_movements.map(({ movements: movement, ...row }) => ({
+        ...row,
+        movement_id: movement?.id ?? "",
+        name: movement?.name ?? "",
+      })),
+      rounds: workout.rounds,
+      time_cap_seconds: workout.time_cap_seconds,
+    },
+    scaling,
+    r.performed_on,
+  );
+  const submitted = submittedParts(r.parts, coach.units);
+  if ("error" in submitted && submitted.error)
+    return failure(formData, submitted.error);
+  const parsedParts = resultPartsSchema.safeParse(submitted.value);
+  if (!parsedParts.success)
+    return failure(formData, parsedParts.error.issues[0]?.message ?? "Check the part results.");
+  const parts = partsForVersion(parsedParts.data, version);
+  if (!parts) return failure(formData, "The workout parts changed. Refresh and try again.");
+
+  const fallbackLoadKg = maxDoneSetLoad(parts);
+  const scoreResult = buildScore(
+    {
+      ...r,
+      load:
+        r.load ??
+        (fallbackLoadKg == null
+          ? null
+          : fromKgPrecise(fallbackLoadKg, coach.units)),
+    },
+    workout.workout_type,
+    coach.units,
+  );
   if ("error" in scoreResult) return failure(formData, scoreResult.error);
+  const score = { ...scoreResult.score };
+  if (r.load == null && fallbackLoadKg != null) score.load_kg = fallbackLoadKg;
 
-  const { error } = await supabase.from("workout_results").insert({
+  const { data: savedResult, error } = await supabase.from("workout_results").insert({
     workout_id: r.workout_id,
     athlete_id: r.athlete_id,
     performed_on: r.performed_on,
-    ...scoreResult.score,
+    parts,
+    ...score,
     is_rx: r.is_rx === "rx",
     notes: r.notes,
-  });
-  if (error) return failure(formData, "Couldn't save the result. Please try again.");
+  }).select("id, athlete_id, coach_id, performed_on, is_rx, logged_by").maybeSingle();
+  if (error || !savedResult) return failure(formData, "Couldn't save the result. Please try again.");
 
+  const prSync = await syncResultLiftPrs(
+    supabase,
+    {
+      ...savedResult,
+      coach_id: savedResult.coach_id ?? coach.gymId,
+    },
+    parts,
+    workout.title,
+  );
   await checkTrainingLoad(supabase, r.athlete_id);
   revalidatePath(`/programs/workouts/${r.workout_id}`);
   revalidatePath(`/athletes/${r.athlete_id}`);
-  return { message: "Result logged." };
+  revalidatePath(`/athletes/${r.athlete_id}/progress`);
+  return {
+    message: "Result logged.",
+    savedParts: parts,
+    newPrSets: prSync.candidates.map(({ position, set_index }) => ({
+      position,
+      set_index,
+    })),
+    prError: Boolean(prSync.error),
+  };
 }
 
 export async function deleteResult(id: string) {

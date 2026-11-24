@@ -12,6 +12,7 @@ import {
   platesPerSide,
 } from "@/lib/plates";
 import { parsePercentages, percentageLoad } from "@/lib/percent-loads";
+import { defaultParts } from "@/lib/result-parts";
 import { fromKgPrecise, type Units } from "@/lib/units";
 import {
   crossedCues,
@@ -366,34 +367,37 @@ export function WorkoutMode({
       params.set("reps", String(session.reps));
       if (type === "other") params.set("time_seconds", String(workSeconds));
     }
-    const sets = workout.movements.flatMap((movement, i) =>
-      Array.from({ length: Math.min(100, movement.sets ?? 1) }, (_, j) => {
-        const key = `${i}-${j}`;
-        const weight = session.weights[key] ?? movementLoad(movement, j).weight;
-        return session.done.includes(key) && weight !== undefined
-          ? { name: movement.name, reps: movement.reps, weight }
-          : null;
-      }).filter((s) => s !== null),
-    );
-    if ((type === "strength" || type === "other") && sets.length)
-      params.set("load", String(Math.max(...sets.map((s) => s.weight))));
-    if (type === "other" && !sets.length) {
-      const weights = workout.movements
-        .map(
-          (movement, i) =>
-            session.weights[`${i}-0`] ?? movementLoad(movement, 0).weight,
-        )
-        .filter((weight): weight is number => weight !== undefined);
-      if (weights.length) params.set("load", String(Math.max(...weights)));
+    params.set("notes", session.notes.slice(0, 500));
+    const parts = defaultParts(workout, units).map((part, position) => ({
+      ...part,
+      sets: part.sets.map((set, setIndex) => {
+        const key = `${position}-${setIndex}`;
+        const movement = workout.movements[position];
+        const plannedLoad =
+          set.load_kg == null ? undefined : fromKgPrecise(set.load_kg, units);
+        const weight =
+          session.weights[key] ??
+          movementLoad(movement, setIndex).weight ??
+          plannedLoad;
+        return {
+          ...set,
+          load_kg: weight ?? null,
+          done: session.done.includes(key),
+        };
+      }),
+    }));
+    const handoffToken = crypto.randomUUID();
+    try {
+      sessionStorage.setItem(
+        `workout-result-parts:${handoffToken}`,
+        JSON.stringify(parts),
+      );
+      params.set("parts_handoff", handoffToken);
+    } catch {
+      setStorageWarning(
+        "Could not prepare part results for logging. Enter them on the next screen.",
+      );
     }
-    const summary =
-      type === "strength" && sets.length
-        ? `Sets: ${sets.map((s) => `${s.name} ${s.reps ?? "?"}×${s.weight}${units}`).join(", ")}`
-        : "";
-    params.set(
-      "notes",
-      [session.notes, summary].filter(Boolean).join("\n").slice(0, 500),
-    );
     const paused = {
       ...session,
       clock: {

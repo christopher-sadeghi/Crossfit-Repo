@@ -537,14 +537,14 @@ isOneToOne: false
                   ]
                 },"benchmark_results": {
                   Row: {
-                    "athlete_id": string,"benchmark_id": string,"coach_id": string,"created_at": string,"id": string,"is_rx": boolean,"load_kg": number | null,"logged_by": string | null,"notes": string | null,"performed_on": string,"rep_max": number | null,"reps": number | null,"rounds": number | null,"time_seconds": number | null
+                    "athlete_id": string,"benchmark_id": string,"coach_id": string,"created_at": string,"id": string,"is_rx": boolean,"load_kg": number | null,"logged_by": string | null,"notes": string | null,"performed_on": string,"rep_max": number | null,"reps": number | null,"rounds": number | null,"source_result_id": string | null,"time_seconds": number | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "athlete_id": string,"benchmark_id": string,"coach_id"?: string,"created_at"?: string,"id"?: string,"is_rx"?: boolean,"load_kg"?: number | null,"logged_by"?: string | null,"notes"?: string | null,"performed_on": string,"rep_max"?: number | null,"reps"?: number | null,"rounds"?: number | null,"time_seconds"?: number | null
+                    "athlete_id": string,"benchmark_id": string,"coach_id"?: string,"created_at"?: string,"id"?: string,"is_rx"?: boolean,"load_kg"?: number | null,"logged_by"?: string | null,"notes"?: string | null,"performed_on": string,"rep_max"?: number | null,"reps"?: number | null,"rounds"?: number | null,"source_result_id"?: string | null,"time_seconds"?: number | null
                   }
                   Update: {
-                    "athlete_id"?: string,"benchmark_id"?: string,"coach_id"?: string,"created_at"?: string,"id"?: string,"is_rx"?: boolean,"load_kg"?: number | null,"logged_by"?: string | null,"notes"?: string | null,"performed_on"?: string,"rep_max"?: number | null,"reps"?: number | null,"rounds"?: number | null,"time_seconds"?: number | null
+                    "athlete_id"?: string,"benchmark_id"?: string,"coach_id"?: string,"created_at"?: string,"id"?: string,"is_rx"?: boolean,"load_kg"?: number | null,"logged_by"?: string | null,"notes"?: string | null,"performed_on"?: string,"rep_max"?: number | null,"reps"?: number | null,"rounds"?: number | null,"source_result_id"?: string | null,"time_seconds"?: number | null
                   }
                   Relationships: [
                     {
@@ -565,6 +565,12 @@ isOneToOne: false
 isOneToOne: false
       referencedRelation: "coaches"
       referencedColumns: ["id"]
+    },{
+      foreignKeyName: "benchmark_results_source_result_id_athlete_id_fkey"
+      columns: ["source_result_id","athlete_id"]
+isOneToOne: false
+      referencedRelation: "workout_results"
+      referencedColumns: ["id","athlete_id"]
     }
                   ]
                 },"benchmark_settings": {
@@ -1375,14 +1381,14 @@ isOneToOne: false
                   ]
                 },"workout_results": {
                   Row: {
-                    "athlete_id": string,"coach_id": string,"created_at": string,"energy": number | null,"id": string,"is_rx": boolean,"load_kg": number | null,"logged_by": string | null,"notes": string | null,"pain_notes": string | null,"performed_on": string,"reps": number | null,"rounds": number | null,"rpe": number | null,"sleep_hours": number | null,"soreness": number | null,"time_seconds": number | null,"updated_at": string | null,"workout_id": string
+                    "athlete_id": string,"coach_id": string,"created_at": string,"energy": number | null,"id": string,"is_rx": boolean,"load_kg": number | null,"logged_by": string | null,"notes": string | null,"pain_notes": string | null,"parts": Json,"performed_on": string,"reps": number | null,"rounds": number | null,"rpe": number | null,"sleep_hours": number | null,"soreness": number | null,"time_seconds": number | null,"updated_at": string | null,"workout_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "athlete_id": string,"coach_id"?: string,"created_at"?: string,"energy"?: number | null,"id"?: string,"is_rx"?: boolean,"load_kg"?: number | null,"logged_by"?: string | null,"notes"?: string | null,"pain_notes"?: string | null,"performed_on"?: string,"reps"?: number | null,"rounds"?: number | null,"rpe"?: number | null,"sleep_hours"?: number | null,"soreness"?: number | null,"time_seconds"?: number | null,"updated_at"?: string | null,"workout_id": string
+                    "athlete_id": string,"coach_id"?: string,"created_at"?: string,"energy"?: number | null,"id"?: string,"is_rx"?: boolean,"load_kg"?: number | null,"logged_by"?: string | null,"notes"?: string | null,"pain_notes"?: string | null,"parts"?: Json,"performed_on"?: string,"reps"?: number | null,"rounds"?: number | null,"rpe"?: number | null,"sleep_hours"?: number | null,"soreness"?: number | null,"time_seconds"?: number | null,"updated_at"?: string | null,"workout_id": string
                   }
                   Update: {
-                    "athlete_id"?: string,"coach_id"?: string,"created_at"?: string,"energy"?: number | null,"id"?: string,"is_rx"?: boolean,"load_kg"?: number | null,"logged_by"?: string | null,"notes"?: string | null,"pain_notes"?: string | null,"performed_on"?: string,"reps"?: number | null,"rounds"?: number | null,"rpe"?: number | null,"sleep_hours"?: number | null,"soreness"?: number | null,"time_seconds"?: number | null,"updated_at"?: string | null,"workout_id"?: string
+                    "athlete_id"?: string,"coach_id"?: string,"created_at"?: string,"energy"?: number | null,"id"?: string,"is_rx"?: boolean,"load_kg"?: number | null,"logged_by"?: string | null,"notes"?: string | null,"pain_notes"?: string | null,"parts"?: Json,"performed_on"?: string,"reps"?: number | null,"rounds"?: number | null,"rpe"?: number | null,"sleep_hours"?: number | null,"soreness"?: number | null,"time_seconds"?: number | null,"updated_at"?: string | null,"workout_id"?: string
                   }
                   Relationships: [
                     {
