@@ -30,7 +30,8 @@ values
     jsonb_build_object('kind','account_change','change',jsonb_build_object('kind','macros','calories',2200,'protein_g',160,'carbs_g',220,'fat_g',70),'before',jsonb_build_object('target',null)),
     jsonb_build_object('kind','account_change','change',jsonb_build_object('kind','goal','action','create','title','Run a 5K','goal_type','performance'),'before',jsonb_build_object('active_goal_count',0)),
     jsonb_build_object('kind','account_change','change',jsonb_build_object('kind','injuries','injuries','No current injuries'),'before',jsonb_build_object('injuries',null)),
-    jsonb_build_object('kind','account_change','change',jsonb_build_object('kind','goal','action','set_status','goal_id','39000000-0000-4000-8000-000000000066','status','active'),'before',jsonb_build_object('goal',jsonb_build_object('id','39000000-0000-4000-8000-000000000066','title','Reactivate','status','abandoned')))
+    jsonb_build_object('kind','account_change','change',jsonb_build_object('kind','goal','action','set_status','goal_id','39000000-0000-4000-8000-000000000066','status','active'),'before',jsonb_build_object('goal',jsonb_build_object('id','39000000-0000-4000-8000-000000000066','title','Reactivate','status','abandoned'))),
+    jsonb_build_object('kind','account_change','change',jsonb_build_object('kind','food_preferences','allergies',jsonb_build_array('Peanuts')),'before',jsonb_build_object('diet_type','none','allergies',jsonb_build_array(),'dislikes',jsonb_build_array(),'cooking_minutes',null))
   ))),
   ('39000000-0000-4000-8000-000000000033', '39000000-0000-4000-8000-000000000023', '39000000-0000-4000-8000-000000000003', 'assistant', 'Other athlete', jsonb_build_object('cards', jsonb_build_array(
     jsonb_build_object('kind','account_change','change',jsonb_build_object('kind','injuries','injuries','Other'),'before',jsonb_build_object())
@@ -38,6 +39,9 @@ values
   ('39000000-0000-4000-8000-000000000034', '39000000-0000-4000-8000-000000000024', '39000000-0000-4000-8000-000000000001', 'assistant', 'Archived athlete', jsonb_build_object('cards', jsonb_build_array(
     jsonb_build_object('kind','account_change','change',jsonb_build_object('kind','injuries','injuries','Archived'),'before',jsonb_build_object())
   )));
+
+insert into public.athlete_food_preferences(athlete_id, coach_id, diet_type, allergies, dislikes, cooking_minutes)
+values ('39000000-0000-4000-8000-000000000022', '39000000-0000-4000-8000-000000000001', 'none', array['Shellfish'], '{}', null);
 
 insert into public.ai_suggestions(id, athlete_id, coach_id, suggestion_type, status, proposal, input)
 values ('39000000-0000-4000-8000-000000000041', '39000000-0000-4000-8000-000000000021',
@@ -116,6 +120,22 @@ end $$;
 update public.coaches set assistant_nutrition = false where id = '39000000-0000-4000-8000-000000000001';
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"39000000-0000-4000-8000-000000000012","role":"authenticated"}', true);
+do $$ begin
+  begin
+    perform public.apply_athlete_account_change(
+      '39000000-0000-4000-8000-000000000032', 4,
+      '{"kind":"food_preferences","allergies":["Peanuts"]}', current_date
+    );
+    raise exception 'stale food-preference card was accepted';
+  exception when sqlstate '40001' then
+    assert sqlerrm = 'account_change_stale';
+  end;
+  assert (select allergies = array['Shellfish']::text[] from public.athlete_food_preferences
+    where athlete_id = '39000000-0000-4000-8000-000000000022');
+  assert not exists(select 1 from public.athlete_assistant_applied_cards
+    where message_id = '39000000-0000-4000-8000-000000000032' and card_index = 4);
+  raise notice 'PASS: stale food-preference cards cannot overwrite newer allergies';
+end $$;
 do $$ begin
   begin
     perform public.apply_athlete_account_change(

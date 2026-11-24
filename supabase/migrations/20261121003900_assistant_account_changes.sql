@@ -49,6 +49,7 @@ declare
   v_assigned_coach_id uuid;
   v_units public.weight_unit;
   v_name text;
+  v_current_injuries text;
   v_card jsonb;
   v_change jsonb;
   v_inserted uuid;
@@ -108,6 +109,27 @@ begin
   if (v_kind in ('goal','injuries','body_weight','reminder_time') and not coalesce(v_assistant_training, false))
     or (v_kind in ('food_preferences','macros') and not coalesce(v_assistant_nutrition, false)) then
     raise exception 'assistant_topic_disabled' using errcode = '42501';
+  end if;
+
+  if exists (
+    select 1 from public.athlete_assistant_applied_cards
+    where message_id = p_message_id and card_index = p_card_index
+  ) then
+    raise exception 'account_change_already_applied' using errcode = '23505';
+  end if;
+  if v_kind = 'injuries' and p_change ? 'injuries' then
+    select injuries into v_current_injuries from public.athletes where id = v_athlete_id;
+    if coalesce(to_jsonb(v_current_injuries), 'null'::jsonb) is distinct from v_card->'before'->'injuries' then
+      raise exception 'account_change_stale' using errcode = '40001';
+    end if;
+  elsif v_kind = 'food_preferences' then
+    select * into v_food from public.athlete_food_preferences where athlete_id = v_athlete_id;
+    if (p_change ? 'diet_type' and to_jsonb(coalesce(v_food.diet_type, 'none')) is distinct from v_card->'before'->'diet_type')
+      or (p_change ? 'allergies' and to_jsonb(coalesce(v_food.allergies, '{}'::text[])) is distinct from v_card->'before'->'allergies')
+      or (p_change ? 'dislikes' and to_jsonb(coalesce(v_food.dislikes, '{}'::text[])) is distinct from v_card->'before'->'dislikes')
+      or (p_change ? 'cooking_minutes' and coalesce(to_jsonb(v_food.cooking_minutes), 'null'::jsonb) is distinct from v_card->'before'->'cooking_minutes') then
+      raise exception 'account_change_stale' using errcode = '40001';
+    end if;
   end if;
 
   insert into public.athlete_assistant_applied_cards(message_id, card_index, athlete_id, coach_id)

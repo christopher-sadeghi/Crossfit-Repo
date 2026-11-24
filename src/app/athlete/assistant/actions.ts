@@ -69,7 +69,12 @@ export async function applyAssistantAccountChange(messageId: string, cardIndex: 
       p_change: change as unknown as Json,
       p_today: await getToday(),
     });
-    if (error) return { error: error.message.includes("already_applied") ? "This change was already saved." : "Couldn't save this change. Please try again." };
+    if (error) {
+      if (error.message.includes("already_applied")) return { error: "This change was already saved." };
+      if (error.message.includes("account_change_stale"))
+        return { error: "Your details changed since this card was made. Ask the assistant for a new change." };
+      return { error: "Couldn't save this change. Please try again." };
+    }
     revalidatePath("/athlete");
     revalidatePath("/athlete/assistant");
     revalidatePath("/athlete/progress");
