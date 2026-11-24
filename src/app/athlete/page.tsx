@@ -389,6 +389,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                         existingResult={null}
                         initialParts={defaultParts(version, viewer.units)}
                         movements={version.movements}
+                        sections={version.sections}
                         inline
                       />
                     </CardContent>
