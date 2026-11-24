@@ -36,6 +36,7 @@ function load(filename) {
 
 const {
   defaultParts,
+  hasSectionScoreEntry,
   initialPartsDirty,
   liftPrCandidates,
   liftPrSetLocations,
@@ -86,6 +87,22 @@ test("section-only results require an entry and keep the fallback overall load",
   assert.equal(
     scoreForSectionResult([part], [{ section: 0, score: {} }], null),
     null,
+  );
+  assert.equal(
+    hasSectionScoreEntry({ section: 0, score: {}, notes: "  " }),
+    false,
+  );
+  assert.equal(
+    hasSectionScoreEntry({ section: 0, score: {}, notes: "Cue notes" }),
+    true,
+  );
+  assert.deepEqual(
+    scoreForSectionResult(
+      [part],
+      [{ section: 0, score: {}, notes: "Cue notes" }],
+      null,
+    ),
+    { time_seconds: null, rounds: null, reps: null, load_kg: null },
   );
   assert.deepEqual(
     scoreForSectionResult(

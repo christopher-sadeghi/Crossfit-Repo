@@ -15,6 +15,7 @@ import {
 import {
   partsForVersion,
   resultPartsSchema,
+  hasSectionScoreEntry,
   sectionScoresSchema,
   scoreForSectionResult,
   type LiftPrSetLocation,
@@ -134,7 +135,7 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
   const sectionScores = parsedSectionScores.data.filter(
     (score) =>
       score.section < (version.sections?.length ?? 0) &&
-      Object.keys(score.score).length > 0,
+      hasSectionScoreEntry(score),
   );
 
   const fallbackLoadKg = maxDoneSetLoad(parts);
