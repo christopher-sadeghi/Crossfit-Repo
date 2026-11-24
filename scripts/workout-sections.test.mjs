@@ -153,11 +153,13 @@ test("a conditioning part load does not create a lift PR candidate", () => {
       workout_type: "other",
       sections: [sections[2]],
       movements: [
-        movement(movementIds.clean, 0, { name: "Power Clean", sets: null, reps: 6, load_kg: 43.09 }),
+        movement(movementIds.clean, 0, { name: "Power Clean", sets: 3, reps: 6, load_kg: 43.09 }),
       ],
     },
     "kg",
   );
+  assert.deepEqual(parts[0].sets, []);
+  assert.equal(parts[0].load_kg, 43.09);
   assert.deepEqual(
     liftPrCandidates(parts, [{ movement_id: movementIds.clean, benchmark_id: "b" }]),
     [],

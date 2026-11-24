@@ -154,9 +154,11 @@ export function defaultParts(
     const setCount =
       isStrength
         ? Math.min(100, Math.max(1, movement.sets ?? 1))
-        : movement.sets != null && movement.sets > 0
-          ? Math.min(100, Math.max(1, movement.sets))
-          : 0;
+        : isSectioned
+          ? 0
+          : movement.sets != null && movement.sets > 0
+            ? Math.min(100, Math.max(1, movement.sets))
+            : 0;
     const plannedLoad =
       movement.load_kg == null
         ? null
