@@ -22,6 +22,7 @@ const {
   defaultTimer,
   emomMovementAt,
   sectionResultForTimer,
+  shouldShowCompletedAtCap,
   timerForSection,
 } = load("src/lib/workout-timer.ts");
 const { platesPerSide, roundToLoadable } = load("src/lib/plates.ts");
@@ -256,6 +257,12 @@ test("a completed For Time section at its cap omits reps", () => {
   );
 });
 
+test("completed-at-cap visibility respects timed sections", () => {
+  assert.equal(shouldShowCompletedAtCap("for_time", "amrap", null), true);
+  assert.equal(shouldShowCompletedAtCap("for_time", "amrap", 0), false);
+  assert.equal(shouldShowCompletedAtCap("other", "for_time", 0), true);
+});
+
 test("EMOM movement cycling stays within the timed section", () => {
   const movements = [
     { name: "Back Squat", section: 0 },
@@ -459,6 +466,44 @@ test("standalone For Time retains its cap control with a different timer mode", 
       ),
   );
   assert.ok(completedLabel);
+});
+
+test("For Time workout hides the cap control while timing an AMRAP section", () => {
+  const h = workoutHarness({
+    workout: {
+      id: "w",
+      title: "WOD",
+      workout_type: "for_time",
+      time_cap_seconds: 600,
+      rounds: null,
+      sections: [
+        { title: "A. AMRAP", format: "amrap", time_cap_seconds: 600, rounds: null },
+      ],
+      movements: [],
+      isScaled: false,
+    },
+  });
+  const timestamp = Date.now();
+  h.states[0] = {
+    ...h.states[0],
+    timedSection: 0,
+    config: { mode: "amrap", durationSeconds: 600 },
+    clock: { startedAt: timestamp - 611000, pausedAt: null, accumulated: 0 },
+  };
+  h.states[1] = true;
+  h.states[5] = timestamp;
+
+  const completedLabel = elements(h.render()).find(
+    (node) =>
+      node.type === "label" &&
+      Array.isArray(node.props.children) &&
+      node.props.children.some(
+        (child) =>
+          typeof child === "string" &&
+          child.includes("Completed all reps before the cap"),
+      ),
+  );
+  assert.equal(completedLabel, undefined);
 });
 
 test("switching timed sections records the previous section result", () => {

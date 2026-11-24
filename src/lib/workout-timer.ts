@@ -9,6 +9,17 @@ export type TimerConfig = (
 ) & { readySeconds?: number };
 export type TimerView = { phase: "countdown" | "work" | "rest" | "done"; displaySeconds: number; index: number; remaining: number | null };
 
+export function shouldShowCompletedAtCap(
+  workoutType: string,
+  timerMode: TimerConfig["mode"],
+  timedSection: number | null,
+): boolean {
+  return (
+    timerMode === "for_time" ||
+    (timedSection == null && workoutType === "for_time")
+  );
+}
+
 export function timerForSection(
   section: Pick<WorkoutSection, "format" | "time_cap_seconds">,
 ): TimerConfig | null {
