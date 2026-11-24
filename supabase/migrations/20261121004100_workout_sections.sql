@@ -46,7 +46,7 @@ begin
       sections
     )
     values (
-      auth.uid(),
+      public.current_gym_id(),
       null,
       p_workout->>'title',
       (p_workout->>'workout_type')::public.workout_type,
@@ -106,7 +106,7 @@ begin
     )
     values (
       v_workout_id,
-      auth.uid(),
+      public.current_gym_id(),
       (v_movement->>'movement_id')::uuid,
       v_position,
       nullif(v_movement->>'sets', '')::integer,
@@ -133,13 +133,13 @@ declare
   v_source public.workouts;
   v_id uuid;
 begin
-  select * into v_source from public.workouts where id = p_workout_id and coach_id = auth.uid();
-  if not found or not exists (select 1 from public.athletes where id = p_athlete_id and coach_id = auth.uid()) then
+  select * into v_source from public.workouts where id = p_workout_id and coach_id = public.current_gym_id();
+  if not found or not exists (select 1 from public.athletes where id = p_athlete_id and coach_id = public.current_gym_id()) then
     raise exception 'Choose a workout and athlete owned by your account.';
   end if;
   if p_scheduled_on is null then raise exception 'Choose a date.'; end if;
   insert into public.workouts (coach_id, athlete_id, scheduled_on, title, workout_type, time_cap_seconds, rounds, description, notes, source_workout_id, sections)
-  values (auth.uid(), p_athlete_id, p_scheduled_on, v_source.title, v_source.workout_type, v_source.time_cap_seconds, v_source.rounds, v_source.description, v_source.notes, coalesce(v_source.source_workout_id, v_source.id), v_source.sections)
+  values (public.current_gym_id(), p_athlete_id, p_scheduled_on, v_source.title, v_source.workout_type, v_source.time_cap_seconds, v_source.rounds, v_source.description, v_source.notes, coalesce(v_source.source_workout_id, v_source.id), v_source.sections)
   returning id into v_id;
   insert into public.workout_movements (coach_id, workout_id, movement_id, position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, section)
   select coach_id, v_id, movement_id, position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, section
@@ -156,11 +156,11 @@ declare
   v_id uuid;
 begin
   if p_mode is null or p_mode not in ('edit', 'remove') then raise exception 'Choose edit or remove.'; end if;
-  perform 1 from public.athletes where id = p_athlete_id and coach_id = auth.uid() for update;
+  perform 1 from public.athletes where id = p_athlete_id and coach_id = public.current_gym_id() for update;
   if not found then raise exception 'Choose an athlete from your roster.'; end if;
   select pa.start_date + (w.week_number - 1) * 7 + (w.day_number - 1) into v_date
   from public.workouts w join public.program_assignments pa on pa.program_id = w.program_id
-  where w.id = p_workout_id and pa.athlete_id = p_athlete_id and w.coach_id = auth.uid();
+  where w.id = p_workout_id and pa.athlete_id = p_athlete_id and w.coach_id = public.current_gym_id();
   if v_date is null then raise exception 'This workout is not in an assigned program.'; end if;
   select replacement_workout_id into v_old from public.athlete_workout_overrides
   where athlete_id = p_athlete_id and workout_id = p_workout_id;
@@ -174,7 +174,7 @@ begin
   values (p_athlete_id, p_workout_id, v_id)
   on conflict (athlete_id, workout_id) do update set replacement_workout_id = excluded.replacement_workout_id, updated_at = now();
   if v_old is not null then
-    perform 1 from public.workouts where id = v_old and coach_id = auth.uid() for update;
+    perform 1 from public.workouts where id = v_old and coach_id = public.current_gym_id() for update;
     if not exists (select 1 from public.workout_results where workout_id = v_old) then
       delete from public.workouts where id = v_old;
     end if;
@@ -199,7 +199,7 @@ security invoker
 set search_path = ''
 as $$
 declare
-  v_coach_id uuid := auth.uid();
+  v_coach_id uuid := public.current_gym_id();
   v_source public.programs%rowtype;
   v_athlete public.athletes%rowtype;
   v_start_date date;
@@ -403,7 +403,7 @@ grant execute on function public.copy_program_for_athlete(uuid, uuid, date) to a
 create or replace function public.apply_draft_program(p_athlete_id uuid, p_program jsonb, p_today date)
 returns uuid language plpgsql security invoker set search_path = '' as $$
 declare
-  v_coach uuid := auth.uid();
+  v_coach uuid := public.current_gym_id();
   v_days integer;
   v_program uuid;
   v_workout uuid;

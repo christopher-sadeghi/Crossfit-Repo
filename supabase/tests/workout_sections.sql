@@ -2,7 +2,12 @@ begin;
 
 insert into auth.users(id, email, raw_user_meta_data) values
   ('46000000-0000-0000-0000-000000000001', 'sections-coach@test.local', '{}'),
-  ('46000000-0000-0000-0000-000000000002', 'sections-athlete@test.local', '{}');
+  ('46000000-0000-0000-0000-000000000002', 'sections-athlete@test.local', '{}'),
+  ('46000000-0000-0000-0000-000000000003', 'sections-staff@test.local', '{}');
+
+update public.coaches
+set gym_id = '46000000-0000-0000-0000-000000000001'
+where id = '46000000-0000-0000-0000-000000000003';
 
 insert into public.athletes(id, coach_id, user_id, first_name, last_name) values
   ('46000000-0000-0000-0000-000000000011', '46000000-0000-0000-0000-000000000001', '46000000-0000-0000-0000-000000000002', 'Section', 'Athlete');
@@ -21,6 +26,8 @@ declare
   v_workout uuid;
   v_legacy_workout uuid;
   v_copy uuid;
+  v_staff_workout uuid;
+  v_staff_copy uuid;
   v_program uuid;
   v_program_copy uuid;
   v_draft_program uuid;
@@ -63,6 +70,23 @@ begin
   assert (select section = 0 from public.workout_movements where workout_id = v_copy),
     'copy_workout_for_athlete carries movement section';
 
+  perform set_config('request.jwt.claims', '{"sub":"46000000-0000-0000-0000-000000000003","role":"authenticated"}', true);
+  v_staff_workout := public.save_ai_workout(
+    null,
+    jsonb_build_object('title','Staff AI sections','workout_type','other','sections',v_sections),
+    v_movement
+  );
+  assert (select coach_id = '46000000-0000-0000-0000-000000000001' and sections = v_sections from public.workouts where id = v_staff_workout),
+    'staff save_ai_workout uses gym owner and carries sections';
+  assert (select coach_id = '46000000-0000-0000-0000-000000000001' and section = 0 from public.workout_movements where workout_id = v_staff_workout),
+    'staff save_ai_workout uses gym owner and carries movement section';
+  v_staff_copy := public.copy_workout_for_athlete(v_workout, '46000000-0000-0000-0000-000000000011', '2026-11-25');
+  assert (select coach_id = '46000000-0000-0000-0000-000000000001' and sections = v_sections from public.workouts where id = v_staff_copy),
+    'staff copy_workout_for_athlete uses gym owner and carries sections';
+  assert (select coach_id = '46000000-0000-0000-0000-000000000001' and section = 0 from public.workout_movements where workout_id = v_staff_copy),
+    'staff copy_workout_for_athlete uses gym owner and carries movement section';
+
+  perform set_config('request.jwt.claims', '{"sub":"46000000-0000-0000-0000-000000000001","role":"authenticated"}', true);
   insert into public.programs(id, coach_id, name, weeks) values
     ('46000000-0000-0000-0000-000000000031', auth.uid(), 'Section program', 1);
   insert into public.program_assignments(coach_id, program_id, athlete_id, start_date) values
