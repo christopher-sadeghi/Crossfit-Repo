@@ -52,6 +52,50 @@ test("lifts match movements and use movement reps, result reps, then one", () =>
   assert.deepEqual(attempts.map((a) => a.rep_max), [5, 3, 1]);
   assert.deepEqual(attempts.map((a) => a.isPr), [false, false, false]);
 });
+test("scheduled lift parts use the heaviest completed set for each valid rep count", () => {
+  const result = strengthResult({
+    parts: [
+      {
+        position: 0,
+        movement_id: "m",
+        name: "Squat",
+        sets: [
+          { reps: 5, load_kg: 100, done: true },
+          { reps: 5, load_kg: 105, done: true },
+          { reps: 3, load_kg: 110, done: true },
+          { reps: 3, load_kg: 150, done: false },
+          { reps: 21, load_kg: 200, done: true },
+          { reps: 1, load_kg: 0, done: true },
+        ],
+      },
+      {
+        position: 1,
+        movement_id: "other",
+        name: "Other lift",
+        sets: [{ reps: 1, load_kg: 500, done: true }],
+      },
+    ],
+  });
+  const attempts = normalizeBenchmarkHistory(lift, [], [result]);
+  assert.deepEqual(
+    attempts.map(({ rep_max, load_kg }) => [rep_max, load_kg]),
+    [
+      [5, 105],
+      [3, 110],
+    ],
+  );
+});
+test("generated direct lift rows are skipped when their scheduled result is present", () => {
+  const scheduledResult = strengthResult({ parts: [] });
+  const generated = result("generated", "2026-01-01", {
+    benchmark_id: lift.id,
+    load_kg: 105,
+    rep_max: 5,
+    source_result_id: scheduledResult.id,
+  });
+  const attempts = normalizeBenchmarkHistory(lift, [generated], [scheduledResult]);
+  assert.deepEqual(attempts.map((attempt) => attempt.id), [scheduledResult.id]);
+});
 test("high-rep lifts fall back to actual loads for bests and PRs while preserving Rx priority", async () => {
   const direct = [
     result("first", "2026-01-01", { load_kg: 100, rep_max: 12 }),
