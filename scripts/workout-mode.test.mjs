@@ -124,6 +124,39 @@ test("finish hands off completed part sets through session storage", () => withW
   );
 }));
 
+test("non-strength handoff keeps default completion and only uses the first entered load", () => withWorkoutStorage((_records, sessionRecords) => {
+  const movementId = "10000000-0000-4000-8000-000000000001";
+  const h = workoutHarness({
+    workout: {
+      id: "w",
+      title: "WOD",
+      workout_type: "for_time",
+      time_cap_seconds: 600,
+      rounds: null,
+      movements: [{ movement_id: movementId, name: "Row", sets: 3, reps: 5, load_kg: 100 }],
+      isScaled: false,
+    },
+  });
+  h.states[0] = {
+    ...h.states[0],
+    weights: { "0-0": 110, "0-1": 120 },
+    done: [],
+  };
+  h.states[1] = true;
+  elements(h.render()).find((node) => node.type === "button" && node.props.children === "Finish & review result").props.onClick();
+  const query = new URL(h.navigations[0], "https://example.test").searchParams;
+  const token = query.get("parts_handoff");
+  assert.ok(token);
+  assert.deepEqual(
+    JSON.parse(sessionRecords.get(`workout-result-parts:${token}`))[0].sets,
+    [
+      { reps: 5, load_kg: 110, done: true },
+      { reps: 5, load_kg: 100, done: true },
+      { reps: 5, load_kg: 100, done: true },
+    ],
+  );
+}));
+
 test("saved display-unit weights are isolated by units", () => withWorkoutStorage((records) => {
   const kg = workoutHarness({ units: "kg" });
   kg.states[0] = { ...kg.states[0], weights: { "0-0": 100 }, reps: 10 };

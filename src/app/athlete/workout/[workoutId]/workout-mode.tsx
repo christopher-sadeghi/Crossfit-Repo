@@ -368,21 +368,25 @@ export function WorkoutMode({
       if (type === "other") params.set("time_seconds", String(workSeconds));
     }
     params.set("notes", session.notes.slice(0, 500));
+    const isStrength = type === "strength";
     const parts = defaultParts(workout, units).map((part, position) => ({
       ...part,
       sets: part.sets.map((set, setIndex) => {
         const key = `${position}-${setIndex}`;
         const movement = workout.movements[position];
-        const plannedLoad =
-          set.load_kg == null ? undefined : fromKgPrecise(set.load_kg, units);
-        const weight =
-          session.weights[key] ??
-          movementLoad(movement, setIndex).weight ??
-          plannedLoad;
+        const weight = isStrength
+          ? session.weights[key] ??
+            movementLoad(movement, setIndex).weight ??
+            (set.load_kg == null
+              ? undefined
+              : fromKgPrecise(set.load_kg, units))
+          : setIndex === 0
+            ? session.weights[`${position}-0`] ?? set.load_kg
+            : set.load_kg;
         return {
           ...set,
           load_kg: weight ?? null,
-          done: session.done.includes(key),
+          done: isStrength ? session.done.includes(key) : set.done,
         };
       }),
     }));

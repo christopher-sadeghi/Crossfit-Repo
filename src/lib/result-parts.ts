@@ -74,12 +74,12 @@ export function defaultParts(
   units: Units,
 ): ResultPart[] {
   return version.movements.slice(0, 40).map((movement, position) => {
-    const hasSetPrescription =
-      (movement.sets != null && movement.sets > 0) ||
-      (version.workout_type === "strength" && movement.reps != null);
-    const setCount = hasSetPrescription
-      ? Math.min(100, Math.max(1, movement.sets ?? 1))
-      : 0;
+    const setCount =
+      version.workout_type === "strength"
+        ? Math.min(100, Math.max(1, movement.sets ?? 1))
+        : movement.sets != null && movement.sets > 0
+          ? Math.min(100, Math.max(1, movement.sets))
+          : 0;
     const plannedLoad =
       movement.load_kg == null
         ? null

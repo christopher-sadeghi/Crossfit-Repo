@@ -91,6 +91,40 @@ test("defaultParts prefill strength, conditioning, and scaled movements", () => 
     { reps: 5, load_kg: 100, done: true },
     { reps: 5, load_kg: 100, done: true },
   ]);
+  const unspecifiedStrength = defaultParts(
+    {
+      workout_type: "strength",
+      movements: [
+        {
+          movement_id: movementId,
+          name: "Deadlift",
+          sets: null,
+          reps: null,
+          load_kg: null,
+        },
+      ],
+    },
+    "kg",
+  );
+  assert.deepEqual(unspecifiedStrength[0].sets, [
+    { reps: null, load_kg: null, done: true },
+  ]);
+  const cappedStrength = defaultParts(
+    {
+      workout_type: "strength",
+      movements: [
+        {
+          movement_id: movementId,
+          name: "Deadlift",
+          sets: 150,
+          reps: 1,
+          load_kg: null,
+        },
+      ],
+    },
+    "kg",
+  );
+  assert.equal(cappedStrength[0].sets.length, 100);
 
   const conditioning = defaultParts(
     {
