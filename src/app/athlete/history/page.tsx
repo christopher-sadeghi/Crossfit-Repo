@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { feedbackSummary } from "@/lib/feedback";
 import { loadFormReviews } from "@/lib/form-review-data";
 import { loadResultPrSetLocations } from "@/lib/result-part-prs";
-import { resultPartsSchema } from "@/lib/result-parts";
+import { resultPartsSchema, sectionScoresSchema } from "@/lib/result-parts";
+import { workoutSectionsSchema } from "@/lib/workout-sections";
 import { createClient } from "@/lib/supabase/server";
 import { getToday } from "@/lib/time-zone";
 import { gymSessionLoad } from "@/lib/training-load";
@@ -38,7 +39,7 @@ export default async function AthleteHistoryPage({
     supabase
       .from("workout_results")
       .select(
-        "id, workout_id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, logged_by, rpe, energy, sleep_hours, soreness, pain_notes, parts, workouts(title, workout_type, time_cap_seconds)",
+        "id, workout_id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, logged_by, rpe, energy, sleep_hours, soreness, pain_notes, parts, section_scores, workouts(title, workout_type, time_cap_seconds, sections, workout_movements(position, movement_id, section))",
       )
       .eq("athlete_id", viewer.athleteId)
       .order("performed_on", { ascending: false })
@@ -69,6 +70,8 @@ export default async function AthleteHistoryPage({
         results.map((result) => {
           const session = gymSessionLoad(result, result.workouts);
           const parts = resultPartsSchema.safeParse(result.parts);
+          const sections = workoutSectionsSchema.safeParse(result.workouts?.sections);
+          const sectionScores = sectionScoresSchema.safeParse(result.section_scores);
           const isSaved = query.result === result.id;
           return (
           <Card key={result.id}>
@@ -102,6 +105,9 @@ export default async function AthleteHistoryPage({
                 <WorkoutResultPartsDisplay
                   parts={parts.data}
                   units={viewer.units}
+                  sections={sections.success ? sections.data : undefined}
+                  movements={result.workouts?.workout_movements ?? []}
+                  sectionScores={sectionScores.success ? sectionScores.data : []}
                   newPrSets={prSetsByResult.get(result.id)}
                   open={isSaved}
                 />

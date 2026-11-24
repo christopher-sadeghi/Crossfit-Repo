@@ -10,7 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { FEEDBACK_LABELS } from "@/lib/feedback";
 import type { FormState } from "@/lib/auth/form-state";
 import type { Enums, Tables } from "@/lib/supabase/database.types";
-import type { LiftPrSetLocation, ResultPart, ResultPartMovement } from "@/lib/result-parts";
+import type { LiftPrSetLocation, ResultPart, ResultPartMovement, SectionScore } from "@/lib/result-parts";
+import type { WorkoutSection } from "@/lib/workout-sections";
 import { fromKgPrecise, type Units } from "@/lib/units";
 import { FIELDS } from "@/app/(app)/programs/workouts/log-result-form";
 import { ResultPartsEditor } from "@/components/result-parts-editor";
@@ -34,10 +35,12 @@ type WorkoutResult = Pick<
   | "soreness"
   | "logged_by"
   | "parts"
+  | "section_scores"
 >;
 type Tracked = FormState & {
   successes?: number;
   savedParts?: ResultPart[];
+  savedSectionScores?: SectionScore[];
   newPrSets?: LiftPrSetLocation[];
   prError?: boolean;
   savedResultId?: string;
@@ -52,6 +55,8 @@ export function AthleteResultForm({
   units,
   existingResult,
   initialParts,
+  sections,
+  initialSectionScores,
   movements,
   scheduledOn,
   scheduledParts,
@@ -70,6 +75,8 @@ export function AthleteResultForm({
   units: Units;
   existingResult: WorkoutResult | null;
   initialParts: ResultPart[];
+  sections?: WorkoutSection[];
+  initialSectionScores?: SectionScore[];
   movements: ResultPartMovement[];
   scheduledOn?: string;
   scheduledParts?: ResultPart[];
@@ -155,12 +162,18 @@ export function AthleteResultForm({
       )}
       <ResultPartsEditor
         initialParts={state.savedParts ?? initialParts}
+        sections={sections}
+        initialSectionScores={
+          state.savedSectionScores ??
+          (state.error ? undefined : initialSectionScores)
+        }
         templateParts={templateParts}
         movements={templateMovements}
         units={units}
         workoutType={workoutType}
         inputId={id("parts")}
         initialRawParts={state.error ? state.values?.parts : undefined}
+        initialRawSectionScores={state.error ? state.values?.section_scores : undefined}
         handoffToken={partsHandoffToken}
         newPrSets={state.newPrSets}
       />
@@ -178,6 +191,9 @@ export function AthleteResultForm({
             <WorkoutResultPartsDisplay
               parts={state.savedParts}
               units={units}
+              sections={sections}
+              movements={templateMovements}
+              sectionScores={state.savedSectionScores}
               newPrSets={state.newPrSets}
             />
           )}

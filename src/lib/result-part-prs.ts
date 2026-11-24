@@ -176,9 +176,13 @@ export function submittedParts(raw: string, units: "kg" | "lb") {
   const kilograms = parsed.map((part) => {
     if (!part || typeof part !== "object" || !Array.isArray(part.sets))
       return part;
+    const record = part as Record<string, unknown>;
     return {
-      ...part,
-      sets: part.sets.map((set: unknown) => {
+      ...record,
+      ...(typeof record.load_kg === "number"
+        ? { load_kg: toKg(record.load_kg, units) }
+        : {}),
+      sets: (part as { sets: unknown[] }).sets.map((set: unknown) => {
         if (!set || typeof set !== "object") return set;
         const value = set as Record<string, unknown>;
         return {

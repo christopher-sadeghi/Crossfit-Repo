@@ -12,7 +12,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { getCoach } from "@/lib/coach";
 import { loadProgressCheckIns } from "@/lib/measurements";
 import { loadResultPrSetLocations } from "@/lib/result-part-prs";
-import { resultPartsSchema } from "@/lib/result-parts";
+import { resultPartsSchema, sectionScoresSchema } from "@/lib/result-parts";
+import { workoutSectionsSchema } from "@/lib/workout-sections";
 import { addDays, targetOn, totals } from "@/lib/nutrition";
 import { getToday } from "@/lib/time-zone";
 import { formatGoalValue, GOAL_TYPE_LABELS, goalProgress, loadPrsByMovement, TRACKING_LABELS } from "@/lib/progress";
@@ -51,7 +52,7 @@ export default async function AthleteProgressPage({ params }: Props) {
     supabase.from("workout_results").select("performed_on, load_kg, reps, rounds, workouts(workout_type, workout_movements(movement_id))").eq("athlete_id", id),
     supabase
       .from("workout_results")
-      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, parts, workouts(title, workout_type, time_cap_seconds)")
+      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, parts, section_scores, workouts(title, workout_type, time_cap_seconds, sections, workout_movements(position, movement_id, section))")
       .eq("athlete_id", id)
       .order("performed_on", { ascending: false })
       .order("created_at", { ascending: false })
@@ -161,6 +162,8 @@ export default async function AthleteProgressPage({ params }: Props) {
           <CardContent className="grid gap-3">
             {recentResults.length ? recentResults.map((result) => {
               const parts = resultPartsSchema.safeParse(result.parts);
+              const sections = workoutSectionsSchema.safeParse(result.workouts?.sections);
+              const sectionScores = sectionScoresSchema.safeParse(result.section_scores);
               return (
                 <div key={result.id} className="grid gap-2 rounded-md border p-3">
                   <div className="flex flex-wrap justify-between gap-2">
@@ -173,6 +176,9 @@ export default async function AthleteProgressPage({ params }: Props) {
                     <WorkoutResultPartsDisplay
                       parts={parts.data}
                       units={units}
+                      sections={sections.success ? sections.data : undefined}
+                      movements={result.workouts?.workout_movements ?? []}
+                      sectionScores={sectionScores.success ? sectionScores.data : []}
                       newPrSets={resultPrSets.get(result.id)}
                     />
                   )}

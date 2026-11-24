@@ -15,14 +15,17 @@ import {
 import {
   partsForVersion,
   resultPartsSchema,
+  sectionScoresSchema,
   type LiftPrSetLocation,
   type ResultPart,
+  type SectionScore,
 } from "@/lib/result-parts";
 import { buildScore, feedbackFields, scoreFields } from "@/lib/result-score";
 import { createClient } from "@/lib/supabase/server";
 import { fromKgPrecise } from "@/lib/units";
 import { getViewer } from "@/lib/viewer";
 import { workoutVersion } from "@/lib/workout-version";
+import { workoutSectionsSchema } from "@/lib/workout-sections";
 
 const resultSchema = z.object({
   result_id: z.preprocess((v) => (v == null || v === "" ? null : v), z.string().uuid().nullable()),
@@ -32,6 +35,7 @@ const resultSchema = z.object({
   is_rx: z.enum(["rx", "scaled"], { message: "Choose Rx or Scaled." }),
   notes: z.string().trim().max(500).transform((v) => v || null),
   parts: z.string().default("[]"),
+  section_scores: z.string().default("[]"),
   ...feedbackFields,
   return_to: z.enum(["/athlete", "/athlete/history"]).catch("/athlete/history"),
 });
@@ -41,6 +45,7 @@ const uuidSchema = z.string().uuid();
 export type AthleteResultState = FormState & {
   newPrSets?: LiftPrSetLocation[];
   savedParts?: ResultPart[];
+  savedSectionScores?: SectionScore[];
   prError?: boolean;
   savedResultId?: string;
 };
@@ -79,7 +84,7 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
   const [{ data: workout }, { data: scaling }] = await Promise.all([
     supabase
     .from("workouts")
-    .select("id, title, workout_type, rounds, time_cap_seconds, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(id, name))")
+    .select("id, title, workout_type, rounds, time_cap_seconds, sections, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, section, movements(id, name))")
     .eq("id", r.workout_id)
     .order("position", { referencedTable: "workout_movements" })
     .maybeSingle(),
@@ -91,6 +96,8 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
       .maybeSingle(),
   ]);
   if (!workout) return failure(formData, "That WOD is no longer available.");
+  const parsedSections = workoutSectionsSchema.safeParse(workout.sections);
+  const sections = parsedSections.success ? parsedSections.data : [];
 
   const version = workoutVersion(
     {
@@ -101,6 +108,7 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
       })),
       rounds: workout.rounds,
       time_cap_seconds: workout.time_cap_seconds,
+      sections,
     },
     scaling,
     r.performed_on,
@@ -113,6 +121,18 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
     return failure(formData, parsedParts.error.issues[0]?.message ?? "Check the part results.");
   const parts = partsForVersion(parsedParts.data, version);
   if (!parts) return failure(formData, "The workout parts changed. Refresh and try again.");
+  let rawSectionScores: unknown;
+  try {
+    rawSectionScores = JSON.parse(r.section_scores);
+  } catch {
+    return failure(formData, "Check the section scores.");
+  }
+  const parsedSectionScores = sectionScoresSchema.safeParse(rawSectionScores);
+  if (!parsedSectionScores.success)
+    return failure(formData, parsedSectionScores.error.issues[0]?.message ?? "Check the section scores.");
+  const sectionScores = parsedSectionScores.data.filter(
+    (score) => score.section < (version.sections?.length ?? 0),
+  );
 
   const fallbackLoadKg = maxDoneSetLoad(parts);
   const scoreResult = buildScore(
@@ -145,6 +165,7 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
     logged_by: loggedBy,
     performed_on: r.performed_on,
     parts,
+    section_scores: sectionScores,
     ...score,
     is_rx: r.is_rx === "rx",
     notes: r.notes,
@@ -205,6 +226,7 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
       position,
       set_index,
     })),
+    savedSectionScores: sectionScores,
     prError: Boolean(prSync.error),
   };
   if (r.return_to === "/athlete") return successState;
