@@ -123,22 +123,6 @@ select set_config('request.jwt.claims', '{"sub":"39000000-0000-4000-8000-0000000
 do $$ begin
   begin
     perform public.apply_athlete_account_change(
-      '39000000-0000-4000-8000-000000000032', 4,
-      '{"kind":"food_preferences","allergies":["Peanuts"]}', current_date
-    );
-    raise exception 'stale food-preference card was accepted';
-  exception when sqlstate '40001' then
-    assert sqlerrm = 'account_change_stale';
-  end;
-  assert (select allergies = array['Shellfish']::text[] from public.athlete_food_preferences
-    where athlete_id = '39000000-0000-4000-8000-000000000022');
-  assert not exists(select 1 from public.athlete_assistant_applied_cards
-    where message_id = '39000000-0000-4000-8000-000000000032' and card_index = 4);
-  raise notice 'PASS: stale food-preference cards cannot overwrite newer allergies';
-end $$;
-do $$ begin
-  begin
-    perform public.apply_athlete_account_change(
       '39000000-0000-4000-8000-000000000032', 0,
       '{"kind":"macros","calories":2200,"protein_g":160,"carbs_g":220,"fat_g":70}', current_date
     );
@@ -155,6 +139,22 @@ update public.coaches set assistant_nutrition = true where id = '39000000-0000-4
 
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"39000000-0000-4000-8000-000000000012","role":"authenticated"}', true);
+do $$ begin
+  begin
+    perform public.apply_athlete_account_change(
+      '39000000-0000-4000-8000-000000000032', 4,
+      '{"kind":"food_preferences","allergies":["Peanuts"]}', current_date
+    );
+    raise exception 'stale food-preference card was accepted';
+  exception when sqlstate '40001' then
+    assert sqlerrm = 'account_change_stale';
+  end;
+  assert (select allergies = array['Shellfish']::text[] from public.athlete_food_preferences
+    where athlete_id = '39000000-0000-4000-8000-000000000022');
+  assert not exists(select 1 from public.athlete_assistant_applied_cards
+    where message_id = '39000000-0000-4000-8000-000000000032' and card_index = 4);
+  raise notice 'PASS: stale food-preference cards cannot overwrite newer allergies';
+end $$;
 do $$ begin
   begin
     perform public.apply_athlete_account_change(
