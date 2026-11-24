@@ -15,6 +15,7 @@ import { saveActivity } from "@/lib/activity-actions";
 import { accountChangeTopic } from "@/lib/ai/athlete-account-change";
 import type { Json } from "@/lib/supabase/database.types";
 import { getToday, getTimeZone } from "@/lib/time-zone";
+import { dispatchNewNotifications } from "@/lib/notifications";
 import type { FormState } from "@/lib/auth/form-state";
 import type { ChatEntry } from "./use-assistant";
 
@@ -75,6 +76,8 @@ export async function applyAssistantAccountChange(messageId: string, cardIndex: 
         return { error: "Your details changed since this card was made. Ask the assistant for a new change." };
       return { error: "Couldn't save this change. Please try again." };
     }
+    if (card.change.kind === "goal" || card.change.kind === "injuries" || card.change.kind === "macros")
+      dispatchNewNotifications(viewer.athleteId, "athlete_profile_changed");
     revalidatePath("/athlete");
     revalidatePath("/athlete/assistant");
     revalidatePath("/athlete/progress");
