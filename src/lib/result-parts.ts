@@ -31,6 +31,33 @@ export const resultPartsSchema = z.array(resultPartSchema).max(40);
 export type ResultPartSet = z.infer<typeof resultPartSetSchema>;
 export type ResultPart = z.infer<typeof resultPartSchema>;
 
+export function shouldResetParts(
+  previous: ResultPart[],
+  next: ResultPart[],
+  dirty: boolean,
+): boolean {
+  if (
+    previous.length !== next.length ||
+    previous.some((part, index) => part.movement_id !== next[index].movement_id)
+  )
+    return true;
+  if (dirty) return false;
+  const content = (parts: ResultPart[]) =>
+    JSON.stringify(
+      parts.map((part) => ({
+        position: part.position,
+        movement_id: part.movement_id,
+        name: part.name,
+        sets: part.sets.map(({ reps, load_kg, done }) => [reps, load_kg, done]),
+        score: Object.entries(part.score ?? {}).sort(([a], [b]) =>
+          a.localeCompare(b),
+        ),
+        notes: part.notes ?? null,
+      })),
+    );
+  return content(previous) !== content(next);
+}
+
 export type ResultPartMovement = {
   movement_id: string;
   name: string;

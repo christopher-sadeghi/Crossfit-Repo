@@ -10,7 +10,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { Enums } from "@/lib/supabase/database.types";
 import { fromKgPrecise, type Units } from "@/lib/units";
-import type { LiftPrCandidate, ResultPart, ResultPartMovement } from "@/lib/result-parts";
+import {
+  shouldResetParts,
+  type LiftPrCandidate,
+  type ResultPart,
+  type ResultPartMovement,
+} from "@/lib/result-parts";
 
 type ScoreKey = "time_seconds" | "rounds" | "reps" | "calories" | "distance_m";
 type DraftSet = { reps: string; load: string; done: boolean };
@@ -168,30 +173,31 @@ export function ResultPartsEditor({
   resetKey?: string;
 }) {
   const [parts, setParts] = useState(() => toDraftParts(initialParts, units));
+  const [dirty, setDirty] = useState(false);
   const activeTemplate = templateParts ?? initialParts;
-  const templateMovementIds = activeTemplate
-    .map((part) => part.movement_id)
-    .join("\u0000");
-  const previousTemplate = useRef({ templateMovementIds, resetKey });
+  const previousTemplate = useRef({ parts: activeTemplate, resetKey });
   const definitions = useMemo(
     () => new Map(movements.map((movement, position) => [position, movement])),
     [movements],
   );
 
   useEffect(() => {
-    if (
-      previousTemplate.current.templateMovementIds === templateMovementIds &&
-      previousTemplate.current.resetKey === resetKey
-    )
-      return;
-    previousTemplate.current = { templateMovementIds, resetKey };
+    const shouldReset =
+      previousTemplate.current.resetKey !== resetKey ||
+      shouldResetParts(previousTemplate.current.parts, activeTemplate, dirty);
+    previousTemplate.current = { parts: activeTemplate, resetKey };
+    if (!shouldReset) return;
     setParts(toDraftParts(activeTemplate, units));
-  }, [activeTemplate, resetKey, templateMovementIds, units]);
+    setDirty(false);
+  }, [activeTemplate, dirty, resetKey, units]);
 
   useEffect(() => {
     if (initialRawParts) {
       const submitted = fromRawParts(initialRawParts);
-      if (submitted) setParts(submitted);
+      if (submitted) {
+        setParts(submitted);
+        setDirty(true);
+      }
       return;
     }
     if (!handoffToken) return;
@@ -201,19 +207,27 @@ export function ResultPartsEditor({
       sessionStorage.removeItem(key);
       if (raw) {
         const handoff = fromRawParts(raw);
-        if (handoff) setParts(handoff);
+        if (handoff) {
+          setParts(handoff);
+          setDirty(true);
+        }
       }
     } catch {
       return;
     }
   }, [handoffToken, initialRawParts]);
 
+  const updateParts = (update: (current: DraftPart[]) => DraftPart[]) => {
+    setDirty(true);
+    setParts(update);
+  };
+
   const updateSet = (
     position: number,
     setIndex: number,
     update: Partial<DraftSet>,
   ) =>
-    setParts((current) =>
+    updateParts((current) =>
       current.map((part) =>
         part.position !== position
           ? part
@@ -326,7 +340,7 @@ export function ResultPartsEditor({
                           aria-label={`Remove set ${setIndex + 1}`}
                           disabled={part.sets.length <= 1}
                           onClick={() =>
-                            setParts((current) =>
+                            updateParts((current) =>
                               current.map((item) =>
                                 item.position === part.position
                                   ? {
@@ -351,7 +365,7 @@ export function ResultPartsEditor({
                     className="w-fit"
                     disabled={part.sets.length >= 100}
                     onClick={() =>
-                      setParts((current) =>
+                      updateParts((current) =>
                         current.map((item) =>
                           item.position === part.position
                             ? {
@@ -383,7 +397,7 @@ export function ResultPartsEditor({
                         step={field === "time_seconds" || field === "rounds" || field === "reps" ? "1" : "any"}
                         value={part.score[field] ?? ""}
                         onChange={(event) =>
-                          setParts((current) =>
+                          updateParts((current) =>
                             current.map((item) =>
                               item.position === part.position
                                 ? {
@@ -413,7 +427,7 @@ export function ResultPartsEditor({
                     rows={2}
                     value={part.notes}
                     onChange={(event) =>
-                      setParts((current) =>
+                      updateParts((current) =>
                         current.map((item) =>
                           item.position === part.position
                             ? { ...item, notes: event.currentTarget.value }
@@ -423,7 +437,7 @@ export function ResultPartsEditor({
                     }
                     onBlur={(event) => {
                       if (event.currentTarget.value.trim()) return;
-                      setParts((current) =>
+                      updateParts((current) =>
                         current.map((item) =>
                           item.position === part.position
                             ? { ...item, notesExpanded: false }
@@ -439,7 +453,7 @@ export function ResultPartsEditor({
                   variant="link"
                   className="h-auto w-fit justify-start p-0"
                   onClick={() =>
-                    setParts((current) =>
+                    updateParts((current) =>
                       current.map((item) =>
                         item.position === part.position
                           ? { ...item, notesExpanded: true }

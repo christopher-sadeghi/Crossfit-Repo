@@ -41,6 +41,7 @@ const {
   partsForVersion,
   partsSummary,
   resultPartsSchema,
+  shouldResetParts,
 } = load("src/lib/result-parts.ts");
 const { maxDoneSetLoad, submittedParts } = load("src/lib/result-part-prs.ts");
 const { buildScore, scoreSchema } = load("src/lib/result-score.ts");
@@ -181,6 +182,33 @@ test("partsForVersion validates order and movement identity", () => {
     ),
     null,
   );
+});
+
+test("parts reset when clean template content changes but preserve dirty values for the same movements", () => {
+  const template = [
+    {
+      position: 0,
+      movement_id: movementId,
+      name: "Back Squat",
+      sets: [{ reps: 5, load_kg: 100, done: true }],
+    },
+  ];
+  const changedPrescription = [
+    {
+      ...template[0],
+      sets: [{ reps: 3, load_kg: 110, done: true }],
+    },
+  ];
+  const changedMovement = [
+    {
+      ...changedPrescription[0],
+      movement_id: "10000000-0000-4000-8000-000000000002",
+    },
+  ];
+  assert.equal(shouldResetParts(template, changedPrescription, false), true);
+  assert.equal(shouldResetParts(template, changedPrescription, true), false);
+  assert.equal(shouldResetParts(template, changedMovement, true), true);
+  assert.equal(shouldResetParts(template, template, false), false);
 });
 
 test("submitted part loads convert to kg and the fallback uses completed sets only", () => {
