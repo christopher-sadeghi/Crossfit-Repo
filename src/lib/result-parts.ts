@@ -57,7 +57,7 @@ export function scoreForSectionResult(
     sectionScores.some(hasSectionScoreEntry) ||
     parts.some(
       (part) =>
-        part.load_kg != null || part.sets.some((set) => set.done),
+        part.sets.some((set) => set.done),
     );
   return hasEntry
     ? {

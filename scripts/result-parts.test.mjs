@@ -89,6 +89,17 @@ test("section-only results require an entry and keep the fallback overall load",
     null,
   );
   assert.equal(
+    scoreForSectionResult(
+      [
+        { ...part, load_kg: 43.09 },
+        { ...part, position: 1, movement_id: "20000000-0000-4000-8000-000000000002", load_kg: 29.48 },
+      ],
+      [],
+      null,
+    ),
+    null,
+  );
+  assert.equal(
     hasSectionScoreEntry({ section: 0, score: {}, notes: "  " }),
     false,
   );
@@ -140,7 +151,7 @@ test("section-only results require an entry and keep the fallback overall load",
   );
   assert.deepEqual(
     scoreForSectionResult([{ ...part, load_kg: 0 }], [], null),
-    { time_seconds: null, rounds: null, reps: null, load_kg: null },
+    null,
   );
 });
 
