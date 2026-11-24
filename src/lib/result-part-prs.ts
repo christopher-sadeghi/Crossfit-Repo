@@ -64,14 +64,10 @@ export async function syncResultLiftPrs(
   );
   const candidates = liftPrCandidates(parts, bests);
 
-  const { error: deleteError } = await supabase
-    .from("benchmark_results")
-    .delete()
-    .eq("source_result_id", result.id);
-  if (deleteError) return { candidates: [], error: deleteError.message };
-
-  if (candidates.length) {
-    const { error: insertError } = await supabase.from("benchmark_results").insert(
+  const { data: insertedRows, error: insertError } = candidates.length
+    ? await supabase
+        .from("benchmark_results")
+        .insert(
       candidates.map((candidate) => ({
         coach_id: result.coach_id,
         athlete_id: result.athlete_id,
@@ -84,9 +80,25 @@ export async function syncResultLiftPrs(
         source_result_id: result.id,
         logged_by: result.logged_by,
       })),
+        )
+        .select("id")
+    : { data: [], error: null };
+  if (insertError) return { candidates: [], error: insertError.message };
+
+  const insertedIds = (insertedRows ?? []).map((row) => row.id);
+  let obsoleteRowsQuery = supabase
+    .from("benchmark_results")
+    .delete()
+    .eq("source_result_id", result.id);
+  if (insertedIds.length) {
+    obsoleteRowsQuery = obsoleteRowsQuery.not(
+      "id",
+      "in",
+      `(${insertedIds.join(",")})`,
     );
-    if (insertError) return { candidates: [], error: insertError.message };
   }
+  const { error: deleteError } = await obsoleteRowsQuery;
+  if (deleteError) return { candidates: [], error: deleteError.message };
 
   return { candidates };
 }
