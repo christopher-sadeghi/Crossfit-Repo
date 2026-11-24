@@ -120,19 +120,27 @@ export function formatSectionHeadline(section: WorkoutSection | null): string {
     ? `${Math.round((section.time_cap_seconds / 60) * 10) / 10} min`
     : "";
   switch (section.format) {
-    case "for_time":
-      return section.rounds && section.rounds > 1
-        ? `${section.rounds} Rounds For Time`
-        : "For Time";
+    case "for_time": {
+      const headline =
+        section.rounds && section.rounds > 1
+          ? `${section.rounds} Rounds For Time`
+          : "For Time";
+      return minutes ? `${headline} · ${minutes} cap` : headline;
+    }
     case "amrap":
       return `AMRAP ${minutes}`.trim();
     case "emom":
       return `EMOM ${minutes}`.trim();
     case "strength":
       return "Strength";
-    default:
-      return section.rounds && section.rounds > 1
-        ? `${section.rounds} Rounds`
-        : "";
+    default: {
+      const rounds =
+        section.rounds && section.rounds > 1
+          ? `${section.rounds} Rounds`
+          : "";
+      return [rounds, minutes ? `${minutes} cap` : ""]
+        .filter(Boolean)
+        .join(" · ");
+    }
   }
 }

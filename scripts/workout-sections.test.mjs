@@ -115,6 +115,10 @@ test("formatSectionHeadline describes the section format and cap", () => {
   assert.equal(formatSectionHeadline(sections[2]), "AMRAP 20 min");
   assert.equal(formatSectionHeadline({ ...sections[2], time_cap_seconds: null, rounds: 3, format: "for_time" }), "3 Rounds For Time");
   assert.equal(formatSectionHeadline({ ...sections[2], time_cap_seconds: null, rounds: null, format: "for_time" }), "For Time");
+  assert.equal(formatSectionHeadline({ ...sections[2], time_cap_seconds: 720, rounds: null, format: "for_time" }), "For Time · 12 min cap");
+  assert.equal(formatSectionHeadline({ ...sections[2], time_cap_seconds: 900, rounds: 3, format: "for_time" }), "3 Rounds For Time · 15 min cap");
+  assert.equal(formatSectionHeadline({ ...sections[2], time_cap_seconds: 600, rounds: 3, format: "other" }), "3 Rounds · 10 min cap");
+  assert.equal(formatSectionHeadline({ ...sections[2], time_cap_seconds: 600, rounds: null, format: "other" }), "10 min cap");
   assert.equal(formatSectionHeadline({ ...sections[2], format: "emom" }), "EMOM 20 min");
   assert.equal(formatSectionHeadline(sections[0]), "Strength");
 });
