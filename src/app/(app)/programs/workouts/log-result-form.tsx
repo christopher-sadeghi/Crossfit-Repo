@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState } from "react";
+import { startTransition, useActionState, useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -9,12 +9,22 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { FormState } from "@/lib/auth/form-state";
 import type { Enums } from "@/lib/supabase/database.types";
+import { ResultPartsEditor } from "@/components/result-parts-editor";
+import { WorkoutResultPartsDisplay } from "@/components/workout-result-parts-display";
+import { defaultParts, type ResultPartMovement } from "@/lib/result-parts";
+import type { ScalingRow } from "@/lib/workout-scaling";
+import { workoutVersion } from "@/lib/workout-version";
 import type { Units } from "@/lib/units";
 
 import { selectClass } from "../options";
 import { deleteResult, logResult } from "./result-actions";
 
-type Tracked = FormState & { successes?: number };
+type Tracked = FormState & {
+  successes?: number;
+  savedParts?: import("@/lib/result-parts").ResultPart[];
+  newPrSets?: import("@/lib/result-parts").LiftPrSetLocation[];
+  prError?: boolean;
+};
 
 export const FIELDS: Record<Enums<"workout_type">, ("time" | "rounds" | "reps" | "load")[]> = {
   for_time: ["time", "reps"],
@@ -30,12 +40,20 @@ export function LogResultForm({
   athletes,
   units,
   today,
+  baseVersion,
+  scalings,
 }: {
   workoutId: string;
   workoutType: Enums<"workout_type">;
   athletes: { id: string; name: string }[];
   units: Units;
   today: string;
+  baseVersion: {
+    movements: ResultPartMovement[];
+    rounds: number | null;
+    time_cap_seconds: number | null;
+  };
+  scalings: (ScalingRow & { athlete_id: string })[];
 }) {
   // Submit manually so a failed submit keeps the selections; remount after each success to clear them.
   const [state, formAction, pending] = useActionState<Tracked, FormData>(async (prev, data) => {
@@ -44,6 +62,20 @@ export function LogResultForm({
   }, {});
   const fields = FIELDS[workoutType];
   const v = state.error ? (state.values ?? {}) : {};
+  const [selectedAthlete, setSelectedAthlete] = useState(v.athlete_id ?? "");
+  const [selectedDate, setSelectedDate] = useState(v.performed_on ?? today);
+  useEffect(() => {
+    if (state.error) {
+      setSelectedAthlete(v.athlete_id ?? "");
+      setSelectedDate(v.performed_on ?? today);
+    } else if (state.successes) {
+      setSelectedAthlete("");
+      setSelectedDate(today);
+    }
+  }, [state.error, state.successes, today, v.athlete_id, v.performed_on]);
+  const scaling = scalings.find((row) => row.athlete_id === selectedAthlete) ?? null;
+  const version = workoutVersion(baseVersion, scaling, selectedDate);
+  const initialParts = defaultParts(version, units);
 
   return (
     <form
@@ -58,7 +90,14 @@ export function LogResultForm({
       <input type="hidden" name="workout_id" value={workoutId} />
       <div className="grid gap-1.5">
         <Label htmlFor="athlete_id">Athlete</Label>
-        <select id="athlete_id" name="athlete_id" className={selectClass} defaultValue={v.athlete_id ?? ""} required>
+        <select
+          id="athlete_id"
+          name="athlete_id"
+          className={selectClass}
+          value={selectedAthlete}
+          onChange={(event) => setSelectedAthlete(event.currentTarget.value)}
+          required
+        >
           <option value="" disabled>
             Choose an athlete…
           </option>
@@ -71,8 +110,26 @@ export function LogResultForm({
       </div>
       <div className="grid gap-1.5">
         <Label htmlFor="performed_on">Date</Label>
-        <Input id="performed_on" name="performed_on" type="date" max={today} defaultValue={v.performed_on ?? today} required />
+        <Input
+          id="performed_on"
+          name="performed_on"
+          type="date"
+          max={today}
+          value={selectedDate}
+          onChange={(event) => setSelectedDate(event.currentTarget.value)}
+          required
+        />
       </div>
+      <ResultPartsEditor
+        initialParts={initialParts}
+        templateParts={initialParts}
+        resetKey={`${selectedAthlete}-${state.successes ?? 0}`}
+        movements={version.movements}
+        units={units}
+        workoutType={workoutType}
+        inputId={`${workoutId}-coach`}
+        initialRawParts={state.error ? v.parts : undefined}
+      />
       {fields.includes("time") && (
         <fieldset className="grid gap-1.5">
           <legend className="mb-1.5 text-sm font-medium">Time {workoutType === "for_time" && <span className="font-normal text-muted-foreground">(mm:ss)</span>}</legend>
@@ -124,9 +181,21 @@ export function LogResultForm({
         </p>
       )}
       {!state.error && state.message && (
-        <p role="status" className="text-sm text-emerald-600">
-          {state.message}
-        </p>
+        <div className="grid gap-2">
+          <p role="status" className="text-sm text-emerald-600">{state.message}</p>
+          {state.prError && (
+            <p role="status" className="text-sm text-amber-700">
+              The result was saved, but automatic lift PRs could not be updated.
+            </p>
+          )}
+          {state.savedParts && (
+            <WorkoutResultPartsDisplay
+              parts={state.savedParts}
+              units={units}
+              newPrSets={state.newPrSets}
+            />
+          )}
+        </div>
       )}
       <Button type="submit" disabled={pending || athletes.length === 0}>
         {pending ? "Saving…" : "Log result"}

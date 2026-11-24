@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database, Tables } from "@/lib/supabase/database.types";
+import type { Database, Json, Tables } from "@/lib/supabase/database.types";
 import { compareScores, type Score } from "@/lib/results";
 import { addDays } from "@/lib/nutrition";
+import { resultPartsSchema } from "@/lib/result-parts";
 import { effectiveScaling } from "@/lib/workout-scaling";
 import { scaleWorkoutDetailsSchema } from "@/lib/ai/scale-workout-schema";
 
@@ -15,6 +16,7 @@ export type ScheduledBenchmarkResult = Score & {
   performed_on: string;
   created_at: string;
   notes: string | null;
+  parts?: Json;
   scaling?: BenchmarkScaling | null;
   workouts: {
     title: string;
@@ -46,7 +48,11 @@ function compareAttempts(benchmark: Benchmark) {
 }
 
 export function normalizeBenchmarkHistory(benchmark: Benchmark, direct: DirectResult[], scheduled: ScheduledBenchmarkResult[]): BenchmarkAttempt[] {
-  const attempts: BenchmarkAttempt[] = direct.filter((r) => r.benchmark_id === benchmark.id).map((r) => ({
+  const scheduledIds = new Set(scheduled.map((result) => result.id));
+  const attempts: BenchmarkAttempt[] = direct
+    .filter((r) => r.benchmark_id === benchmark.id)
+    .filter((r) => !r.source_result_id || !scheduledIds.has(r.source_result_id))
+    .map((r) => ({
     ...r, source: "direct", estimatedOneRmKg: benchmark.kind === "lift" ? estimateOneRepMax(r.load_kg, r.rep_max) : null, isPr: false,
   }));
   for (const r of scheduled) {
@@ -56,9 +62,83 @@ export function normalizeBenchmarkHistory(benchmark: Benchmark, direct: DirectRe
     const details = scaling ? scaleWorkoutDetailsSchema.safeParse(scaling.details) : null;
     const movements = details?.success ? details.data.movements : w.workout_movements;
     const movement = movements.find((m) => m.movement_id === benchmark.movement_id);
-    if (benchmark.kind === "lift" ? w.workout_type !== "strength" || !movement : w.workout_type !== benchmark.workout_type || w.title.trim().toLowerCase() !== benchmark.name.trim().toLowerCase()) continue;
-    const reps = benchmark.kind === "lift" ? movement?.reps ?? r.reps ?? 1 : null;
-    attempts.push({ ...r, source: "workout", rep_max: reps, estimatedOneRmKg: benchmark.kind === "lift" ? estimateOneRepMax(r.load_kg, reps) : null, isPr: false });
+    if (benchmark.kind === "lift") {
+      const parsedParts = resultPartsSchema.safeParse(r.parts);
+      if (parsedParts.success && parsedParts.data.length > 0) {
+        const loadsByReps = new Map<number, number>();
+        for (const part of parsedParts.data) {
+          if (part.movement_id !== benchmark.movement_id) continue;
+          for (const set of part.sets) {
+            if (
+              !set.done ||
+              set.reps == null ||
+              set.reps < 1 ||
+              set.reps > 20 ||
+              set.load_kg == null ||
+              set.load_kg <= 0
+            )
+              continue;
+            loadsByReps.set(
+              set.reps,
+              Math.max(loadsByReps.get(set.reps) ?? 0, set.load_kg),
+            );
+          }
+        }
+        for (const [rep_max, load_kg] of loadsByReps) {
+          attempts.push({
+            ...r,
+            source: "workout",
+            time_seconds: null,
+            rounds: null,
+            reps: null,
+            rep_max,
+            load_kg,
+            estimatedOneRmKg: estimateOneRepMax(load_kg, rep_max),
+            isPr: false,
+          });
+        }
+        if (loadsByReps.size > 0) continue;
+        const hasLoadedDoneSet = parsedParts.data.some((part) =>
+          part.sets.some(
+            (set) => set.done && set.load_kg != null && set.load_kg > 0,
+          ),
+        );
+        if (hasLoadedDoneSet) continue;
+      }
+      const matchingWithSets = parsedParts.success
+        ? parsedParts.data.filter(
+            (part) =>
+              part.movement_id === benchmark.movement_id && part.sets.length > 0,
+          )
+        : [];
+      if (
+        matchingWithSets.length > 0 &&
+        matchingWithSets.every((part) => part.sets.every((set) => !set.done))
+      )
+        continue;
+      if (w.workout_type !== "strength" || !movement) continue;
+      const rep_max = movement.reps ?? r.reps ?? 1;
+      attempts.push({
+        ...r,
+        source: "workout",
+        rep_max,
+        estimatedOneRmKg: estimateOneRepMax(r.load_kg, rep_max),
+        isPr: false,
+      });
+      continue;
+    }
+    if (
+      w.workout_type !== benchmark.workout_type ||
+      w.title.trim().toLowerCase() !== benchmark.name.trim().toLowerCase()
+    )
+      continue;
+    attempts.push({
+      ...r,
+      source: "workout",
+      rep_max: null,
+      estimatedOneRmKg: null,
+      isPr: false,
+    });
   }
   attempts.sort((a, b) => a.performed_on.localeCompare(b.performed_on) || a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
   const compare = compareAttempts(benchmark);
@@ -86,9 +166,9 @@ function summarize(benchmark: Benchmark, attempts: BenchmarkAttempt[], retestWee
   };
 }
 
-async function loadHistory(supabase: Client, athleteId: string, asOf?: string) {
+export async function loadBenchmarkHistory(supabase: Client, athleteId: string, asOf?: string) {
   const directQuery = supabase.from("benchmark_results").select("*").eq("athlete_id", athleteId);
-  const scheduledQuery = supabase.from("workout_results").select("id, workout_id, performed_on, created_at, time_seconds, rounds, reps, load_kg, is_rx, notes, workouts(title, workout_type, workout_movements(movement_id, reps))").eq("athlete_id", athleteId);
+  const scheduledQuery = supabase.from("workout_results").select("id, workout_id, performed_on, created_at, time_seconds, rounds, reps, load_kg, is_rx, notes, parts, workouts(title, workout_type, workout_movements(movement_id, reps))").eq("athlete_id", athleteId);
   const [benchmarks, direct, scheduled, scalings] = await Promise.all([
     supabase.from("benchmarks").select("*").order("name"),
     asOf ? directQuery.lte("performed_on", asOf) : directQuery,
@@ -102,7 +182,7 @@ async function loadHistory(supabase: Client, athleteId: string, asOf?: string) {
 
 export async function loadAthleteBenchmarks(supabase: Client, athleteId: string, today: string, asOf?: string) {
   const [history, athlete] = await Promise.all([
-    loadHistory(supabase, athleteId, asOf),
+    loadBenchmarkHistory(supabase, athleteId, asOf),
     supabase.from("athletes").select("coach_id").eq("id", athleteId).single(),
   ]);
   if (athlete.error) throw athlete.error;
@@ -125,7 +205,7 @@ export type LiftMax = {
 };
 
 export async function loadLiftMaxes(supabase: Client, athleteId: string, asOf?: string): Promise<LiftMax[]> {
-  const history = await loadHistory(supabase, athleteId, asOf);
+  const history = await loadBenchmarkHistory(supabase, athleteId, asOf);
   const lifts = new Map<string, { name: string; attempts: BenchmarkAttempt[] }>();
   for (const b of history.benchmarks) {
     if (b.kind !== "lift" || !b.movement_id) continue;

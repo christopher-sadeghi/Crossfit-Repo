@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { feedbackSummary } from "@/lib/feedback";
 import { loadFormReviews } from "@/lib/form-review-data";
+import { loadResultPrSetLocations } from "@/lib/result-part-prs";
+import { resultPartsSchema } from "@/lib/result-parts";
 import { createClient } from "@/lib/supabase/server";
 import { getToday } from "@/lib/time-zone";
 import { gymSessionLoad } from "@/lib/training-load";
@@ -17,8 +19,14 @@ import { getViewer } from "@/lib/viewer";
 
 import { AthleteResultControls } from "./result-controls";
 import { AthleteConsistencyCard } from "../consistency-card";
+import { WorkoutResultPartsDisplay } from "@/components/workout-result-parts-display";
 
-export default async function AthleteHistoryPage() {
+export default async function AthleteHistoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ result?: string; pr_error?: string }>;
+}) {
+  const query = await searchParams;
   const viewer = await getViewer();
   if (!viewer) redirect("/login");
   if (viewer.kind === "coach") redirect("/");
@@ -30,7 +38,7 @@ export default async function AthleteHistoryPage() {
     supabase
       .from("workout_results")
       .select(
-        "id, workout_id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, logged_by, rpe, energy, sleep_hours, soreness, pain_notes, workouts(title, workout_type, time_cap_seconds)",
+        "id, workout_id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, logged_by, rpe, energy, sleep_hours, soreness, pain_notes, parts, workouts(title, workout_type, time_cap_seconds)",
       )
       .eq("athlete_id", viewer.athleteId)
       .order("performed_on", { ascending: false })
@@ -40,6 +48,7 @@ export default async function AthleteHistoryPage() {
     loadFormReviews(supabase, { athleteId: viewer.athleteId }),
   ]);
   const userId = claims?.claims?.sub;
+  const prSetsByResult = await loadResultPrSetLocations(supabase, results ?? []);
 
   return (
     <div className="grid gap-3">
@@ -59,6 +68,8 @@ export default async function AthleteHistoryPage() {
       {results?.length ? (
         results.map((result) => {
           const session = gymSessionLoad(result, result.workouts);
+          const parts = resultPartsSchema.safeParse(result.parts);
+          const isSaved = query.result === result.id;
           return (
           <Card key={result.id}>
             <CardContent className="grid gap-2 py-4">
@@ -77,6 +88,24 @@ export default async function AthleteHistoryPage() {
                 <span className="text-muted-foreground">{formatDate(result.performed_on)}</span>
                 <span className="font-medium">{formatScore(result, viewer.units)}</span>
               </div>
+              {isSaved && (
+                <div className="grid gap-1">
+                  <p role="status" className="text-sm text-emerald-600">Result saved.</p>
+                  {query.pr_error === "1" && (
+                    <p role="status" className="text-sm text-amber-700">
+                      Automatic lift PRs could not be updated.
+                    </p>
+                  )}
+                </div>
+              )}
+              {parts.success && (
+                <WorkoutResultPartsDisplay
+                  parts={parts.data}
+                  units={viewer.units}
+                  newPrSets={prSetsByResult.get(result.id)}
+                  open={isSaved}
+                />
+              )}
               <p className="text-sm text-muted-foreground">{Math.round(session.load)} load{session.estimated && " (estimated)"}</p>
               {feedbackSummary(result) && (
                 <p className="text-sm text-muted-foreground">{feedbackSummary(result)}</p>

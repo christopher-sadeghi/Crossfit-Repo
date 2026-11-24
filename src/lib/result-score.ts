@@ -13,7 +13,7 @@ const load = z
   .string()
   .trim()
   .transform((v) => (v === "" ? null : Number(v)))
-  .refine((v) => v == null || (Number.isFinite(v) && v > 0 && v < 2000), "Load must be a positive number.");
+  .refine((v) => v == null || (Number.isFinite(v) && v >= 0 && v < 2000), "Load must be a non-negative number.");
 
 const optionalCount = z.preprocess((v) => v ?? "", count);
 const optionalLoad = z.preprocess((v) => v ?? "", load);

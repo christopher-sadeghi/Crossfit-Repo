@@ -22,6 +22,8 @@ function load(relative) {
   return loaded.exports;
 }
 const { estimateOneRepMax, normalizeBenchmarkHistory, retestDue, loadAthleteBenchmarks, loadLiftMaxes } = load("src/lib/benchmarks.ts");
+const { liftBestsFromHistory } = load("src/lib/result-part-prs.ts");
+const { liftPrCandidates } = load("src/lib/result-parts.ts");
 const { bestForMovement, goalProgress } = load("src/lib/progress.ts");
 const { formatLiftMaxes, liftMaxContextSchema, LIFT_LOAD_RULE } = load("src/lib/ai/lift-context.ts");
 const benchmark = { id: "b", name: "Fran", kind: "girl", workout_type: "for_time", movement_id: null };
@@ -51,6 +53,322 @@ test("lifts match movements and use movement reps, result reps, then one", () =>
   const attempts = normalizeBenchmarkHistory(lift, [], [w("1", 5, 9), w("2", null, 3), w("3", null, null)]);
   assert.deepEqual(attempts.map((a) => a.rep_max), [5, 3, 1]);
   assert.deepEqual(attempts.map((a) => a.isPr), [false, false, false]);
+});
+test("scheduled lift parts use the heaviest completed set for each valid rep count", () => {
+  const movementId = "10000000-0000-4000-8000-000000000001";
+  const result = strengthResult({
+    parts: [
+      {
+        position: 0,
+        movement_id: movementId,
+        name: "Squat",
+        sets: [
+          { reps: 5, load_kg: 100, done: true },
+          { reps: 5, load_kg: 105, done: true },
+          { reps: 3, load_kg: 110, done: true },
+          { reps: 3, load_kg: 150, done: false },
+          { reps: 21, load_kg: 200, done: true },
+          { reps: 1, load_kg: 0, done: true },
+        ],
+      },
+      {
+        position: 1,
+        movement_id: "10000000-0000-4000-8000-000000000002",
+        name: "Other lift",
+        sets: [{ reps: 1, load_kg: 500, done: true }],
+      },
+    ],
+  });
+  const attempts = normalizeBenchmarkHistory(
+    { ...lift, movement_id: movementId },
+    [],
+    [result],
+  );
+  assert.deepEqual(
+    attempts.map(({ rep_max, load_kg }) => [rep_max, load_kg]),
+    [
+      [5, 105],
+      [3, 110],
+    ],
+  );
+});
+test("strength parts without loaded completed sets fall back to overall load", () => {
+  const movementId = "10000000-0000-4000-8000-000000000001";
+  const result = strengthResult({
+    load_kg: 105,
+    parts: [
+      {
+        position: 0,
+        movement_id: movementId,
+        name: "Squat",
+        sets: [{ reps: 5, load_kg: null, done: true }],
+      },
+    ],
+    workouts: {
+      title: "Strength",
+      workout_type: "strength",
+      workout_movements: [{ movement_id: movementId, reps: 5 }],
+    },
+  });
+  const attempts = normalizeBenchmarkHistory(
+    { ...lift, movement_id: movementId },
+    [],
+    [result],
+  );
+  assert.deepEqual(
+    attempts.map(({ rep_max, load_kg }) => [rep_max, load_kg]),
+    [[5, 105]],
+  );
+});
+test("strength results with every matching set skipped do not create a lift attempt", () => {
+  const movementId = "10000000-0000-4000-8000-000000000001";
+  const result = strengthResult({
+    load_kg: 105,
+    parts: [
+      {
+        position: 0,
+        movement_id: movementId,
+        name: "Squat",
+        sets: [
+          { reps: 5, load_kg: 105, done: false },
+          { reps: 5, load_kg: null, done: false },
+        ],
+      },
+    ],
+    workouts: {
+      title: "Strength",
+      workout_type: "strength",
+      workout_movements: [{ movement_id: movementId, reps: 5 }],
+    },
+  });
+  assert.deepEqual(
+    normalizeBenchmarkHistory(
+      { ...lift, movement_id: movementId },
+      [],
+      [result],
+    ),
+    [],
+  );
+});
+test("one skipped lift block does not suppress fallback for a block with a done unloaded set", () => {
+  const movementId = "10000000-0000-4000-8000-000000000001";
+  const result = strengthResult({
+    load_kg: 105,
+    parts: [
+      {
+        position: 0,
+        movement_id: movementId,
+        name: "Squat Heavy",
+        sets: [{ reps: 1, load_kg: 115, done: false }],
+      },
+      {
+        position: 1,
+        movement_id: movementId,
+        name: "Squat Back-Off",
+        sets: [{ reps: 5, load_kg: null, done: true }],
+      },
+    ],
+    workouts: {
+      title: "Strength",
+      workout_type: "strength",
+      workout_movements: [{ movement_id: movementId, reps: 5 }],
+    },
+  });
+  assert.deepEqual(
+    normalizeBenchmarkHistory(
+      { ...lift, movement_id: movementId },
+      [],
+      [result],
+    ).map(({ rep_max, load_kg }) => [rep_max, load_kg]),
+    [[5, 105]],
+  );
+});
+test("loaded sets in other parts prevent overall load from being credited to a lift", () => {
+  const movementId = "10000000-0000-4000-8000-000000000001";
+  const otherMovementId = "10000000-0000-4000-8000-000000000002";
+  const result = strengthResult({
+    load_kg: 105,
+    parts: [
+      {
+        position: 0,
+        movement_id: otherMovementId,
+        name: "Deadlift",
+        sets: [{ reps: 5, load_kg: 100, done: true }],
+      },
+    ],
+    workouts: {
+      title: "Strength",
+      workout_type: "strength",
+      workout_movements: [{ movement_id: movementId, reps: 5 }],
+    },
+  });
+  assert.deepEqual(
+    normalizeBenchmarkHistory(
+      { ...lift, movement_id: movementId },
+      [],
+      [result],
+    ),
+    [],
+  );
+});
+test("non-strength result parts count as lift attempts without double-counting generated rows", () => {
+  const movementId = "10000000-0000-4000-8000-000000000001";
+  const emom = scheduled("emom", "2026-01-01", {
+    parts: [
+      {
+        position: 0,
+        movement_id: movementId,
+        name: "Deadlift",
+        sets: [{ reps: 5, load_kg: 125, done: true }],
+      },
+    ],
+    workouts: {
+      title: "Deadlift EMOM",
+      workout_type: "emom",
+      workout_movements: [{ movement_id: movementId, reps: 5 }],
+    },
+  });
+  const generated = result("generated", "2026-01-01", {
+    benchmark_id: lift.id,
+    load_kg: 125,
+    rep_max: 5,
+    source_result_id: emom.id,
+  });
+  const attempts = normalizeBenchmarkHistory(
+    { ...lift, movement_id: movementId },
+    [generated],
+    [emom],
+  );
+  assert.equal(attempts.length, 1);
+  assert.equal(attempts[0].id, emom.id);
+  assert.equal(attempts[0].source, "workout");
+  assert.equal(attempts[0].rep_max, 5);
+  assert.equal(attempts[0].load_kg, 125);
+});
+test("for-time parts-based lift attempts do not retain the workout score", () => {
+  const movementId = "10000000-0000-4000-8000-000000000001";
+  const forTime = scheduled("for-time-lift", "2026-01-01", {
+    time_seconds: 300,
+    rounds: 3,
+    reps: 2,
+    parts: [
+      {
+        position: 0,
+        movement_id: movementId,
+        name: "Deadlift",
+        sets: [{ reps: 5, load_kg: 125, done: true }],
+      },
+    ],
+    workouts: {
+      title: "Deadlift For Time",
+      workout_type: "for_time",
+      workout_movements: [{ movement_id: movementId, reps: 5 }],
+    },
+  });
+  const [attempt] = normalizeBenchmarkHistory(
+    { ...lift, movement_id: movementId },
+    [],
+    [forTime],
+  );
+  assert.equal(attempt.time_seconds, null);
+  assert.equal(attempt.rounds, null);
+  assert.equal(attempt.reps, null);
+  assert.equal(attempt.load_kg, 125);
+});
+test("generated direct lift rows are skipped when their scheduled result is present", () => {
+  const scheduledResult = strengthResult({ parts: [] });
+  const generated = result("generated", "2026-01-01", {
+    benchmark_id: lift.id,
+    load_kg: 105,
+    rep_max: 5,
+    source_result_id: scheduledResult.id,
+  });
+  const attempts = normalizeBenchmarkHistory(lift, [generated], [scheduledResult]);
+  assert.deepEqual(attempts.map((attempt) => attempt.id), [scheduledResult.id]);
+});
+test("PR history includes legacy strength results", () => {
+  const parts = [
+    {
+      position: 0,
+      movement_id: "m",
+      name: "Squat",
+      sets: [{ reps: 5, load_kg: 115, done: true }],
+    },
+  ];
+  const current = {
+    id: "current",
+    performed_on: "2026-01-02",
+    created_at: "2026-01-02T10:00:00.000Z",
+  };
+  const legacy = strengthResult({
+    id: "legacy",
+    performed_on: "2026-01-01",
+    created_at: "2026-01-01T10:00:00.000Z",
+    parts: [],
+    load_kg: 110,
+  });
+  const bests = liftBestsFromHistory([lift], [], [legacy], current, parts);
+  assert.deepEqual(bests, [
+    { benchmark_id: "b", movement_id: "m", rep_max: 5, load_kg: 110 },
+  ]);
+  assert.equal(liftPrCandidates(parts, bests).length, 1);
+});
+test("editing an older PR ignores current, same-day later, and future attempts", () => {
+  const current = {
+    id: "older-pr",
+    performed_on: "2026-01-02",
+    created_at: "2026-01-02T10:00:00.000Z",
+  };
+  const parts = [
+    {
+      position: 0,
+      movement_id: "m",
+      name: "Squat",
+      sets: [{ reps: 5, load_kg: 115, done: true }],
+    },
+  ];
+  const prior = result("prior", "2026-01-01", {
+    benchmark_id: lift.id,
+    load_kg: 100,
+    rep_max: 5,
+    created_at: "2026-01-01T10:00:00.000Z",
+  });
+  const currentGenerated = result("generated", current.performed_on, {
+    benchmark_id: lift.id,
+    load_kg: 115,
+    rep_max: 5,
+    source_result_id: current.id,
+    created_at: "2026-01-02T10:01:00.000Z",
+  });
+  const laterSameDay = result("later-same-day", current.performed_on, {
+    benchmark_id: lift.id,
+    load_kg: 120,
+    rep_max: 5,
+    created_at: "2026-01-02T11:00:00.000Z",
+  });
+  const later = result("later", "2026-01-03", {
+    benchmark_id: lift.id,
+    load_kg: 130,
+    rep_max: 5,
+    created_at: "2026-01-03T10:00:00.000Z",
+  });
+  const currentScheduled = strengthResult({
+    id: current.id,
+    performed_on: current.performed_on,
+    created_at: current.created_at,
+    parts,
+  });
+  const bests = liftBestsFromHistory(
+    [lift],
+    [prior, currentGenerated, laterSameDay, later],
+    [currentScheduled],
+    current,
+    parts,
+  );
+  assert.deepEqual(bests, [
+    { benchmark_id: "b", movement_id: "m", rep_max: 5, load_kg: 100 },
+  ]);
+  assert.equal(liftPrCandidates(parts, bests).length, 1);
 });
 test("high-rep lifts fall back to actual loads for bests and PRs while preserving Rx priority", async () => {
   const direct = [

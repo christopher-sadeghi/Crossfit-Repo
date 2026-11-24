@@ -11,12 +11,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getCoach } from "@/lib/coach";
 import { loadProgressCheckIns } from "@/lib/measurements";
+import { loadResultPrSetLocations } from "@/lib/result-part-prs";
+import { resultPartsSchema } from "@/lib/result-parts";
 import { addDays, targetOn, totals } from "@/lib/nutrition";
 import { getToday } from "@/lib/time-zone";
 import { formatGoalValue, GOAL_TYPE_LABELS, goalProgress, loadPrsByMovement, TRACKING_LABELS } from "@/lib/progress";
 import { loadLiftMaxes } from "@/lib/benchmarks";
 import { createClient } from "@/lib/supabase/server";
-import { formatDate, formatWeight, fromKg, type Units } from "@/lib/units";
+import { formatDate, formatScore, formatWeight, fromKg, type Units } from "@/lib/units";
+import { WorkoutResultPartsDisplay } from "@/components/workout-result-parts-display";
 
 import { MacroChart, PrChart, WeightChart } from "./charts";
 import { DeleteMetricButton, GoalControls, GoalForm, MetricForm } from "./forms";
@@ -35,7 +38,7 @@ export default async function AthleteProgressPage({ params }: Props) {
   const now = await getToday();
   const since = addDays(now, -(MACRO_DAYS - 1));
 
-  const [liftMaxes, athleteRes, metricsRes, goalsRes, resultsRes, movementsRes, targetsRes, foodRes] = await Promise.all([
+  const [liftMaxes, athleteRes, metricsRes, goalsRes, resultsRes, recentResultsRes, movementsRes, targetsRes, foodRes] = await Promise.all([
     loadLiftMaxes(supabase, id),
     supabase.from("athletes").select("id, first_name, last_name").eq("id", id).maybeSingle(),
     supabase.from("body_metrics").select("id, measured_on, weight_kg, body_fat_pct, notes").eq("athlete_id", id).order("measured_on", { ascending: false }).order("created_at", { ascending: false }),
@@ -46,6 +49,13 @@ export default async function AthleteProgressPage({ params }: Props) {
       .order("status")
       .order("target_date", { nullsFirst: false }),
     supabase.from("workout_results").select("performed_on, load_kg, reps, rounds, workouts(workout_type, workout_movements(movement_id))").eq("athlete_id", id),
+    supabase
+      .from("workout_results")
+      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, parts, workouts(title, workout_type, time_cap_seconds)")
+      .eq("athlete_id", id)
+      .order("performed_on", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(10),
     supabase.from("movements").select("id, name").order("name"),
     supabase.from("nutrition_targets").select("calories, protein_g, carbs_g, fat_g, start_date, end_date").eq("athlete_id", id),
     supabase.from("food_logs").select("logged_on, calories, protein_g, carbs_g, fat_g").eq("athlete_id", id).gte("logged_on", since).lte("logged_on", now),
@@ -61,6 +71,8 @@ export default async function AthleteProgressPage({ params }: Props) {
   const metrics = metricsRes.data ?? [];
   const goals = goalsRes.data ?? [];
   const results = resultsRes.data ?? [];
+  const recentResults = recentResultsRes.data ?? [];
+  const resultPrSets = await loadResultPrSetLocations(supabase, recentResults);
   const movements = movementsRes.data ?? [];
   const targets = targetsRes.data ?? [];
   const food = foodRes.data ?? [];
@@ -139,6 +151,34 @@ export default async function AthleteProgressPage({ params }: Props) {
             ) : (
               <Empty text="No food logged or targets set in this period." />
             )}
+          </CardContent>
+        </Card>
+      </section>
+
+      <section aria-label="Recent workout results" className="mb-6">
+        <Card>
+          <CardHeader><CardTitle>Recent workout results</CardTitle></CardHeader>
+          <CardContent className="grid gap-3">
+            {recentResults.length ? recentResults.map((result) => {
+              const parts = resultPartsSchema.safeParse(result.parts);
+              return (
+                <div key={result.id} className="grid gap-2 rounded-md border p-3">
+                  <div className="flex flex-wrap justify-between gap-2">
+                    <span className="font-medium">{result.workouts?.title ?? "Workout"}</span>
+                    <span className="text-sm text-muted-foreground">
+                      {formatDate(result.performed_on)} · {formatScore(result, units)}
+                    </span>
+                  </div>
+                  {parts.success && (
+                    <WorkoutResultPartsDisplay
+                      parts={parts.data}
+                      units={units}
+                      newPrSets={resultPrSets.get(result.id)}
+                    />
+                  )}
+                </div>
+              );
+            }) : <Empty text="No workout results logged yet." />}
           </CardContent>
         </Card>
       </section>

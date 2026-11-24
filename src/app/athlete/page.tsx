@@ -29,6 +29,10 @@ import { CheckInForm } from "./check-in/check-in-form";
 import { ScrollIntoView } from "./scroll-into-view";
 import { AthleteConsistencyCard } from "./consistency-card";
 import { waiverStatus } from "@/lib/waivers";
+import { defaultParts, resultPartsSchema } from "@/lib/result-parts";
+import { loadResultPrSetLocations } from "@/lib/result-part-prs";
+import { workoutVersion } from "@/lib/workout-version";
+import { WorkoutResultPartsDisplay } from "@/components/workout-result-parts-display";
 
 type TodayWorkout = WhiteboardWorkout & {
   id: string;
@@ -129,14 +133,15 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
         supabase
           .from("workout_results")
           .select(
-            "id, workout_id, performed_on, logged_by, created_at, time_seconds, rounds, reps, load_kg, is_rx, notes, rpe, energy, sleep_hours, soreness",
+            "id, workout_id, performed_on, logged_by, created_at, time_seconds, rounds, reps, load_kg, is_rx, notes, rpe, energy, sleep_hours, soreness, parts",
           )
           .eq("athlete_id", viewer.athleteId)
           .in("workout_id", workoutIds)
           .order("created_at", { ascending: false }),
       ])
-    : [{ data: null }, { data: [] }];
+      : [{ data: null }, { data: [] }];
   const userId = claims?.claims?.sub;
+  const resultPrSets = await loadResultPrSetLocations(supabase, athleteResults ?? []);
   const resultByWorkout = new Map<string, NonNullable<typeof athleteResults>[number]>();
   const todayResultByWorkout = new Map<string, NonNullable<typeof athleteResults>[number]>();
   for (const result of athleteResults ?? []) {
@@ -195,10 +200,20 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
               .sort((a, b) => a.position - b.position)
               .map(({ movements: movement, ...item }) => ({
                 ...item,
-                movement_id: movement?.id,
+                movement_id: movement?.id ?? "",
                 name: movement?.name ?? "",
               }));
             const scaling = effectiveScaling(scalingByWorkout.get(workout.id), currentDate);
+            const version = workoutVersion(
+              {
+                movements,
+                rounds: workout.rounds,
+                time_cap_seconds: workout.time_cap_seconds,
+                workout_type: workout.workout_type,
+              },
+              scaling,
+              currentDate,
+            );
             const scalingDetails = scaling ? scaleWorkoutDetailsSchema.safeParse(scaling.details) : null;
             const todayResult = todayResultForWorkout(workout);
             const adjusted = Boolean(scaling?.athlete_adjusted_at);
@@ -298,6 +313,16 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                         <p className="text-muted-foreground">{feedbackSummary(todayResult)}</p>
                       )}
                       {todayResult.notes && <p className="text-muted-foreground">{todayResult.notes}</p>}
+                      {(() => {
+                        const parts = resultPartsSchema.safeParse(todayResult.parts);
+                        return parts.success ? (
+                          <WorkoutResultPartsDisplay
+                            parts={parts.data}
+                            units={viewer.units}
+                            newPrSets={resultPrSets.get(todayResult.id)}
+                          />
+                        ) : null;
+                      })()}
                     </CardContent>
                   </Card>
                 ) : (
@@ -314,6 +339,8 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                         defaultDate={currentDate}
                         units={viewer.units}
                         existingResult={null}
+                        initialParts={defaultParts(version, viewer.units)}
+                        movements={version.movements}
                         inline
                       />
                     </CardContent>
