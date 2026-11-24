@@ -374,15 +374,19 @@ export async function runChatWithClient(supabase: Supabase, opts: ChatOptions): 
     }) } : {}),
     get_athlete: tool({
       description:
-        "Full detail for one athlete: profile, injuries, goals and progress, PRs, recent results and outside activities, gym and outside training load, consistency (completion, streaks, attendance and drifting), recovery journal, and schedule for the last 7 and next 14 days. Use goal_id from this athlete's goals list for goal changes.",
+        "Full detail for one athlete: profile, injuries, goals and progress, PRs, recent results and outside activities, gym and outside training load, consistency (completion, streaks, attendance and drifting), recovery journal, and schedule for the last 7 and next 14 days. Use goal_id from this athlete's goals list for goal changes. coaching_team contains valid coach IDs for reassignment.",
       inputSchema: z.object({ athlete_id: z.string().uuid() }),
       execute: safe(async ({ athlete_id }: { athlete_id: string }) => {
         if (opts.thread && athlete_id !== opts.thread.athleteId) return { error: "Use only the athlete in this thread." };
-        const [context, programming_style] = await Promise.all([
+        const { data: gymId, error: scopeError } = await supabase.rpc("current_gym_id");
+        if (scopeError || !gymId) return { error: "Couldn't verify your coaching scope." };
+        const [context, programming_style, team] = await Promise.all([
           getAthleteContext(supabase, athlete_id, opts.today, units),
           athleteProgrammingStyleNote(supabase, athlete_id),
+          supabase.from("coaches").select("id, full_name").eq("gym_id", gymId).order("full_name"),
         ]);
-        return { ...context, programming_style };
+        if (team.error) throw team.error;
+        return { ...context, programming_style, coaching_team: team.data ?? [] };
       }),
     }),
     ...(!opts.thread ? { list_programs: tool({
@@ -436,7 +440,7 @@ export async function runChatWithClient(supabase: Supabase, opts: ChatOptions): 
       execute: async ({ athlete_id, note }) => propose("adjust_macros", { athleteId: athlete_id, request: note ?? null }),
     }),
     propose_athlete_change: tool({
-      description: "Create one pending account change for an athlete. Confirm the exact change in words first. The coach must approve it; this tool never changes data directly.",
+      description: "Create one pending account change for an athlete. For assigned_coach changes, use coach_id from the coaching_team returned by get_athlete. Confirm the exact change in words first. The coach must approve it; this tool never changes data directly.",
       inputSchema: z.object({ athlete_id: z.string().uuid(), change: coachAccountChangeSchema }).strict(),
       execute: safe(async ({ athlete_id, change }) => {
         if (proposalCount >= MAX_PROPOSALS_PER_MESSAGE)
