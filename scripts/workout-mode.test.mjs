@@ -397,7 +397,12 @@ test("workout route gates by viewer, single-date schedule, and resolves scaling"
 test("result form prefills new results but preserves edited results and validation errors", () => {
   let state = {};
   const { AthleteResultForm } = load("src/app/athlete/log/[workoutId]/result-form.tsx", {
-    react: { ...require("react"), useActionState: () => [state, () => {}, false] },
+    react: {
+      ...require("react"),
+      useActionState: () => [state, () => {}, false],
+      useState: (value) => [typeof value === "function" ? value() : value, () => {}],
+      useEffect: () => {},
+    },
     "@/components/ui/button": { Button: "button" },
     "@/components/ui/input": { Input: "input" },
     "@/components/ui/label": { Label: "label" },

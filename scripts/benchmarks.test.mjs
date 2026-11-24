@@ -55,11 +55,12 @@ test("lifts match movements and use movement reps, result reps, then one", () =>
   assert.deepEqual(attempts.map((a) => a.isPr), [false, false, false]);
 });
 test("scheduled lift parts use the heaviest completed set for each valid rep count", () => {
+  const movementId = "10000000-0000-4000-8000-000000000001";
   const result = strengthResult({
     parts: [
       {
         position: 0,
-        movement_id: "m",
+        movement_id: movementId,
         name: "Squat",
         sets: [
           { reps: 5, load_kg: 100, done: true },
@@ -72,13 +73,17 @@ test("scheduled lift parts use the heaviest completed set for each valid rep cou
       },
       {
         position: 1,
-        movement_id: "other",
+        movement_id: "10000000-0000-4000-8000-000000000002",
         name: "Other lift",
         sets: [{ reps: 1, load_kg: 500, done: true }],
       },
     ],
   });
-  const attempts = normalizeBenchmarkHistory(lift, [], [result]);
+  const attempts = normalizeBenchmarkHistory(
+    { ...lift, movement_id: movementId },
+    [],
+    [result],
+  );
   assert.deepEqual(
     attempts.map(({ rep_max, load_kg }) => [rep_max, load_kg]),
     [
