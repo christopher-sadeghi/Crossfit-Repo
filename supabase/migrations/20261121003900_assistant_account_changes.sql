@@ -32,10 +32,12 @@ revoke all on public.athlete_assistant_applied_cards from public, anon, authenti
 grant select on public.athlete_assistant_applied_cards to authenticated;
 grant all on public.athlete_assistant_applied_cards to service_role;
 
+drop function if exists public.apply_athlete_account_change(uuid, integer, jsonb);
 create function public.apply_athlete_account_change(
   p_message_id uuid,
   p_card_index integer,
-  p_change jsonb
+  p_change jsonb,
+  p_today date
 ) returns jsonb
 language plpgsql
 security definer
@@ -66,7 +68,7 @@ declare
   v_remind_at time;
   v_time_zone text;
   v_target public.nutrition_targets%rowtype;
-  v_today date := current_date;
+  v_today date;
   v_notification_tab text;
   v_assistant_training boolean;
   v_assistant_nutrition boolean;
@@ -75,6 +77,10 @@ begin
     or jsonb_typeof(p_change) <> 'object' then
     raise exception 'invalid_account_change' using errcode = '22023';
   end if;
+  if p_today is null or p_today < current_date - 1 or p_today > current_date + 1 then
+    raise exception 'invalid_account_change' using errcode = '22023';
+  end if;
+  v_today := p_today;
 
   select a.coach_id, a.assigned_coach_id, c.units, a.first_name || ' ' || a.last_name
     into v_coach_id, v_assigned_coach_id, v_units, v_name
@@ -280,5 +286,5 @@ begin
   return jsonb_build_object('saved', true, 'kind', v_kind);
 end;
 $$;
-revoke all on function public.apply_athlete_account_change(uuid, integer, jsonb) from public, anon, authenticated;
-grant execute on function public.apply_athlete_account_change(uuid, integer, jsonb) to authenticated;
+revoke all on function public.apply_athlete_account_change(uuid, integer, jsonb, date) from public, anon, authenticated;
+grant execute on function public.apply_athlete_account_change(uuid, integer, jsonb, date) to authenticated;

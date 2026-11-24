@@ -1450,7 +1450,7 @@ isOneToOne: false
           }
           Functions: {
             "apply_athlete_account_change":
-{ Args: { "p_card_index": number,"p_change": Json,"p_message_id": string }; Returns: Json
+{ Args: { "p_card_index": number,"p_change": Json,"p_message_id": string,"p_today": string }; Returns: Json
                            },
             "apply_athlete_workout_adjustment":
 { Args: { "p_details": Json,"p_modifications": string,"p_proposal": Json,"p_suggestion_id": string }; Returns: string

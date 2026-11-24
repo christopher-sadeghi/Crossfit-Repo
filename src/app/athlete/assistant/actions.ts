@@ -14,7 +14,7 @@ import { loadAssistantCard, type AssistantCardIdentity } from "@/lib/ai/assistan
 import { saveActivity } from "@/lib/activity-actions";
 import { accountChangeTopic } from "@/lib/ai/athlete-account-change";
 import type { Json } from "@/lib/supabase/database.types";
-import { getTimeZone } from "@/lib/time-zone";
+import { getToday, getTimeZone } from "@/lib/time-zone";
 import type { FormState } from "@/lib/auth/form-state";
 import type { ChatEntry } from "./use-assistant";
 
@@ -67,6 +67,7 @@ export async function applyAssistantAccountChange(messageId: string, cardIndex: 
       p_message_id: messageId,
       p_card_index: cardIndex,
       p_change: change as unknown as Json,
+      p_today: await getToday(),
     });
     if (error) return { error: error.message.includes("already_applied") ? "This change was already saved." : "Couldn't save this change. Please try again." };
     revalidatePath("/athlete");

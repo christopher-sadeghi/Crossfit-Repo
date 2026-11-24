@@ -60,17 +60,17 @@ set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"39000000-0000-4000-8000-000000000011","role":"authenticated"}', true);
 select public.apply_athlete_account_change(
   '39000000-0000-4000-8000-000000000031', 0,
-  '{"kind":"injuries","injuries":"Shoulder tightness"}'
+  '{"kind":"injuries","injuries":"Shoulder tightness"}', current_date
 );
 select public.apply_athlete_account_change(
   '39000000-0000-4000-8000-000000000031', 1,
-  '{"kind":"body_weight","value":200,"measured_on":"2026-11-21"}'
+  '{"kind":"body_weight","value":200,"measured_on":"2026-11-21"}', current_date
 );
 do $$ begin
   begin
     perform public.apply_athlete_account_change(
       '39000000-0000-4000-8000-000000000031', 0,
-      '{"kind":"injuries","injuries":"Shoulder tightness"}'
+      '{"kind":"injuries","injuries":"Shoulder tightness"}', current_date
     );
     raise exception 'duplicate application succeeded';
   exception when unique_violation then null;
@@ -78,7 +78,7 @@ do $$ begin
   begin
     perform public.apply_athlete_account_change(
       '39000000-0000-4000-8000-000000000032', 0,
-      '{"kind":"macros","calories":2200,"protein_g":160,"carbs_g":220,"fat_g":70}'
+      '{"kind":"macros","calories":2200,"protein_g":160,"carbs_g":220,"fat_g":70}', current_date
     );
     raise exception 'other athlete message was accepted';
   exception when insufficient_privilege then null;
@@ -120,7 +120,7 @@ do $$ begin
   begin
     perform public.apply_athlete_account_change(
       '39000000-0000-4000-8000-000000000032', 0,
-      '{"kind":"macros","calories":2200,"protein_g":160,"carbs_g":220,"fat_g":70}'
+      '{"kind":"macros","calories":2200,"protein_g":160,"carbs_g":220,"fat_g":70}', current_date
     );
     raise exception 'disabled nutrition topic accepted a macros card';
   exception when insufficient_privilege then
@@ -135,17 +135,28 @@ update public.coaches set assistant_nutrition = true where id = '39000000-0000-4
 
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"39000000-0000-4000-8000-000000000012","role":"authenticated"}', true);
+do $$ begin
+  begin
+    perform public.apply_athlete_account_change(
+      '39000000-0000-4000-8000-000000000032', 0,
+      '{"kind":"macros","calories":2200,"protein_g":160,"carbs_g":220,"fat_g":70}', current_date + 2
+    );
+    raise exception 'out-of-range athlete date accepted';
+  exception when sqlstate '22023' then
+    if sqlerrm <> 'invalid_account_change' then raise; end if;
+  end;
+end $$;
 select public.apply_athlete_account_change(
   '39000000-0000-4000-8000-000000000032', 0,
-  '{"kind":"macros","calories":2200,"protein_g":160,"carbs_g":220,"fat_g":70}'
+  '{"kind":"macros","calories":2200,"protein_g":160,"carbs_g":220,"fat_g":70}', current_date
 );
 select public.apply_athlete_account_change(
   '39000000-0000-4000-8000-000000000032', 1,
-  '{"kind":"goal","action":"create","title":"Run a 5K","goal_type":"performance"}'
+  '{"kind":"goal","action":"create","title":"Run a 5K","goal_type":"performance"}', current_date
 );
 select public.apply_athlete_account_change(
   '39000000-0000-4000-8000-000000000032', 2,
-  '{"kind":"injuries","injuries":"No current injuries"}'
+  '{"kind":"injuries","injuries":"No current injuries"}', current_date
 );
 reset role;
 
@@ -164,7 +175,7 @@ do $$ begin
   begin
     perform public.apply_athlete_account_change(
       '39000000-0000-4000-8000-000000000032', 3,
-      '{"kind":"goal","action":"set_status","goal_id":"39000000-0000-4000-8000-000000000066","status":"active"}'
+      '{"kind":"goal","action":"set_status","goal_id":"39000000-0000-4000-8000-000000000066","status":"active"}', current_date
     );
     raise exception 'seventh active goal was accepted';
   exception when invalid_parameter_value then null;
@@ -189,7 +200,7 @@ do $$ begin
   begin
     perform public.apply_athlete_account_change(
       '39000000-0000-4000-8000-000000000034', 0,
-      '{"kind":"injuries","injuries":"Archived"}'
+      '{"kind":"injuries","injuries":"Archived"}', current_date
     );
     raise exception 'archived athlete applied a change';
   exception when invalid_parameter_value then null;
@@ -202,7 +213,7 @@ do $$ begin
   begin
     perform public.apply_athlete_account_change(
       '39000000-0000-4000-8000-000000000032', 0,
-      '{"kind":"macros","calories":2200,"protein_g":160,"carbs_g":220,"fat_g":70}'
+      '{"kind":"macros","calories":2200,"protein_g":160,"carbs_g":220,"fat_g":70}', current_date
     );
     raise exception 'other athlete applied a change';
   exception when insufficient_privilege then null;
