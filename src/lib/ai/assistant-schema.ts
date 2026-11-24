@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { activityDraftSchema } from "@/lib/athlete-activities";
+import { athleteAccountChangeSchema } from "./account-change";
 
 export const assistantMessageSchema = z.string().trim().min(1).max(2000);
 export const assistantChangeSchema = z.object({
@@ -22,6 +23,11 @@ export const assistantCardSchema = z.union([
   coachMessageDraftSchema,
   z.object({ kind: z.literal("adjust_wod"), workoutId: z.string().uuid() }).strict(),
   z.object({ kind: z.literal("activity"), draft: activityDraftSchema }).strict(),
+  z.object({
+    kind: z.literal("account_change"),
+    change: athleteAccountChangeSchema,
+    before: z.record(z.string(), z.unknown()),
+  }).strict(),
 ]);
 export type AssistantCard = z.infer<typeof assistantCardSchema>;
 export const assistantSettingsSchema = z.object({

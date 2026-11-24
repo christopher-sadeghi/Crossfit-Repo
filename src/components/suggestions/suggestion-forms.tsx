@@ -149,6 +149,15 @@ export function ApproveSuggestionForm({ id, values }: { id: string; values: Macr
   );
 }
 
+export function ApproveAccountChangeForm({ id, compact = false }: { id: string; compact?: boolean }) {
+  const [state, formAction, pending] = useActionState(useInlineDecision(approveSuggestion), {});
+  return <form action={formAction} className="grid gap-3">
+    <input type="hidden" name="id" value={id} />
+    <Button type="submit" disabled={pending}>{pending ? "Approving…" : compact ? "Approve" : "Approve change"}</Button>
+    <Message state={state} />
+  </form>;
+}
+
 export function ApproveWorkoutSuggestionForm({
   id,
   mode,

@@ -29,6 +29,8 @@ import { athleteAdjustSchema } from "./athlete-adjust-schema";
 import { suggestFoodEntry } from "./suggest-food";
 import { draftProgramEntry } from "./draft-program";
 import { athleteProgrammingStyleNote, coachProgrammingStyleNote, writeWorkoutSystem } from "@/lib/programming-style";
+import { applyCoachAccountChange } from "./coach-account-change";
+import { coachAccountChangeProposalSchema } from "./account-change";
 
 export { ApprovalError } from "./errors";
 
@@ -42,6 +44,7 @@ export const SUGGESTION_LABELS: Record<Enums<"suggestion_type">, string> = {
   movement_guide: "Movement how-to",
   athlete_adjust_workout: "Athlete adjusted WOD",
   suggest_food: "Food ideas",
+  athlete_account_change: "Athlete account change",
 };
 
 export const adjustMacrosSchema = z.object({
@@ -498,4 +501,9 @@ export const SUGGESTION_REGISTRY: Record<Enums<"suggestion_type">, SuggestionEnt
   // Applied by the athlete right away (see athlete-adjust.ts); coaches review it afterwards.
   athlete_adjust_workout: { label: SUGGESTION_LABELS.athlete_adjust_workout, proposalSchema: athleteAdjustSchema },
   suggest_food: suggestFoodEntry,
+  athlete_account_change: {
+    label: SUGGESTION_LABELS.athlete_account_change,
+    proposalSchema: coachAccountChangeProposalSchema,
+    apply: applyCoachAccountChange,
+  },
 };

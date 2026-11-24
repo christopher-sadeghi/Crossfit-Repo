@@ -106,7 +106,8 @@ function AthleteChatSession({
                   units={units}
                   disabled={pending}
                   identity={{ assistantMessageId: assistantMessageId(message.metadata, message.id), cardIndex: index }}
-                  completed={message.actions?.find((action) => action.card_index === index)}
+                  completed={message.actions?.find((action) => action.card_index === index)
+                    ?? (message.applied?.some((applied) => applied.card_index === index) ? { action: "account_change" } : undefined)}
                 />
               ))}
             </div>

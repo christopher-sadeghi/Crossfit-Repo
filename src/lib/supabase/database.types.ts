@@ -155,6 +155,38 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"athlete_assistant_applied_cards": {
+                  Row: {
+                    "applied_at": string,"athlete_id": string,"card_index": number,"coach_id": string,"message_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "applied_at"?: string,"athlete_id": string,"card_index": number,"coach_id": string,"message_id": string
+                  }
+                  Update: {
+                    "applied_at"?: string,"athlete_id"?: string,"card_index"?: number,"coach_id"?: string,"message_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "athlete_assistant_applied_cards_athlete_id_coach_id_fkey"
+      columns: ["athlete_id","coach_id"]
+isOneToOne: false
+      referencedRelation: "athletes"
+      referencedColumns: ["id","coach_id"]
+    },{
+      foreignKeyName: "athlete_assistant_applied_cards_coach_id_fkey"
+      columns: ["coach_id"]
+isOneToOne: false
+      referencedRelation: "coaches"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "athlete_assistant_applied_cards_message_id_fkey"
+      columns: ["message_id"]
+isOneToOne: false
+      referencedRelation: "athlete_ai_messages"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"athlete_food_preferences": {
                   Row: {
                     "allergies": (string)[],"athlete_id": string,"coach_id": string,"cooking_minutes": number | null,"created_at": string,"diet_type": string,"dislikes": (string)[],"updated_at": string
@@ -1417,6 +1449,9 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
+            "apply_athlete_account_change":
+{ Args: { "p_card_index": number,"p_change": Json,"p_message_id": string,"p_today": string }; Returns: Json
+                           },
             "apply_athlete_workout_adjustment":
 { Args: { "p_details": Json,"p_modifications": string,"p_proposal": Json,"p_suggestion_id": string }; Returns: string
                            },
@@ -1555,7 +1590,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "athlete_status": "active"|"archived","benchmark_kind": "girl"|"hero"|"lift"|"custom","experience_level": "beginner"|"intermediate"|"advanced"|"competitor","goal_status": "active"|"achieved"|"abandoned","goal_type": "performance"|"body_composition"|"skill","meal_type": "breakfast"|"lunch"|"dinner"|"snack","movement_category": "weightlifting"|"gymnastics"|"monostructural"|"other","movement_measure": "reps"|"load"|"distance"|"calories"|"time","suggestion_status": "pending"|"approved"|"edited"|"rejected"|"failed"|"idea","suggestion_type": "write_workout"|"scale_workout"|"adjust_macros"|"progress_summary"|"movement_guide"|"suggest_food"|"athlete_adjust_workout"|"draft_program"|"weekly_report","weight_unit": "lb"|"kg","workout_type": "for_time"|"amrap"|"emom"|"strength"|"other"
+            "athlete_status": "active"|"archived","benchmark_kind": "girl"|"hero"|"lift"|"custom","experience_level": "beginner"|"intermediate"|"advanced"|"competitor","goal_status": "active"|"achieved"|"abandoned","goal_type": "performance"|"body_composition"|"skill","meal_type": "breakfast"|"lunch"|"dinner"|"snack","movement_category": "weightlifting"|"gymnastics"|"monostructural"|"other","movement_measure": "reps"|"load"|"distance"|"calories"|"time","suggestion_status": "pending"|"approved"|"edited"|"rejected"|"failed"|"idea","suggestion_type": "write_workout"|"scale_workout"|"adjust_macros"|"progress_summary"|"movement_guide"|"suggest_food"|"athlete_adjust_workout"|"draft_program"|"weekly_report"|"athlete_account_change","weight_unit": "lb"|"kg","workout_type": "for_time"|"amrap"|"emom"|"strength"|"other"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -1671,7 +1706,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "athlete_status": ["active", "archived"],"benchmark_kind": ["girl", "hero", "lift", "custom"],"experience_level": ["beginner", "intermediate", "advanced", "competitor"],"goal_status": ["active", "achieved", "abandoned"],"goal_type": ["performance", "body_composition", "skill"],"meal_type": ["breakfast", "lunch", "dinner", "snack"],"movement_category": ["weightlifting", "gymnastics", "monostructural", "other"],"movement_measure": ["reps", "load", "distance", "calories", "time"],"suggestion_status": ["pending", "approved", "edited", "rejected", "failed", "idea"],"suggestion_type": ["write_workout", "scale_workout", "adjust_macros", "progress_summary", "movement_guide", "suggest_food", "athlete_adjust_workout", "draft_program", "weekly_report"],"weight_unit": ["lb", "kg"],"workout_type": ["for_time", "amrap", "emom", "strength", "other"]
+            "athlete_status": ["active", "archived"],"benchmark_kind": ["girl", "hero", "lift", "custom"],"experience_level": ["beginner", "intermediate", "advanced", "competitor"],"goal_status": ["active", "achieved", "abandoned"],"goal_type": ["performance", "body_composition", "skill"],"meal_type": ["breakfast", "lunch", "dinner", "snack"],"movement_category": ["weightlifting", "gymnastics", "monostructural", "other"],"movement_measure": ["reps", "load", "distance", "calories", "time"],"suggestion_status": ["pending", "approved", "edited", "rejected", "failed", "idea"],"suggestion_type": ["write_workout", "scale_workout", "adjust_macros", "progress_summary", "movement_guide", "suggest_food", "athlete_adjust_workout", "draft_program", "weekly_report", "athlete_account_change"],"weight_unit": ["lb", "kg"],"workout_type": ["for_time", "amrap", "emom", "strength", "other"]
           }
         }
 } as const

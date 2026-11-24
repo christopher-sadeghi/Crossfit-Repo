@@ -12,6 +12,10 @@ import { createClient } from "@/lib/supabase/server";
 import { getViewer } from "@/lib/viewer";
 import { loadAssistantCard, type AssistantCardIdentity } from "@/lib/ai/assistant-card-actions";
 import { saveActivity } from "@/lib/activity-actions";
+import { accountChangeTopic } from "@/lib/ai/athlete-account-change";
+import type { Json } from "@/lib/supabase/database.types";
+import { getToday, getTimeZone } from "@/lib/time-zone";
+import { dispatchNewNotifications } from "@/lib/notifications";
 import type { FormState } from "@/lib/auth/form-state";
 import type { ChatEntry } from "./use-assistant";
 
@@ -24,7 +28,7 @@ export async function loadAssistantMessages(): Promise<{ messages: ChatEntry[] }
     const messages: ChatEntry[] = [];
     for (let offset = 0; ; offset += 500) {
       const { data, error } = await supabase.from("athlete_ai_messages")
-        .select("id, role, content, metadata, actions:athlete_ai_card_actions(card_index, action, ref_id)")
+        .select("id, role, content, metadata, actions:athlete_ai_card_actions(card_index, action, ref_id), applied:athlete_assistant_applied_cards(card_index, applied_at)")
         .eq("athlete_id", viewer.athleteId)
         .order("created_at")
         .order("id")
@@ -36,6 +40,51 @@ export async function loadAssistantMessages(): Promise<{ messages: ChatEntry[] }
     return { messages };
   } catch {
     return { error: "Couldn't load your conversation. Please refresh to try again." };
+  }
+}
+
+export async function applyAssistantAccountChange(messageId: string, cardIndex: number): Promise<{ error?: string; saved?: boolean }> {
+  const viewer = await getViewer();
+  if (viewer?.kind !== "athlete") return { error: "Sign in as an athlete to confirm this change." };
+  try {
+    const supabase = await createClient();
+    const identity = { assistantMessageId: messageId, cardIndex };
+    const card = await loadAssistantCard(supabase, viewer, identity);
+    if (card?.kind !== "account_change") return { error: "This account-change card could not be found." };
+    if (card.change.kind === "body_weight" && card.before.units !== viewer.units)
+      return { error: "Your weight units changed. Please create a new change." };
+    if (assistantSafety(JSON.stringify(card.change)).flagged)
+      return { error: "For a safety concern, contact your coach or a medical professional before making this change." };
+    const { data: rows, error: settingsError } = await supabase.rpc("athlete_assistant_settings");
+    const settings = rows?.[0];
+    if (settingsError || !settings) return { error: "Your active athlete profile could not be found." };
+    const topic = accountChangeTopic(card.change);
+    if (!settings[`assistant_${topic}` as "assistant_training" | "assistant_nutrition"])
+      return { error: "Ask your coach about this topic." };
+    const change = card.change.kind === "reminder_time"
+      ? { ...card.change, time_zone: await getTimeZone() }
+      : card.change;
+    const { error } = await supabase.rpc("apply_athlete_account_change", {
+      p_message_id: messageId,
+      p_card_index: cardIndex,
+      p_change: change as unknown as Json,
+      p_today: await getToday(),
+    });
+    if (error) {
+      if (error.message.includes("already_applied")) return { error: "This change was already saved." };
+      if (error.message.includes("account_change_stale"))
+        return { error: "Your details changed since this card was made. Ask the assistant for a new change." };
+      return { error: "Couldn't save this change. Please try again." };
+    }
+    if (card.change.kind === "goal" || card.change.kind === "injuries" || card.change.kind === "macros")
+      dispatchNewNotifications(viewer.athleteId, "athlete_profile_changed");
+    revalidatePath("/athlete");
+    revalidatePath("/athlete/assistant");
+    revalidatePath("/athlete/progress");
+    revalidatePath("/athlete/nutrition");
+    return { saved: true };
+  } catch {
+    return { error: "Couldn't save this change. Please try again." };
   }
 }
 
