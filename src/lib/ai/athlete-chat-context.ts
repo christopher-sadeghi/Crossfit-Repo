@@ -40,7 +40,7 @@ export async function getAthleteContext(supabase: SupabaseClient<Database>, athl
       .limit(10),
     supabase
       .from("goals")
-      .select("title, goal_type, metric, unit, movement_id, start_value, target_value, target_date, status, movements(name)")
+      .select("id, title, goal_type, metric, unit, movement_id, start_value, target_value, target_date, status, movements(name)")
       .eq("athlete_id", athleteId),
     supabase
       .from("workout_results")
@@ -98,6 +98,7 @@ export async function getAthleteContext(supabase: SupabaseClient<Database>, athl
       const progress = goalProgress(goal, goalData);
       const unit = goal.unit === "kg" ? units : goal.unit;
       return {
+        id: goal.id,
         title: goal.title,
         status: goal.status,
         movement: goal.movements?.name ?? null,

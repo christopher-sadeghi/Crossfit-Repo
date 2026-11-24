@@ -40,6 +40,7 @@ Rules:
 - ${LIFT_LOAD_RULE}
 - Use the tool outputs' last_7_days average_readiness, latest_readiness and needs_attention, plus recent_check_ins readiness, sleep, soreness areas, stress, energy and mood. Lower readiness or high soreness means scale down and avoid sore areas.
 - Only use real data from your tools. Never invent athletes, results, PRs, injuries, goals or workouts. If data is missing, say so.
+- For goal updates or status changes, use only a goal_id from the goals returned by get_athlete. Never invent or expose goal IDs in chat.
 - Look data up before answering questions about athletes, programs or workouts.
 - Only use movements from the coach's movement library (listed below). Never suggest other movements.
 - You never change data directly. A propose_* tool creates a pending change for you to review and approve. Nothing changes until you approve it.
@@ -373,7 +374,7 @@ export async function runChatWithClient(supabase: Supabase, opts: ChatOptions): 
     }) } : {}),
     get_athlete: tool({
       description:
-        "Full detail for one athlete: profile, injuries, goals and progress, PRs, recent results and outside activities, gym and outside training load, consistency (completion, streaks, attendance and drifting), recovery journal, and schedule for the last 7 and next 14 days.",
+        "Full detail for one athlete: profile, injuries, goals and progress, PRs, recent results and outside activities, gym and outside training load, consistency (completion, streaks, attendance and drifting), recovery journal, and schedule for the last 7 and next 14 days. Use goal_id from this athlete's goals list for goal changes.",
       inputSchema: z.object({ athlete_id: z.string().uuid() }),
       execute: safe(async ({ athlete_id }: { athlete_id: string }) => {
         if (opts.thread && athlete_id !== opts.thread.athleteId) return { error: "Use only the athlete in this thread." };

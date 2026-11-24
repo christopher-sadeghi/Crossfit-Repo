@@ -108,7 +108,7 @@ export async function streamAthleteAssistant(
   const unavailableTopic = { error: "Ask your coach about this topic. I can draft a message for you." };
   const tools = {
     get_my_training: tool({
-      description: "Look up my profile, goals/progress, today's WOD/personal versions/scalings, results, check-ins, benchmarks/lift maxes, nutrition/preferences, intake and training load.",
+      description: "Look up my profile, goals/progress, today's WOD/personal versions/scalings, results, check-ins, benchmarks/lift maxes, nutrition/preferences, intake and training load. Use goal_id from the goals list for goal updates or status changes.",
       inputSchema: z.object({}).strict(),
       execute: async () => {
         const context = await getMyTraining(supabase, viewer, today, config.drift_days);
@@ -166,7 +166,7 @@ export async function streamAthleteAssistant(
       },
     }),
     propose_account_change: tool({
-      description: "Create an unsaved account-change card for this athlete's own goals, injuries, food preferences, body weight, reminder time, or macros. Confirm exact details in chat first. This tool never writes data.",
+      description: "Create an unsaved account-change card for this athlete's own goals, injuries, food preferences, body weight, reminder time, or macros. For goal updates or status changes, use a goal_id from get_my_training. Confirm exact details in chat first. This tool never writes data.",
       inputSchema: z.object({ change: athleteAccountChangeSchema }).strict(),
       execute: async ({ change }) => {
         const topic = accountChangeTopic(change);
