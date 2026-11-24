@@ -111,7 +111,7 @@ export async function logResult(_: FormState, formData: FormData): Promise<Coach
     ...score,
     is_rx: r.is_rx === "rx",
     notes: r.notes,
-  }).select("id, athlete_id, coach_id, performed_on, is_rx, logged_by").maybeSingle();
+  }).select("id, athlete_id, coach_id, performed_on, created_at, is_rx, logged_by").maybeSingle();
   if (error || !savedResult) return failure(formData, "Couldn't save the result. Please try again.");
 
   const prSync = await syncResultLiftPrs(

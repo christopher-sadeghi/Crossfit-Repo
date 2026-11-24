@@ -1,7 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database } from "@/lib/supabase/database.types";
-import type { Json } from "@/lib/supabase/database.types";
+import {
+  loadBenchmarkHistory,
+  normalizeBenchmarkHistory,
+} from "@/lib/benchmarks";
+import type { Database, Json, Tables } from "@/lib/supabase/database.types";
 import { toKg } from "@/lib/units";
 import {
   liftPrCandidates,
@@ -20,6 +23,7 @@ export async function syncResultLiftPrs(
     athlete_id: string;
     coach_id: string;
     performed_on: string;
+    created_at: string;
     is_rx: boolean;
     logged_by: string | null;
   },
@@ -37,48 +41,26 @@ export async function syncResultLiftPrs(
     : { data: [], error: null };
   if (benchmarkError) return { candidates: [], error: benchmarkError.message };
 
-  const benchmarkRows = (benchmarks ?? []).flatMap((benchmark) =>
-    benchmark.movement_id == null
-      ? []
-      : [{ id: benchmark.id, movement_id: benchmark.movement_id }],
-  );
-  const benchmarkIds = benchmarkRows.map((benchmark) => benchmark.id);
-  const { data: history, error: historyError } = benchmarkIds.length
-    ? await supabase
-        .from("benchmark_results")
-        .select("benchmark_id, rep_max, load_kg")
-        .eq("athlete_id", result.athlete_id)
-        .in("benchmark_id", benchmarkIds)
-        .or(`source_result_id.is.null,source_result_id.neq.${result.id}`)
-    : { data: [], error: null };
-  if (historyError) return { candidates: [], error: historyError.message };
-
-  const repsByMovement = new Map<string, Set<number>>();
-  for (const part of parts) {
-    for (const set of part.sets) {
-      if (set.done && set.reps != null && set.reps >= 1 && set.reps <= 20) {
-        const reps = repsByMovement.get(part.movement_id) ?? new Set<number>();
-        reps.add(set.reps);
-        repsByMovement.set(part.movement_id, reps);
-      }
-    }
+  const benchmarkIds = new Set((benchmarks ?? []).map((benchmark) => benchmark.id));
+  let history: Awaited<ReturnType<typeof loadBenchmarkHistory>>;
+  try {
+    history = await loadBenchmarkHistory(
+      supabase,
+      result.athlete_id,
+      result.performed_on,
+    );
+  } catch (error) {
+    return {
+      candidates: [],
+      error: error instanceof Error ? error.message : "Couldn't load lift history.",
+    };
   }
-
-  const bests = benchmarkRows.flatMap((benchmark) =>
-    [...(repsByMovement.get(benchmark.movement_id) ?? [])].map((rep_max) => ({
-      benchmark_id: benchmark.id,
-      movement_id: benchmark.movement_id,
-      rep_max,
-      load_kg:
-        history
-          ?.filter(
-            (row) =>
-              row.benchmark_id === benchmark.id &&
-              row.rep_max === rep_max &&
-              row.load_kg != null,
-          )
-          .reduce((best, row) => Math.max(best, Number(row.load_kg)), 0) ?? null,
-    })),
+  const bests = liftBestsFromHistory(
+    history.benchmarks.filter((benchmark) => benchmarkIds.has(benchmark.id)),
+    history.direct,
+    history.scheduled,
+    result,
+    parts,
   );
   const candidates = liftPrCandidates(parts, bests);
 
@@ -107,6 +89,66 @@ export async function syncResultLiftPrs(
   }
 
   return { candidates };
+}
+
+export function liftBestsFromHistory(
+  benchmarks: Tables<"benchmarks">[],
+  direct: Tables<"benchmark_results">[],
+  scheduled: Awaited<ReturnType<typeof loadBenchmarkHistory>>["scheduled"],
+  result: Pick<Tables<"workout_results">, "id" | "performed_on" | "created_at">,
+  parts: ResultPart[],
+) {
+  const repsByMovement = new Map<string, Set<number>>();
+  for (const part of parts) {
+    for (const set of part.sets) {
+      if (
+        set.done &&
+        set.reps != null &&
+        set.reps >= 1 &&
+        set.reps <= 20 &&
+        set.load_kg != null &&
+        set.load_kg > 0
+      ) {
+        const reps = repsByMovement.get(part.movement_id) ?? new Set<number>();
+        reps.add(set.reps);
+        repsByMovement.set(part.movement_id, reps);
+      }
+    }
+  }
+
+  const isEarlier = (attempt: { performed_on: string; created_at: string }) =>
+    attempt.performed_on < result.performed_on ||
+    (attempt.performed_on === result.performed_on &&
+      attempt.created_at < result.created_at);
+  const earlierDirect = direct.filter(
+    (attempt) =>
+      attempt.source_result_id !== result.id && isEarlier(attempt),
+  );
+  const earlierScheduled = scheduled.filter(
+    (attempt) => attempt.id !== result.id && isEarlier(attempt),
+  );
+
+  return benchmarks.flatMap((benchmark) => {
+    if (benchmark.kind !== "lift" || !benchmark.movement_id) return [];
+    const reps = [...(repsByMovement.get(benchmark.movement_id) ?? [])];
+    if (!reps.length) return [];
+    const attempts = normalizeBenchmarkHistory(
+      benchmark,
+      earlierDirect,
+      earlierScheduled,
+    );
+    return reps.map((rep_max) => ({
+      benchmark_id: benchmark.id,
+      movement_id: benchmark.movement_id!,
+      rep_max,
+      load_kg: attempts.reduce<number | null>((best, attempt) => {
+        if (attempt.rep_max !== rep_max || attempt.load_kg == null)
+          return best;
+        const load = Number(attempt.load_kg);
+        return best == null ? load : Math.max(best, load);
+      }, null),
+    }));
+  });
 }
 
 export function submittedParts(raw: string, units: "kg" | "lb") {

@@ -159,6 +159,7 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
     athlete_id: string;
     coach_id: string | null;
     performed_on: string;
+    created_at: string;
     is_rx: boolean;
     logged_by: string | null;
   };
@@ -168,7 +169,7 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
       .update({ ...values, updated_at: new Date().toISOString() })
       .eq("id", r.result_id)
       .eq("logged_by", loggedBy)
-      .select("id, workout_id, athlete_id, coach_id, performed_on, is_rx, logged_by")
+      .select("id, workout_id, athlete_id, coach_id, performed_on, created_at, is_rx, logged_by")
       .maybeSingle();
     if (error || !data) return failure(formData, "Couldn't update the result. Please try again.");
     savedResult = data;
@@ -178,7 +179,7 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
     const { data, error } = await supabase
       .from("workout_results")
       .insert(values)
-      .select("id, workout_id, athlete_id, coach_id, performed_on, is_rx, logged_by")
+      .select("id, workout_id, athlete_id, coach_id, performed_on, created_at, is_rx, logged_by")
       .maybeSingle();
     if (error || !data) return failure(formData, "Couldn't save the result. Please try again.");
     savedResult = data;

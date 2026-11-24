@@ -22,6 +22,8 @@ function load(relative) {
   return loaded.exports;
 }
 const { estimateOneRepMax, normalizeBenchmarkHistory, retestDue, loadAthleteBenchmarks, loadLiftMaxes } = load("src/lib/benchmarks.ts");
+const { liftBestsFromHistory } = load("src/lib/result-part-prs.ts");
+const { liftPrCandidates } = load("src/lib/result-parts.ts");
 const { bestForMovement, goalProgress } = load("src/lib/progress.ts");
 const { formatLiftMaxes, liftMaxContextSchema, LIFT_LOAD_RULE } = load("src/lib/ai/lift-context.ts");
 const benchmark = { id: "b", name: "Fran", kind: "girl", workout_type: "for_time", movement_id: null };
@@ -95,6 +97,90 @@ test("generated direct lift rows are skipped when their scheduled result is pres
   });
   const attempts = normalizeBenchmarkHistory(lift, [generated], [scheduledResult]);
   assert.deepEqual(attempts.map((attempt) => attempt.id), [scheduledResult.id]);
+});
+test("PR history includes legacy strength results", () => {
+  const parts = [
+    {
+      position: 0,
+      movement_id: "m",
+      name: "Squat",
+      sets: [{ reps: 5, load_kg: 115, done: true }],
+    },
+  ];
+  const current = {
+    id: "current",
+    performed_on: "2026-01-02",
+    created_at: "2026-01-02T10:00:00.000Z",
+  };
+  const legacy = strengthResult({
+    id: "legacy",
+    performed_on: "2026-01-01",
+    created_at: "2026-01-01T10:00:00.000Z",
+    parts: [],
+    load_kg: 110,
+  });
+  const bests = liftBestsFromHistory([lift], [], [legacy], current, parts);
+  assert.deepEqual(bests, [
+    { benchmark_id: "b", movement_id: "m", rep_max: 5, load_kg: 110 },
+  ]);
+  assert.equal(liftPrCandidates(parts, bests).length, 1);
+});
+test("editing an older PR ignores current, same-day later, and future attempts", () => {
+  const current = {
+    id: "older-pr",
+    performed_on: "2026-01-02",
+    created_at: "2026-01-02T10:00:00.000Z",
+  };
+  const parts = [
+    {
+      position: 0,
+      movement_id: "m",
+      name: "Squat",
+      sets: [{ reps: 5, load_kg: 115, done: true }],
+    },
+  ];
+  const prior = result("prior", "2026-01-01", {
+    benchmark_id: lift.id,
+    load_kg: 100,
+    rep_max: 5,
+    created_at: "2026-01-01T10:00:00.000Z",
+  });
+  const currentGenerated = result("generated", current.performed_on, {
+    benchmark_id: lift.id,
+    load_kg: 115,
+    rep_max: 5,
+    source_result_id: current.id,
+    created_at: "2026-01-02T10:01:00.000Z",
+  });
+  const laterSameDay = result("later-same-day", current.performed_on, {
+    benchmark_id: lift.id,
+    load_kg: 120,
+    rep_max: 5,
+    created_at: "2026-01-02T11:00:00.000Z",
+  });
+  const later = result("later", "2026-01-03", {
+    benchmark_id: lift.id,
+    load_kg: 130,
+    rep_max: 5,
+    created_at: "2026-01-03T10:00:00.000Z",
+  });
+  const currentScheduled = strengthResult({
+    id: current.id,
+    performed_on: current.performed_on,
+    created_at: current.created_at,
+    parts,
+  });
+  const bests = liftBestsFromHistory(
+    [lift],
+    [prior, currentGenerated, laterSameDay, later],
+    [currentScheduled],
+    current,
+    parts,
+  );
+  assert.deepEqual(bests, [
+    { benchmark_id: "b", movement_id: "m", rep_max: 5, load_kg: 100 },
+  ]);
+  assert.equal(liftPrCandidates(parts, bests).length, 1);
 });
 test("high-rep lifts fall back to actual loads for bests and PRs while preserving Rx priority", async () => {
   const direct = [
