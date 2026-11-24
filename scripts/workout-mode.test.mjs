@@ -35,7 +35,7 @@ function workoutHarness(extra = {}) {
   let stateIndex, refIndex, effects;
   const navigations = [];
   const props = { athleteId: "a", date: "2026-01-01", units: "kg", maxes: [], workout: { id: "w", title: "WOD", workout_type: "for_time", time_cap_seconds: 600, rounds: 5, movements: [], isScaled: false }, ...extra };
-  const { WorkoutMode } = load("src/app/athlete/workout/[workoutId]/workout-mode.tsx", {
+  const { WorkoutMode, workoutModeVersionFingerprint } = load("src/app/athlete/workout/[workoutId]/workout-mode.tsx", {
     react: {
       useEffect: (effect) => { effects.push(effect); },
       useRef: (value) => refs[refIndex++] ??= { current: value },
@@ -51,7 +51,14 @@ function workoutHarness(extra = {}) {
   });
   const render = () => { stateIndex = 0; refIndex = 0; effects = []; return WorkoutMode(props); };
   render();
-  return { states, navigations, render, effects: () => effects, props };
+  return {
+    states,
+    navigations,
+    render,
+    effects: () => effects,
+    props,
+    workoutModeVersionFingerprint,
+  };
 }
 
 function withWorkoutStorage(run) {
@@ -101,6 +108,61 @@ test("saved sessions without section timer fields still restore", () => withWork
   assert.equal(h.states[0].timedSection, null);
   assert.deepEqual(h.states[0].sectionResults, {});
 }));
+
+test("sectionless workout fingerprints preserve the legacy shape", () => {
+  const h = workoutHarness();
+  const movement = {
+    movement_id: "10000000-0000-4000-8000-000000000001",
+    sets: 5,
+    reps: 5,
+    load_kg: 100,
+    notes: "tempo",
+    reason: null,
+    section: null,
+  };
+  const workout = {
+    id: "w",
+    title: "WOD",
+    description: null,
+    notes: null,
+    workout_type: "strength",
+    time_cap_seconds: null,
+    rounds: null,
+    sections: [],
+    movements: [movement],
+    isScaled: false,
+    modifications: "",
+  };
+  assert.equal(
+    h.workoutModeVersionFingerprint(workout),
+    JSON.stringify({
+      movements: [
+        {
+          movement_id: movement.movement_id,
+          sets: movement.sets,
+          reps: movement.reps,
+          load_kg: movement.load_kg,
+          notes: movement.notes,
+          reason: movement.reason,
+        },
+      ],
+      rounds: null,
+      time_cap_seconds: null,
+      isScaled: false,
+      modifications: "",
+    }),
+  );
+  assert.notEqual(
+    h.workoutModeVersionFingerprint({
+      ...workout,
+      sections: [
+        { title: "A. Back Squat", format: "strength", time_cap_seconds: null, rounds: null },
+      ],
+      movements: [{ ...movement, section: 0 }],
+    }),
+    h.workoutModeVersionFingerprint(workout),
+  );
+});
 
 test("capped For Time handoff includes cap time plus reps accepted by buildScore", () => {
   const h = workoutHarness();

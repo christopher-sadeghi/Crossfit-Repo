@@ -95,6 +95,27 @@ const emptyClock = { startedAt: null, pausedAt: null, accumulated: 0 };
 const timeLabel = (seconds: number) =>
   `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 
+export function workoutModeVersionFingerprint(workout: Workout): string {
+  return JSON.stringify({
+    movements: workout.movements.map(
+      ({ movement_id, sets, reps, load_kg, notes, reason, section }) => ({
+        movement_id,
+        sets,
+        reps,
+        load_kg,
+        notes,
+        reason,
+        ...(section == null ? {} : { section }),
+      }),
+    ),
+    rounds: workout.rounds,
+    time_cap_seconds: workout.time_cap_seconds,
+    ...(workout.sections?.length ? { sections: workout.sections } : {}),
+    isScaled: workout.isScaled,
+    modifications: workout.modifications,
+  });
+}
+
 function createSession(workout: Workout, versionFingerprint: string): Session {
   return {
     createdAt: Date.now(),
@@ -131,24 +152,7 @@ export function WorkoutMode({
   const router = useRouter();
   const storageKey = `workout:${athleteId}:${workout.id}:${date}:${units}`;
   const barKey = `workout-bar:${athleteId}:${units}`;
-  const versionFingerprint = JSON.stringify({
-    movements: workout.movements.map(
-      ({ movement_id, sets, reps, load_kg, notes, reason, section }) => ({
-        movement_id,
-        sets,
-        reps,
-        load_kg,
-        notes,
-        reason,
-        section,
-      }),
-    ),
-    rounds: workout.rounds,
-    time_cap_seconds: workout.time_cap_seconds,
-    sections: workout.sections,
-    isScaled: workout.isScaled,
-    modifications: workout.modifications,
-  });
+  const versionFingerprint = workoutModeVersionFingerprint(workout);
   const movementGroups = groupBySection(
     workout.movements.map((movement, position) => ({ ...movement, position })),
     workout.sections,
