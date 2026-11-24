@@ -68,6 +68,8 @@ declare
   v_target public.nutrition_targets%rowtype;
   v_today date := current_date;
   v_notification_tab text;
+  v_assistant_training boolean;
+  v_assistant_nutrition boolean;
 begin
   if v_athlete_id is null or p_message_id is null or p_card_index is null or p_card_index < 0 or p_change is null
     or jsonb_typeof(p_change) <> 'object' then
@@ -92,14 +94,21 @@ begin
     raise exception 'account_change_card_mismatch' using errcode = '42501';
   end if;
 
+  v_kind := p_change->>'kind';
+  v_action := p_change->>'action';
+  select assistant_training, assistant_nutrition
+    into v_assistant_training, v_assistant_nutrition
+  from public.athlete_assistant_settings();
+  if (v_kind in ('goal','injuries','body_weight','reminder_time') and not coalesce(v_assistant_training, false))
+    or (v_kind in ('food_preferences','macros') and not coalesce(v_assistant_nutrition, false)) then
+    raise exception 'assistant_topic_disabled' using errcode = '42501';
+  end if;
+
   insert into public.athlete_assistant_applied_cards(message_id, card_index, athlete_id, coach_id)
   values (p_message_id, p_card_index, v_athlete_id, v_coach_id)
   on conflict (message_id, card_index) do nothing
   returning message_id into v_inserted;
   if v_inserted is null then raise exception 'account_change_already_applied' using errcode = '23505'; end if;
-
-  v_kind := p_change->>'kind';
-  v_action := p_change->>'action';
 
   if v_kind = 'goal' then
     if v_action = 'create' then

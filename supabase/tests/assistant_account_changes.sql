@@ -113,6 +113,26 @@ do $$ begin
   assert not exists(select 1 from public.notifications where athlete_id = '39000000-0000-4000-8000-000000000021' and dedupe_key like '%:1');
 end $$;
 
+update public.coaches set assistant_nutrition = false where id = '39000000-0000-4000-8000-000000000001';
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub":"39000000-0000-4000-8000-000000000012","role":"authenticated"}', true);
+do $$ begin
+  begin
+    perform public.apply_athlete_account_change(
+      '39000000-0000-4000-8000-000000000032', 0,
+      '{"kind":"macros","calories":2200,"protein_g":160,"carbs_g":220,"fat_g":70}'
+    );
+    raise exception 'disabled nutrition topic accepted a macros card';
+  exception when insufficient_privilege then
+    assert sqlerrm = 'assistant_topic_disabled';
+  end;
+  assert not exists(select 1 from public.athlete_assistant_applied_cards
+    where message_id = '39000000-0000-4000-8000-000000000032' and card_index = 0);
+  raise notice 'PASS: disabled nutrition topic rejects macros cards';
+end $$;
+reset role;
+update public.coaches set assistant_nutrition = true where id = '39000000-0000-4000-8000-000000000001';
+
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"39000000-0000-4000-8000-000000000012","role":"authenticated"}', true);
 select public.apply_athlete_account_change(
