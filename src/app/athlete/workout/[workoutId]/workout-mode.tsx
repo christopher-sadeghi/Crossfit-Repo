@@ -374,15 +374,15 @@ export function WorkoutMode({
       sets: part.sets.map((set, setIndex) => {
         const key = `${position}-${setIndex}`;
         const movement = workout.movements[position];
+        const plannedLoad =
+          set.load_kg == null ? undefined : fromKgPrecise(set.load_kg, units);
         const weight = isStrength
           ? session.weights[key] ??
             movementLoad(movement, setIndex).weight ??
-            (set.load_kg == null
-              ? undefined
-              : fromKgPrecise(set.load_kg, units))
+            plannedLoad
           : setIndex === 0
-            ? session.weights[`${position}-0`] ?? set.load_kg
-            : set.load_kg;
+            ? session.weights[`${position}-0`] ?? plannedLoad
+            : plannedLoad;
         return {
           ...set,
           load_kg: weight ?? null,

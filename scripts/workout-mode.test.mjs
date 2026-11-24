@@ -157,6 +157,34 @@ test("non-strength handoff keeps default completion and only uses the first ente
   );
 }));
 
+test("non-strength lb handoff converts planned loads to pounds", () => withWorkoutStorage((_records, sessionRecords) => {
+  const movementId = "10000000-0000-4000-8000-000000000001";
+  const h = workoutHarness({
+    units: "lb",
+    workout: {
+      id: "w",
+      title: "WOD",
+      workout_type: "for_time",
+      time_cap_seconds: 600,
+      rounds: null,
+      movements: [{ movement_id: movementId, name: "Row", sets: 2, reps: 8, load_kg: 50 }],
+      isScaled: false,
+    },
+  });
+  h.states[1] = true;
+  elements(h.render()).find((node) => node.type === "button" && node.props.children === "Finish & review result").props.onClick();
+  const query = new URL(h.navigations[0], "https://example.test").searchParams;
+  const token = query.get("parts_handoff");
+  assert.ok(token);
+  assert.deepEqual(
+    JSON.parse(sessionRecords.get(`workout-result-parts:${token}`))[0].sets,
+    [
+      { reps: 8, load_kg: 110.2, done: true },
+      { reps: 8, load_kg: 110.2, done: true },
+    ],
+  );
+}));
+
 test("saved display-unit weights are isolated by units", () => withWorkoutStorage((records) => {
   const kg = workoutHarness({ units: "kg" });
   kg.states[0] = { ...kg.states[0], weights: { "0-0": 100 }, reps: 10 };
