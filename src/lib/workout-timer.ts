@@ -1,3 +1,5 @@
+import type { WorkoutSection } from "@/lib/workout-sections";
+
 export type TimerConfig = (
   | { mode: "for_time"; capSeconds?: number }
   | { mode: "amrap"; durationSeconds: number }
@@ -6,6 +8,27 @@ export type TimerConfig = (
   | { mode: "rest"; seconds: number }
 ) & { readySeconds?: number };
 export type TimerView = { phase: "countdown" | "work" | "rest" | "done"; displaySeconds: number; index: number; remaining: number | null };
+
+export function timerForSection(
+  section: Pick<WorkoutSection, "format" | "time_cap_seconds">,
+): TimerConfig | null {
+  const capSeconds = section.time_cap_seconds;
+  if (capSeconds == null) return null;
+  switch (section.format) {
+    case "amrap":
+      return { mode: "amrap", durationSeconds: capSeconds };
+    case "for_time":
+      return { mode: "for_time", capSeconds };
+    case "emom": {
+      const intervals = capSeconds / 60;
+      return Number.isInteger(intervals) && intervals >= 1
+        ? { mode: "emom", intervalSeconds: 60, intervals }
+        : null;
+    }
+    default:
+      return null;
+  }
+}
 
 export function timerDuration(config: TimerConfig) {
   switch (config.mode) {

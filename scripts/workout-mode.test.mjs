@@ -15,7 +15,7 @@ function load(filename, overrides = {}) {
   new Function("require", "module", "exports", js)((id) => overrides[id] ?? (id.startsWith(".") ? load(path.resolve(path.dirname(filename), `${id}.ts`), overrides) : id.startsWith("@/") ? load(`src/${id.slice(2)}.ts`, overrides) : require(id)), loaded, loaded.exports);
   return loaded.exports;
 }
-const { timerView, crossedCues, elapsedTime, defaultTimer } = load("src/lib/workout-timer.ts");
+const { timerView, crossedCues, elapsedTime, defaultTimer, timerForSection } = load("src/lib/workout-timer.ts");
 const { platesPerSide, roundToLoadable } = load("src/lib/plates.ts");
 const { parsePercentages, percentageLoad } = load("src/lib/percent-loads.ts");
 const { workoutVersion } = load("src/lib/workout-version.ts");
@@ -91,6 +91,72 @@ test("capped For Time handoff includes cap time plus reps accepted by buildScore
   assert.equal(query.reps, "42");
   const { buildScore, scoreSchema } = load("src/lib/result-score.ts");
   assert.deepEqual(buildScore(scoreSchema.parse(workoutPrefill(query)), "for_time", "kg"), { score: { time_seconds: 600, reps: 42, rounds: null, load_kg: null } });
+});
+
+test("section timers use section caps and reset only the clock", () => {
+  assert.deepEqual(
+    timerForSection({ format: "amrap", time_cap_seconds: 1200 }),
+    { mode: "amrap", durationSeconds: 1200 },
+  );
+  assert.deepEqual(
+    timerForSection({ format: "for_time", time_cap_seconds: 900 }),
+    { mode: "for_time", capSeconds: 900 },
+  );
+  assert.deepEqual(
+    timerForSection({ format: "emom", time_cap_seconds: 720 }),
+    { mode: "emom", intervalSeconds: 60, intervals: 12 },
+  );
+  assert.equal(timerForSection({ format: "emom", time_cap_seconds: null }), null);
+  assert.equal(timerForSection({ format: "other", time_cap_seconds: 600 }), null);
+
+  const section = { title: "C. AMRAP", format: "amrap", time_cap_seconds: 1200, rounds: null };
+  const h = workoutHarness({
+    workout: {
+      id: "w",
+      title: "WOD",
+      workout_type: "other",
+      time_cap_seconds: null,
+      rounds: null,
+      sections: [section],
+      movements: [
+        {
+          movement_id: "10000000-0000-4000-8000-000000000001",
+          name: "Row",
+          sets: 3,
+          reps: 10,
+          load_kg: null,
+          section: 0,
+        },
+      ],
+      isScaled: false,
+    },
+  });
+  h.states[0] = {
+    ...h.states[0],
+    clock: { startedAt: Date.now() - 5000, pausedAt: null, accumulated: 0 },
+    done: ["0-0"],
+    weights: { "0-0": 43 },
+  };
+  h.states[1] = true;
+  elements(h.render())
+    .find((node) => node.type === "button" && node.props.children === "Time this section")
+    .props.onClick();
+  assert.deepEqual(h.states[0].config, { mode: "amrap", durationSeconds: 1200 });
+  assert.deepEqual(h.states[0].clock, { startedAt: null, pausedAt: null, accumulated: 0 });
+  assert.deepEqual(h.states[0].done, ["0-0"]);
+  assert.deepEqual(h.states[0].weights, { "0-0": 43 });
+
+  h.states[0] = {
+    ...h.states[0],
+    clock: { startedAt: Date.now() - 5000, pausedAt: null, accumulated: 0 },
+  };
+  elements(h.render())
+    .find((node) => node.type === "button" && node.props.children === "Reset timer")
+    .props.onClick();
+  assert.deepEqual(h.states[0].config, { mode: "amrap", durationSeconds: 1200 });
+  assert.deepEqual(h.states[0].clock, { startedAt: null, pausedAt: null, accumulated: 0 });
+  assert.deepEqual(h.states[0].done, ["0-0"]);
+  assert.deepEqual(h.states[0].weights, { "0-0": 43 });
 });
 
 test("finish hands off completed part sets through session storage", () => withWorkoutStorage((_records, sessionRecords) => {

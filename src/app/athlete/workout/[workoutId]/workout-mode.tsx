@@ -19,6 +19,7 @@ import {
   crossedCues,
   defaultTimer,
   elapsedTime,
+  timerForSection,
   timerDuration,
   timerView,
   type TimerConfig,
@@ -313,6 +314,20 @@ export function WorkoutMode({
     update({ clock: { startedAt: timestamp, pausedAt: null, accumulated } });
   }
 
+  function resetTimer() {
+    previousElapsed.current = 0;
+    setNow(Date.now());
+    update({ clock: emptyClock });
+  }
+
+  function timeSection(section: WorkoutSection) {
+    const config = timerForSection(section);
+    if (!config) return;
+    previousElapsed.current = 0;
+    setNow(Date.now());
+    update({ config, clock: emptyClock });
+  }
+
   function movementLoad(movement: WorkoutMovement, set: number) {
     if (movement.load_kg != null)
       return {
@@ -570,6 +585,7 @@ export function WorkoutMode({
             >
               Reset
             </button>
+            <button onClick={resetTimer}>Reset timer</button>
           </div>
           <button className="text-sm text-slate-300" onClick={unlockAudio}>
             Enable sound (best-effort)
@@ -670,14 +686,25 @@ export function WorkoutMode({
           {movementGroups.flatMap((group) => [
             ...(group.section
               ? [
-                  <h3
+                  <div
                     key={`section-${group.index}`}
-                    className="border-b border-slate-700 pb-2 text-lg font-bold text-cyan-300"
+                    className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-700 pb-2"
                   >
-                    {group.section.title}
-                    {formatSectionHeadline(group.section) &&
-                      ` · ${formatSectionHeadline(group.section)}`}
-                  </h3>,
+                    <h3 className="text-lg font-bold text-cyan-300">
+                      {group.section.title}
+                      {formatSectionHeadline(group.section) &&
+                        ` · ${formatSectionHeadline(group.section)}`}
+                    </h3>
+                    {timerForSection(group.section) && (
+                      <button
+                        type="button"
+                        className="rounded-lg border border-slate-500 px-3 py-2 text-sm"
+                        onClick={() => timeSection(group.section!)}
+                      >
+                        Time this section
+                      </button>
+                    )}
+                  </div>,
                 ]
               : []),
             ...group.items.map(({ movement, position: i }) => {
