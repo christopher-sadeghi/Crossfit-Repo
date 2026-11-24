@@ -6,9 +6,19 @@ import { addDays } from "@/lib/nutrition";
 import { goalProgress } from "@/lib/progress";
 import { personalRecords } from "@/lib/results";
 import { fromKgPrecise, type Units } from "@/lib/units";
-import type { Database } from "@/lib/supabase/database.types";
+import type { Database, Json } from "@/lib/supabase/database.types";
 import { formatLiftMaxes } from "./lift-context";
 import { consistencyContext, trainingLoadContext } from "./athlete-context";
+
+type ScheduleWorkoutWithSections = {
+  id: string;
+  source_workout_id: string | null;
+  title: string;
+  week_number: number | null;
+  day_number: number | null;
+  sections: Json;
+  workout_movements: { movement_id: string; section: number | null }[];
+};
 
 const load = (kg: number | null, units: Units) => (kg == null ? null : fromKgPrecise(Number(kg), units));
 
@@ -45,7 +55,7 @@ export async function getAthleteContext(supabase: SupabaseClient<Database>, athl
     supabase
       .from("workout_results")
       .select(
-        "performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, rpe, energy, sleep_hours, soreness, pain_notes, workouts(title, workout_type, workout_movements(movement_id))",
+        "performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, rpe, energy, sleep_hours, soreness, pain_notes, workouts(title, workout_type, sections, workout_movements(movement_id, section))",
       )
       .eq("athlete_id", athleteId)
       .order("performed_on", { ascending: false }),
@@ -63,11 +73,11 @@ export async function getAthleteContext(supabase: SupabaseClient<Database>, athl
   if (error) throw error;
   if (!athlete) return { error: "Athlete not found." };
 
-  const schedule = await loadAthleteSchedule(
+  const schedule = await loadAthleteSchedule<ScheduleWorkoutWithSections>(
     supabase,
     athleteId,
     { from: addDays(today, -7), to: addDays(today, 14) },
-    "id, source_workout_id, title, week_number, day_number, workout_type",
+    "id, source_workout_id, title, week_number, day_number, workout_type, sections, workout_movements(movement_id, section)",
   );
   const allResults = results ?? [];
   const goalData = { metrics: metrics ?? [], results: allResults, liftMaxes };
@@ -126,6 +136,11 @@ export async function getAthleteContext(supabase: SupabaseClient<Database>, athl
     recent_results: allResults.slice(0, 15).map((r) => ({
       performed_on: r.performed_on,
       workout: r.workouts?.title,
+      sections: r.workouts?.sections ?? [],
+      movements: r.workouts?.workout_movements?.map((movement) => ({
+        movement_id: movement.movement_id,
+        section: movement.section,
+      })) ?? [],
       time_seconds: r.time_seconds,
       rounds: r.rounds,
       reps: r.reps,
@@ -143,6 +158,11 @@ export async function getAthleteContext(supabase: SupabaseClient<Database>, athl
       date: item.date,
       workout_id: item.workout.id,
       title: item.workout.title,
+      sections: item.workout.sections,
+      movements: item.workout.workout_movements.map((movement) => ({
+        movement_id: movement.movement_id,
+        section: movement.section,
+      })),
       source: item.source,
       program: item.programName,
     })),

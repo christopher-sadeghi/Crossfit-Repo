@@ -153,7 +153,7 @@ async function listPrograms(supabase: Supabase) {
 }
 
 const WORKOUT_DETAIL =
-  "id, title, workout_type, time_cap_seconds, rounds, description, notes, week_number, day_number, scheduled_on, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(name))";
+  "id, title, workout_type, time_cap_seconds, rounds, description, notes, sections, week_number, day_number, scheduled_on, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, section, movements(name))";
 
 type WorkoutDetailRow = {
   id: string;
@@ -166,6 +166,7 @@ type WorkoutDetailRow = {
   week_number: number | null;
   day_number: number | null;
   scheduled_on: string | null;
+  sections: unknown;
   workout_movements: {
     position: number;
     sets: number | null;
@@ -175,6 +176,8 @@ type WorkoutDetailRow = {
     calories: number | null;
     duration_seconds: number | null;
     notes: string | null;
+    section: number | null;
+    movement_id: string;
     movements: { name: string } | null;
   }[];
 };
@@ -190,10 +193,13 @@ const workoutDetail = (w: WorkoutDetailRow, units: Units) => ({
   week: w.week_number,
   day: w.day_number,
   scheduled_on: w.scheduled_on,
+  sections: w.sections,
   movements: [...w.workout_movements]
     .sort((a, b) => a.position - b.position)
     .map((m) => ({
+      movement_id: m.movement_id,
       name: m.movements?.name,
+      section: m.section,
       sets: m.sets,
       reps: m.reps,
       load: load(m.load_kg, units),

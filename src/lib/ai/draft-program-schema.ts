@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SECTION_FORMATS } from "../workout-sections";
 
 export const programMovementSchema = z.object({
   movement_id: z.string(),
@@ -9,6 +10,13 @@ export const programMovementSchema = z.object({
   calories: z.number().int().positive().max(1000).nullable(),
   duration_seconds: z.number().int().positive().max(7200).nullable(),
   notes: z.string().max(500).nullable(),
+  section: z.number().int().min(0).max(9).nullable(),
+});
+const programSectionSchema = z.object({
+  title: z.string().trim().min(1).max(80),
+  format: z.enum(SECTION_FORMATS),
+  time_cap_minutes: z.number().int().min(1).max(180).nullable(),
+  rounds: z.number().int().min(1).max(100).nullable(),
 });
 export const programWorkoutSchema = z.object({
   day_number: z.number().int().min(1).max(7),
@@ -18,6 +26,7 @@ export const programWorkoutSchema = z.object({
   rounds: z.number().int().positive().max(100).nullable(),
   description: z.string().max(3000).nullable(),
   notes: z.string().max(2000).nullable(),
+  sections: z.array(programSectionSchema).max(10),
   movements: z.array(programMovementSchema).min(1).max(15),
 });
 export const programWeekSchema = z.object({ week_number: z.number().int().min(1).max(4), workouts: z.array(programWorkoutSchema).min(1).max(7) });

@@ -5,7 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays } from "@/lib/nutrition";
 import { applyTarget } from "@/lib/nutrition-targets";
 import { WORKOUT_TYPES } from "@/app/(app)/programs/options";
-import { fromKgPrecise, toKg } from "@/lib/units";
+import { fromKgPrecise } from "@/lib/units";
 import type { Database, Enums, Json, Tables } from "@/lib/supabase/database.types";
 import { getToday } from "@/lib/time-zone";
 import { loadLiftMaxes } from "@/lib/benchmarks";
@@ -31,6 +31,8 @@ import { draftProgramEntry } from "./draft-program";
 import { athleteProgrammingStyleNote, coachProgrammingStyleNote, writeWorkoutSystem } from "@/lib/programming-style";
 import { applyCoachAccountChange } from "./coach-account-change";
 import { coachAccountChangeProposalSchema } from "./account-change";
+import { SECTION_FORMATS } from "@/lib/workout-sections";
+import { prepareWorkoutSavePayload } from "./workout-save-payload";
 
 export { ApprovalError } from "./errors";
 
@@ -64,6 +66,7 @@ const writeWorkoutMovementSchema = z.object({
   calories: z.number().int().min(1).max(1000).nullable(),
   duration_seconds: z.number().int().min(1).max(7200).nullable(),
   notes: z.string().max(200).nullable(),
+  section: z.number().int().min(0).max(9).nullable(),
 });
 
 export const writeWorkoutSchema = z.object({
@@ -71,6 +74,12 @@ export const writeWorkoutSchema = z.object({
   workout_type: z.enum(WORKOUT_TYPES),
   time_cap_minutes: z.number().int().min(1).max(180).nullable(),
   rounds: z.number().int().min(1).max(100).nullable(),
+  sections: z.array(z.object({
+    title: z.string().trim().min(1).max(80),
+    format: z.enum(SECTION_FORMATS),
+    time_cap_minutes: z.number().int().min(1).max(180).nullable(),
+    rounds: z.number().int().min(1).max(100).nullable(),
+  })).max(10),
   description: z.string().max(1000).nullable(),
   notes: z.string().max(1000).nullable(),
   movements: z
@@ -96,6 +105,12 @@ export const writeWorkoutInputSchema = z.object({
       workout_type: z.enum(WORKOUT_TYPES),
       time_cap_seconds: z.number().nullable(),
       rounds: z.number().nullable(),
+      sections: z.array(z.object({
+        title: z.string(),
+        format: z.enum(SECTION_FORMATS),
+        time_cap_seconds: z.number().nullable(),
+        rounds: z.number().nullable(),
+      })).max(10).optional().default([]),
       description: z.string().nullable(),
       notes: z.string().nullable(),
       movements: z.array(
@@ -109,6 +124,7 @@ export const writeWorkoutInputSchema = z.object({
           calories: z.number().nullable(),
           duration_seconds: z.number().nullable(),
           notes: z.string().nullable(),
+          section: z.number().int().min(0).max(9).nullable().optional().default(null),
         }),
       ),
     })
@@ -254,6 +270,9 @@ Rules:
 - Loads are in the coach's preferred units (<units>). Use realistic barbell, dumbbell, and kettlebell numbers (Rx loads for an intermediate athlete unless the request says otherwise).
 - Set fields that do not apply to null.
 - Match workout_type to the format: for_time (usually with a time cap), amrap (time_cap_minutes is the AMRAP length), emom (time_cap_minutes is total minutes; rounds optional), strength (sets and reps with load), or other.
+- List every exercise the athlete performs as its own movement entry with its own movement_id and numbers, including every movement inside an AMRAP, EMOM, for-time or interval block. Never name another exercise inside a movement's notes; notes are only for cues, tempo, percentages or Rx/scaled loads.
+- For a conditioning block, put the per-round reps, calories or distance on each movement and its load in load. The block's length or time cap goes on its section (or on the WOD when there are no sections), never on a movement's duration_seconds.
+- For a session with more than one part (e.g. strength, then accessory, then a metcon), set workout_type to other and add sections in order, each with a short title like "A. Back Squat" or "C. 20-min AMRAP", its format, and time_cap_minutes/rounds. Set each movement's section to its section index (0-based). For a single-part WOD, use an empty sections list and null section.
 - For adjust mode, keep the WOD's intent and structure unless requested otherwise; change only what is needed. A title suffix such as "(harder)" may be used only when saving as a new WOD.
 - When an athlete is given, this WOD is individual programming for that athlete on that date: fit it to their experience level, goals and recent results, and work around injuries or recent pain.
 - Write the rationale for the coach in 2–4 short, plain-English sentences.`;
@@ -311,7 +330,7 @@ export async function buildWorkoutRequest(
     const { data: workout, error: workoutError } = await supabase
       .from("workouts")
       .select(
-        "id, athlete_id, title, workout_type, time_cap_seconds, rounds, description, notes, updated_at, workout_movements(position, movement_id, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(name))",
+        "id, athlete_id, title, workout_type, time_cap_seconds, rounds, description, notes, sections, updated_at, workout_movements(position, movement_id, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, section, movements(name))",
       )
       .eq("id", params.workoutId)
       .order("position", { referencedTable: "workout_movements" })
@@ -326,6 +345,7 @@ export async function buildWorkoutRequest(
       workout_type: workout.workout_type,
       time_cap_seconds: workout.time_cap_seconds,
       rounds: workout.rounds,
+      sections: workout.sections ?? [],
       description: workout.description,
       notes: workout.notes,
       movements: workout.workout_movements.map(({ movements: movement, load_kg, ...item }) => ({
@@ -366,8 +386,31 @@ export async function buildWorkoutRequest(
   };
 }
 
+function withWorkoutSectionDefaults(proposal: unknown): unknown {
+  if (!proposal || typeof proposal !== "object" || Array.isArray(proposal))
+    return proposal;
+  const record = proposal as Record<string, unknown>;
+  const movements = Array.isArray(record.movements)
+    ? record.movements.map((movement) => {
+        if (!movement || typeof movement !== "object" || Array.isArray(movement))
+          return movement;
+        const item = movement as Record<string, unknown>;
+        return { ...item, section: item.section ?? null };
+      })
+    : record.movements;
+  return { ...record, sections: record.sections ?? [], movements };
+}
+
+export function safeParseWriteWorkoutProposal(proposal: unknown) {
+  return writeWorkoutSchema.safeParse(withWorkoutSectionDefaults(proposal));
+}
+
+function parseWriteWorkoutProposal(proposal: unknown) {
+  return writeWorkoutSchema.parse(withWorkoutSectionDefaults(proposal));
+}
+
 function validateWorkoutProposal(proposal: unknown, input: Json) {
-  const parsedProposal = writeWorkoutSchema.parse(proposal);
+  const parsedProposal = parseWriteWorkoutProposal(proposal);
   const parsedInput = writeWorkoutInputSchema.parse(input);
   const allowedMovementIds = new Set(parsedInput.library.map(({ id }) => id));
   if (parsedProposal.movements.some(({ movement_id }) => !allowedMovementIds.has(movement_id)))
@@ -380,7 +423,7 @@ async function applyWorkoutSuggestion(
   final: unknown,
   options?: SuggestionApplyOptions,
 ): Promise<AppliedTarget> {
-  const parsed = writeWorkoutSchema.parse(final);
+  const parsed = parseWriteWorkoutProposal(final);
   validateWorkoutProposal(parsed, suggestion.input);
   const input = writeWorkoutInputSchema.safeParse(suggestion.input);
   if (!input.success) throw new ApprovalError("This suggestion is missing its workout details. Ask again.");
@@ -408,18 +451,9 @@ async function applyWorkoutSuggestion(
     }
   }
 
-  const workout = {
-    title: parsed.title,
-    workout_type: parsed.workout_type,
-    time_cap_seconds: parsed.time_cap_minutes == null ? null : parsed.time_cap_minutes * 60,
-    rounds: parsed.rounds,
-    description: parsed.description,
-    notes: parsed.notes,
-  } satisfies Json;
-  const movements = parsed.movements.map(({ load, ...movement }) => ({
-    ...movement,
-    load_kg: load == null ? null : toKg(load, input.data.units),
-  })) satisfies Json;
+  const payload = prepareWorkoutSavePayload(parsed, input.data.units);
+  const workout = payload.workout satisfies Json;
+  const movements = payload.movements satisfies Json;
   const { data: targetId, error } = await supabase.rpc("save_ai_workout", {
     p_workout_id: workoutId as string,
     p_workout: workout,
