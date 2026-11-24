@@ -241,6 +241,21 @@ test("section timer results use the active section's score format", () => {
   );
 });
 
+test("a completed For Time section at its cap omits reps", () => {
+  assert.deepEqual(
+    sectionResultForTimer(
+      { format: "for_time", time_cap_seconds: 600 },
+      { mode: "for_time", capSeconds: 600 },
+      { startedAt: 0, pausedAt: null, accumulated: 0 },
+      3,
+      21,
+      true,
+      611000,
+    ),
+    { time_seconds: 600 },
+  );
+});
+
 test("EMOM movement cycling stays within the timed section", () => {
   const movements = [
     { name: "Back Squat", section: 0 },
@@ -326,6 +341,44 @@ test("section timers use section caps and reset only the clock", () => {
   assert.deepEqual(h.states[0].done, ["0-0"]);
   assert.deepEqual(h.states[0].weights, { "0-0": 43 });
   assert.equal(h.states[0].timedSection, 0);
+});
+
+test("completed-at-cap control appears for a timed For Time section", () => {
+  const h = workoutHarness({
+    workout: {
+      id: "w",
+      title: "WOD",
+      workout_type: "other",
+      time_cap_seconds: null,
+      rounds: null,
+      sections: [
+        { title: "A. For Time", format: "for_time", time_cap_seconds: 300, rounds: null },
+      ],
+      movements: [],
+      isScaled: false,
+    },
+  });
+  const timestamp = Date.now();
+  h.states[0] = {
+    ...h.states[0],
+    timedSection: 0,
+    config: { mode: "for_time", capSeconds: 300 },
+    clock: { startedAt: timestamp - 311000, pausedAt: null, accumulated: 0 },
+  };
+  h.states[1] = true;
+  h.states[5] = timestamp;
+
+  const completedLabel = elements(h.render()).find(
+    (node) =>
+      node.type === "label" &&
+      Array.isArray(node.props.children) &&
+      node.props.children.some(
+        (child) =>
+          typeof child === "string" &&
+          child.includes("Completed all reps before the cap"),
+      ),
+  );
+  assert.ok(completedLabel);
 });
 
 test("switching timed sections records the previous section result", () => {
