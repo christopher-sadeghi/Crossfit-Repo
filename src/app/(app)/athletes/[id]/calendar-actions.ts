@@ -115,7 +115,7 @@ export async function requestAthleteDayWorkout(_: FormState, formData: FormData)
     const weekStart = monday(date);
     const weekEnd = addDays(weekStart, 6);
     const schedule = await loadAthleteSchedule(supabase, athlete_id, { from: weekStart, to: weekEnd },
-      "id, source_workout_id, title, week_number, day_number, workout_type, time_cap_seconds, rounds, description, notes, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(name))");
+      "id, source_workout_id, title, week_number, day_number, workout_type, time_cap_seconds, rounds, description, notes, sections, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, section, movements(name))");
     const week = schedule.map((item) => ({
       date: item.date,
       label: item.overrides ? `Edited from ${SCHEDULE_LABEL({ source: item.overrides.source, programName: item.overrides.programName })}` : SCHEDULE_LABEL(item),

@@ -29,7 +29,12 @@ import { CheckInForm } from "./check-in/check-in-form";
 import { ScrollIntoView } from "./scroll-into-view";
 import { AthleteConsistencyCard } from "./consistency-card";
 import { waiverStatus } from "@/lib/waivers";
-import { defaultParts, resultPartsSchema } from "@/lib/result-parts";
+import { defaultParts, resultPartsSchema, sectionScoresSchema } from "@/lib/result-parts";
+import {
+  formatSectionHeadline,
+  groupBySection,
+  workoutSectionsSchema,
+} from "@/lib/workout-sections";
 import { loadResultPrSetLocations } from "@/lib/result-part-prs";
 import { workoutVersion } from "@/lib/workout-version";
 import { WorkoutResultPartsDisplay } from "@/components/workout-result-parts-display";
@@ -48,6 +53,7 @@ type TodayWorkout = WhiteboardWorkout & {
     calories: number | null;
     duration_seconds: number | null;
     notes: string | null;
+    section?: number | null;
     movements: { id: string; name: string } | null;
   }[];
 };
@@ -85,7 +91,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
       supabase,
       viewer.athleteId,
       { from: recentStartIso, to: "9999-12-31" },
-      "id, source_workout_id, title, workout_type, time_cap_seconds, rounds, description, notes, week_number, day_number, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(id, name))",
+      "id, source_workout_id, title, workout_type, time_cap_seconds, rounds, description, notes, sections, week_number, day_number, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, section, movements(id, name))",
     ),
     loadActivities(supabase, viewer.athleteId, { from: activityWeekStart, to: currentDate }),
     supabase.from("athlete_memberships")
@@ -133,7 +139,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
         supabase
           .from("workout_results")
           .select(
-            "id, workout_id, performed_on, logged_by, created_at, time_seconds, rounds, reps, load_kg, is_rx, notes, rpe, energy, sleep_hours, soreness, parts",
+            "id, workout_id, performed_on, logged_by, created_at, time_seconds, rounds, reps, load_kg, is_rx, notes, rpe, energy, sleep_hours, soreness, parts, section_scores",
           )
           .eq("athlete_id", viewer.athleteId)
           .in("workout_id", workoutIds)
@@ -210,6 +216,7 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                 rounds: workout.rounds,
                 time_cap_seconds: workout.time_cap_seconds,
                 workout_type: workout.workout_type,
+                sections: workout.sections,
               },
               scaling,
               currentDate,
@@ -226,6 +233,16 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                     adjustedDetails.time_cap_seconds === undefined ? workout.time_cap_seconds : adjustedDetails.time_cap_seconds,
                 })
               : "";
+            const adjustedMovementGroups = scalingDetails?.success
+              ? groupBySection(
+                  scalingDetails.data.movements.map((movement, index) => ({
+                    ...movement,
+                    position: index,
+                    section: movements[index]?.section ?? null,
+                  })),
+                  workout.sections,
+                )
+              : [];
 
             return (
               <div key={workout.id} className="grid gap-3">
@@ -260,21 +277,47 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                       )}
                       {scalingDetails?.success && (
                         <ul className="grid gap-2">
-                          {scalingDetails.data.movements.map((movement, index) => (
-                            <li key={`${movement.movement_id}-${index}`}>
-                              <MovementDemoSheet movement={{ id: movement.movement_id, name: movement.movement_name }}>{formatMovementLine({
-                                name: movement.movement_name,
-                                sets: movement.sets,
-                                reps: movement.reps,
-                                load_kg: movement.load_kg,
-                                distance_m: movement.distance_m,
-                                calories: movement.calories,
-                                duration_seconds: movement.duration_seconds,
-                                notes: null,
-                              }, viewer.units)}</MovementDemoSheet>
-                              <p className="text-xs text-muted-foreground">{movement.reason}</p>
-                            </li>
-                          ))}
+                          {adjustedMovementGroups.flatMap((group) => [
+                            ...(group.section
+                              ? [
+                                  <li
+                                    key={`section-${group.index}`}
+                                    className="border-b pb-1 font-medium"
+                                  >
+                                    {group.section.title}
+                                    {formatSectionHeadline(group.section) &&
+                                      ` · ${formatSectionHeadline(group.section)}`}
+                                  </li>,
+                                ]
+                              : []),
+                            ...group.items.map(({ movement, position }) => (
+                              <li key={`${movement.movement_id}-${position}`}>
+                                <MovementDemoSheet
+                                  movement={{
+                                    id: movement.movement_id,
+                                    name: movement.movement_name,
+                                  }}
+                                >
+                                  {formatMovementLine(
+                                    {
+                                      name: movement.movement_name,
+                                      sets: movement.sets,
+                                      reps: movement.reps,
+                                      load_kg: movement.load_kg,
+                                      distance_m: movement.distance_m,
+                                      calories: movement.calories,
+                                      duration_seconds: movement.duration_seconds,
+                                      notes: null,
+                                    },
+                                    viewer.units,
+                                  )}
+                                </MovementDemoSheet>
+                                <p className="text-xs text-muted-foreground">
+                                  {movement.reason}
+                                </p>
+                              </li>
+                            )),
+                          ])}
                         </ul>
                       )}
                       {adjusted && scaling.coach_modifications && (
@@ -315,10 +358,15 @@ export default async function AthleteTodayPage({ searchParams }: { searchParams:
                       {todayResult.notes && <p className="text-muted-foreground">{todayResult.notes}</p>}
                       {(() => {
                         const parts = resultPartsSchema.safeParse(todayResult.parts);
+                        const sections = workoutSectionsSchema.safeParse(workout.sections);
+                        const sectionScores = sectionScoresSchema.safeParse(todayResult.section_scores);
                         return parts.success ? (
                           <WorkoutResultPartsDisplay
                             parts={parts.data}
                             units={viewer.units}
+                            sections={sections.success ? sections.data : undefined}
+                            movements={workout.workout_movements}
+                            sectionScores={sectionScores.success ? sectionScores.data : []}
                             newPrSets={resultPrSets.get(todayResult.id)}
                           />
                         ) : null;

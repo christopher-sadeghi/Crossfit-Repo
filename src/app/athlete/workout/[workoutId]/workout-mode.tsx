@@ -13,6 +13,7 @@ import {
 } from "@/lib/plates";
 import { parsePercentages, percentageLoad } from "@/lib/percent-loads";
 import { defaultParts } from "@/lib/result-parts";
+import { formatSectionHeadline, groupBySection, type WorkoutSection } from "@/lib/workout-sections";
 import { fromKgPrecise, type Units } from "@/lib/units";
 import {
   crossedCues,
@@ -75,6 +76,7 @@ type Workout = {
   workout_type: Enums<"workout_type">;
   time_cap_seconds: number | null;
   rounds: number | null;
+  sections?: WorkoutSection[];
   movements: WorkoutMovement[];
   isScaled: boolean;
   modifications: string;
@@ -133,6 +135,10 @@ export function WorkoutMode({
     isScaled: workout.isScaled,
     modifications: workout.modifications,
   });
+  const movementGroups = groupBySection(
+    workout.movements.map((movement, position) => ({ ...movement, position })),
+    workout.sections,
+  );
   const [session, setSession] = useState<Session>(() =>
     createSession(workout, versionFingerprint),
   );
@@ -369,27 +375,40 @@ export function WorkoutMode({
     }
     params.set("notes", session.notes.slice(0, 500));
     const isStrength = type === "strength";
-    const parts = defaultParts(workout, units).map((part, position) => ({
-      ...part,
-      sets: part.sets.map((set, setIndex) => {
-        const key = `${position}-${setIndex}`;
-        const movement = workout.movements[position];
-        const plannedLoad =
-          set.load_kg == null ? undefined : fromKgPrecise(set.load_kg, units);
-        const weight = isStrength
-          ? session.weights[key] ??
-            movementLoad(movement, setIndex).weight ??
-            plannedLoad
-          : setIndex === 0
-            ? session.weights[`${position}-0`] ?? plannedLoad
-            : plannedLoad;
-        return {
-          ...set,
-          load_kg: weight ?? null,
-          done: isStrength ? session.done.includes(key) : set.done,
-        };
-      }),
-    }));
+    const parts = defaultParts(workout, units).map((part, position) => {
+      const movement = workout.movements[position];
+      const section = workout.sections?.[movement?.section ?? -1];
+      const isStrengthPart = section ? section.format === "strength" : isStrength;
+      const plannedWeight =
+        part.load_kg == null ? undefined : fromKgPrecise(part.load_kg, units);
+      const enteredWeight = session.weights[`${position}-0`];
+      return {
+        ...part,
+        sets: part.sets.map((set, setIndex) => {
+          const key = `${position}-${setIndex}`;
+          const plannedLoad =
+            set.load_kg == null
+              ? undefined
+              : fromKgPrecise(set.load_kg, units);
+          const weight = isStrengthPart
+            ? session.weights[key] ??
+              movementLoad(movement, setIndex).weight ??
+              plannedLoad
+            : setIndex === 0
+              ? session.weights[`${position}-0`] ?? plannedLoad
+              : plannedLoad;
+          return {
+            ...set,
+            load_kg: weight ?? null,
+            done: isStrengthPart ? session.done.includes(key) : set.done,
+          };
+        }),
+        ...(!part.sets.length &&
+        (enteredWeight != null || plannedWeight != null)
+          ? { load_kg: enteredWeight ?? plannedWeight }
+          : {}),
+      };
+    });
     const handoffToken = crypto.randomUUID();
     try {
       sessionStorage.setItem(
@@ -648,179 +667,197 @@ export function WorkoutMode({
         </section>
         <section className="grid gap-4">
           <h2 className="text-xl font-bold">Movements & loads</h2>
-          {workout.movements.map((movement, i) => {
-            const target = movementLoad(movement, 0);
-            const weight = session.weights[`${i}-0`] ?? target.weight;
-            return (
-              <article
-                key={`${movement.movement_id}-${i}`}
-                className="grid gap-3 rounded-xl bg-slate-900 p-4"
-              >
-                <MovementDemoSheet
-                  movement={{ id: movement.movement_id, name: movement.name }}
-                  className="text-xl font-bold"
-                >
-                  {movement.name}
-                </MovementDemoSheet>
-                <p>
-                  {[
-                    movement.sets && `${movement.sets} sets`,
-                    movement.reps && `${movement.reps} reps`,
-                    movement.distance_m && `${movement.distance_m}m`,
-                    movement.calories && `${movement.calories} cal`,
-                    movement.duration_seconds &&
-                      `${movement.duration_seconds}s`,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
-                {movement.notes && (
-                  <p className="text-slate-300">{movement.notes}</p>
-                )}
-                {movement.reason && (
-                  <p className="text-sm text-slate-300">{movement.reason}</p>
-                )}
-                {workout.workout_type === "strength" ? (
-                  <div
-                    className="grid gap-2"
-                    role="group"
-                    aria-label={`${movement.name} sets`}
+          {movementGroups.flatMap((group) => [
+            ...(group.section
+              ? [
+                  <h3
+                    key={`section-${group.index}`}
+                    className="border-b border-slate-700 pb-2 text-lg font-bold text-cyan-300"
                   >
-                    <div className="grid grid-cols-[3rem_1fr_4rem] text-sm text-slate-300">
-                      <span>Set</span>
-                      <span>
-                        Weight ({units}) · {movement.reps ?? "?"} reps
-                      </span>
-                      <span>Done</span>
-                    </div>
-                    {Array.from(
-                      { length: Math.min(100, movement.sets ?? 1) },
-                      (_, j) => {
-                        const key = `${i}-${j}`;
-                        const load = movementLoad(movement, j);
-                        const value = session.weights[key] ?? load.weight;
-                        return (
-                          <div
-                            key={j}
-                            className="grid grid-cols-[3rem_1fr_4rem] items-center gap-2"
-                          >
-                            <span>{j + 1}</span>
-                            <label>
-                              <span className="text-xs text-slate-300">
-                                {load.label}
-                              </span>
-                              <input
-                                aria-label={`${movement.name} set ${j + 1} weight (${units})`}
-                                type="number"
-                                min="0"
-                                max="10000"
-                                step="any"
-                                value={value ?? ""}
-                                onChange={(e) =>
-                                  update({
-                                    weights: {
-                                      ...session.weights,
-                                      [key]: Math.min(
-                                        10000,
-                                        Math.max(0, Number(e.target.value)),
-                                      ),
-                                    },
-                                  })
-                                }
-                              />
-                            </label>
-                            <label className="grid min-h-12 min-w-12 place-items-center">
-                              <span className="sr-only">Set {j + 1} done</span>
-                              <input
-                                type="checkbox"
-                                className="size-6"
-                                checked={session.done.includes(key)}
-                                onChange={(e) => {
-                                  if (e.target.checked && value === undefined)
-                                    return;
-                                  const timestamp = Date.now();
-                                  unlockAudio();
-                                  previousElapsed.current = -1;
-                                  setNow(timestamp);
-                                  setSession((s) => ({
-                                    ...s,
-                                    weights:
-                                      value === undefined
-                                        ? s.weights
-                                        : { ...s.weights, [key]: value },
-                                    done: e.target.checked
-                                      ? [...s.done, key]
-                                      : s.done.filter((id) => id !== key),
-                                    ...(e.target.checked
-                                      ? {
-                                          config: {
-                                            mode: "rest",
-                                            seconds:
-                                              s.config.mode === "rest"
-                                                ? s.config.seconds
-                                                : 120,
-                                            readySeconds:
-                                              s.config.readySeconds ?? 10,
-                                          },
-                                          clock: {
-                                            startedAt: timestamp,
-                                            pausedAt: null,
-                                            accumulated: 0,
-                                          },
-                                        }
-                                      : {}),
-                                  }));
-                                }}
-                              />
-                            </label>
-                            {value !== undefined && (
-                              <div
-                                className="col-span-3"
-                                aria-label={`Set ${j + 1} plates per side`}
-                              >
-                                <PlateDisplay
-                                  weight={value}
-                                  bar={bar}
-                                  units={units}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        );
-                      },
+                    {group.section.title}
+                    {formatSectionHeadline(group.section) &&
+                      ` · ${formatSectionHeadline(group.section)}`}
+                  </h3>,
+                ]
+              : []),
+            ...group.items.map(({ movement, position: i }) => {
+                const movementSection =
+                  workout.sections?.[movement.section ?? -1];
+                const isStrengthMovement = movementSection
+                  ? movementSection.format === "strength"
+                  : workout.workout_type === "strength";
+                const target = movementLoad(movement, 0);
+                const weight = session.weights[`${i}-0`] ?? target.weight;
+                return (
+                  <article
+                    key={`${movement.movement_id}-${i}`}
+                    className="grid gap-3 rounded-xl bg-slate-900 p-4"
+                  >
+                    <MovementDemoSheet
+                      movement={{ id: movement.movement_id, name: movement.name }}
+                      className="text-xl font-bold"
+                    >
+                      {movement.name}
+                    </MovementDemoSheet>
+                    <p>
+                      {[
+                        movement.sets && `${movement.sets} sets`,
+                        movement.reps && `${movement.reps} reps`,
+                        movement.distance_m && `${movement.distance_m}m`,
+                        movement.calories && `${movement.calories} cal`,
+                        movement.duration_seconds &&
+                          `${movement.duration_seconds}s`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                    {movement.notes && (
+                      <p className="text-slate-300">{movement.notes}</p>
                     )}
-                  </div>
-                ) : (
-                  <label className="grid gap-1">
-                    {target.label} ({units})
-                    <input
-                      aria-label={`${movement.name} working weight (${units})`}
-                      type="number"
-                      min="0"
-                      max="10000"
-                      step="any"
-                      value={weight ?? ""}
-                      onChange={(e) =>
-                        update({
-                          weights: {
-                            ...session.weights,
-                            [`${i}-0`]: Math.min(
-                              10000,
-                              Math.max(0, Number(e.target.value)),
-                            ),
+                    {movement.reason && (
+                      <p className="text-sm text-slate-300">{movement.reason}</p>
+                    )}
+                    {isStrengthMovement ? (
+                      <div
+                        className="grid gap-2"
+                        role="group"
+                        aria-label={`${movement.name} sets`}
+                      >
+                        <div className="grid grid-cols-[3rem_1fr_4rem] text-sm text-slate-300">
+                          <span>Set</span>
+                          <span>
+                            Weight ({units}) · {movement.reps ?? "?"} reps
+                          </span>
+                          <span>Done</span>
+                        </div>
+                        {Array.from(
+                          { length: Math.min(100, movement.sets ?? 1) },
+                          (_, j) => {
+                            const key = `${i}-${j}`;
+                            const load = movementLoad(movement, j);
+                            const value = session.weights[key] ?? load.weight;
+                            return (
+                              <div
+                                key={j}
+                                className="grid grid-cols-[3rem_1fr_4rem] items-center gap-2"
+                              >
+                                <span>{j + 1}</span>
+                                <label>
+                                  <span className="text-xs text-slate-300">
+                                    {load.label}
+                                  </span>
+                                  <input
+                                    aria-label={`${movement.name} set ${j + 1} weight (${units})`}
+                                    type="number"
+                                    min="0"
+                                    max="10000"
+                                    step="any"
+                                    value={value ?? ""}
+                                    onChange={(e) =>
+                                      update({
+                                        weights: {
+                                          ...session.weights,
+                                          [key]: Math.min(
+                                            10000,
+                                            Math.max(0, Number(e.target.value)),
+                                          ),
+                                        },
+                                      })
+                                    }
+                                  />
+                                </label>
+                                <label className="grid min-h-12 min-w-12 place-items-center">
+                                  <span className="sr-only">Set {j + 1} done</span>
+                                  <input
+                                    type="checkbox"
+                                    className="size-6"
+                                    checked={session.done.includes(key)}
+                                    onChange={(e) => {
+                                      if (e.target.checked && value === undefined)
+                                        return;
+                                      const timestamp = Date.now();
+                                      unlockAudio();
+                                      previousElapsed.current = -1;
+                                      setNow(timestamp);
+                                      setSession((s) => ({
+                                        ...s,
+                                        weights:
+                                          value === undefined
+                                            ? s.weights
+                                            : { ...s.weights, [key]: value },
+                                        done: e.target.checked
+                                          ? [...s.done, key]
+                                          : s.done.filter((id) => id !== key),
+                                        ...(e.target.checked
+                                          ? {
+                                              config: {
+                                                mode: "rest",
+                                                seconds:
+                                                  s.config.mode === "rest"
+                                                    ? s.config.seconds
+                                                    : 120,
+                                                readySeconds:
+                                                  s.config.readySeconds ?? 10,
+                                              },
+                                              clock: {
+                                                startedAt: timestamp,
+                                                pausedAt: null,
+                                                accumulated: 0,
+                                              },
+                                            }
+                                          : {}),
+                                      }));
+                                    }}
+                                  />
+                                </label>
+                                {value !== undefined && (
+                                  <div
+                                    className="col-span-3"
+                                    aria-label={`Set ${j + 1} plates per side`}
+                                  >
+                                    <PlateDisplay
+                                      weight={value}
+                                      bar={bar}
+                                      units={units}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            );
                           },
-                        })
-                      }
-                    />
-                  </label>
-                )}
-                {workout.workout_type !== "strength" &&
-                  weight !== undefined && (
-                    <PlateDisplay weight={weight} bar={bar} units={units} />
-                  )}
-              </article>
-            );
-          })}
+                        )}
+                      </div>
+                    ) : (
+                      <label className="grid gap-1">
+                        {target.label} ({units})
+                        <input
+                          aria-label={`${movement.name} working weight (${units})`}
+                          type="number"
+                          min="0"
+                          max="10000"
+                          step="any"
+                          value={weight ?? ""}
+                          onChange={(e) =>
+                            update({
+                              weights: {
+                                ...session.weights,
+                                [`${i}-0`]: Math.min(
+                                  10000,
+                                  Math.max(0, Number(e.target.value)),
+                                ),
+                              },
+                            })
+                          }
+                        />
+                      </label>
+                    )}
+                    {!isStrengthMovement && weight !== undefined && (
+                      <PlateDisplay weight={weight} bar={bar} units={units} />
+                    )}
+                  </article>
+                );
+              }),
+          ])}
         </section>
         <details className="rounded-xl border border-slate-700 p-4">
           <summary className="min-h-12 cursor-pointer py-3 text-xl font-bold">

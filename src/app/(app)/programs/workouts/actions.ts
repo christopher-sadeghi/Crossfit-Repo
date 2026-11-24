@@ -7,6 +7,7 @@ import { z } from "zod";
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { notifyScheduleChanged } from "@/lib/notifications";
 import { createClient } from "@/lib/supabase/server";
+import { normalizeSections, workoutSectionsSchema, type WorkoutSection } from "@/lib/workout-sections";
 
 import { WORKOUT_TYPES } from "../options";
 
@@ -21,9 +22,18 @@ const movementSchema = z.object({
   calories: positiveInt,
   duration_seconds: positiveInt,
   notes: z.string().trim().max(200).nullable(),
+  section: z.number().int().min(0).max(9).nullable().optional(),
 });
 
 const optionalNumber = z.preprocess((v) => (v === "" || v == null ? null : Number(v)), z.number().nullable());
+const sectionsInputSchema = z.string().default("[]").transform((value, ctx) => {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    ctx.addIssue({ code: "custom", message: "Invalid section list." });
+    return z.NEVER;
+  }
+}).pipe(workoutSectionsSchema);
 
 const workoutSchema = z.object({
   title: z.string().trim().min(1, "Give the WOD a name.").max(80),
@@ -43,6 +53,7 @@ const workoutSchema = z.object({
       }
     })
     .pipe(z.array(movementSchema).min(1, "Add at least one movement.").max(30)),
+  sections: sectionsInputSchema,
 });
 
 const placementSchema = z.object({
@@ -62,8 +73,22 @@ export async function saveWorkout(_: FormState, formData: FormData): Promise<For
     return failure(formData, message ?? "Please check the form.");
   }
 
-  const { movements, time_cap_minutes, ...fields } = parsed.data;
-  const workout = { ...fields, time_cap_seconds: time_cap_minutes == null ? null : Math.round(time_cap_minutes * 60) };
+  const { movements: submittedMovements, sections: submittedSections, time_cap_minutes, ...fields } = parsed.data;
+  let normalized: {
+    sections: WorkoutSection[];
+    movements: (typeof submittedMovements[number] & { section: number | null })[];
+  };
+  try {
+    normalized = normalizeSections(submittedSections, submittedMovements);
+  } catch (error) {
+    return failure(formData, error instanceof Error ? error.message : "Check the workout sections.");
+  }
+  const movements = normalized.movements;
+  const workout = {
+    ...fields,
+    sections: normalized.sections,
+    time_cap_seconds: time_cap_minutes == null ? null : Math.round(time_cap_minutes * 60),
+  };
   const id = formData.get("id");
   const supabase = await createClient();
 
@@ -166,7 +191,7 @@ export async function duplicateWorkout(id: string) {
   const supabase = await createClient();
   const { data: original } = await supabase
     .from("workouts")
-    .select("title, workout_type, time_cap_seconds, rounds, description, notes, workout_movements(movement_id, position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes)")
+    .select("title, workout_type, time_cap_seconds, rounds, description, notes, sections, workout_movements(movement_id, position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, section)")
     .eq("id", id)
     .single();
   if (!original) throw new Error("WOD not found.");
