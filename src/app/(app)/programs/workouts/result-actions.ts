@@ -16,12 +16,11 @@ import {
   resultPartsSchema,
   hasSectionScoreEntry,
   sectionScoresSchema,
-  scoreForSectionResult,
   type LiftPrSetLocation,
   type ResultPart,
   type SectionScore,
 } from "@/lib/result-parts";
-import { buildScore, scoreFields } from "@/lib/result-score";
+import { buildResultScore, scoreFields } from "@/lib/result-score";
 import { createClient } from "@/lib/supabase/server";
 import { fromKgPrecise } from "@/lib/units";
 import { workoutVersion } from "@/lib/workout-version";
@@ -111,7 +110,7 @@ export async function logResult(_: FormState, formData: FormData): Promise<Coach
   );
 
   const fallbackLoadKg = maxDoneSetLoad(parts);
-  const scoreResult = buildScore(
+  const scoreResult = buildResultScore(
     {
       ...r,
       load:
@@ -122,29 +121,16 @@ export async function logResult(_: FormState, formData: FormData): Promise<Coach
     },
     workout.workout_type,
     coach.units,
+    Boolean(version.sections?.length),
+    parts,
+    sectionScores,
+    fallbackLoadKg,
   );
-  let score: {
-    time_seconds: number | null;
-    rounds: number | null;
-    reps: number | null;
-    load_kg: number | null;
-  };
   if ("error" in scoreResult) {
-    const sectionScore = version.sections?.length
-      ? scoreForSectionResult(parts, sectionScores, fallbackLoadKg)
-      : null;
-    if (!sectionScore)
-      return failure(
-        formData,
-        version.sections?.length
-          ? "Enter a score for at least one section."
-          : scoreResult.error,
-      );
-    score = sectionScore;
-  } else {
-    score = { ...scoreResult.score };
-    if (r.load == null && fallbackLoadKg != null) score.load_kg = fallbackLoadKg;
+    return failure(formData, scoreResult.error);
   }
+  const score = { ...scoreResult.score };
+  if (r.load == null && fallbackLoadKg != null) score.load_kg = fallbackLoadKg;
 
   const { data: savedResult, error } = await supabase.from("workout_results").insert({
     workout_id: r.workout_id,

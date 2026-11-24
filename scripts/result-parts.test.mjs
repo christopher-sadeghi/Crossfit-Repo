@@ -48,7 +48,7 @@ const {
   shouldResetParts,
 } = load("src/lib/result-parts.ts");
 const { maxDoneSetLoad, submittedParts } = load("src/lib/result-part-prs.ts");
-const { buildScore, scoreSchema } = load("src/lib/result-score.ts");
+const { buildResultScore, buildScore, scoreSchema } = load("src/lib/result-score.ts");
 const movementId = "10000000-0000-4000-8000-000000000001";
 const benchmarkId = "20000000-0000-4000-8000-000000000001";
 
@@ -354,6 +354,52 @@ test("a zero-load strength score is valid for a completed set fallback", () => {
   assert.deepEqual(buildScore(scoreSchema.parse({ load: "0" }), "strength", "kg"), {
     score: { time_seconds: null, rounds: null, reps: null, load_kg: 0 },
   });
+});
+
+test("sectioned scores preserve overall fields accepted by the other format", () => {
+  assert.deepEqual(
+    buildResultScore(
+      {
+        minutes: null,
+        seconds: null,
+        rounds: 3,
+        reps: 7,
+        load: null,
+      },
+      "for_time",
+      "kg",
+      true,
+      [],
+      [],
+      null,
+    ),
+    {
+      score: {
+        time_seconds: null,
+        rounds: 3,
+        reps: 7,
+        load_kg: null,
+      },
+    },
+  );
+  assert.deepEqual(
+    buildResultScore(
+      {
+        minutes: null,
+        seconds: null,
+        rounds: null,
+        reps: null,
+        load: null,
+      },
+      "for_time",
+      "kg",
+      true,
+      [],
+      [],
+      null,
+    ),
+    { error: "Enter a score for at least one section." },
+  );
 });
 
 test("partsSummary formats loads in lb and kg", () => {

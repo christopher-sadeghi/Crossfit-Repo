@@ -17,12 +17,15 @@ import {
   resultPartsSchema,
   hasSectionScoreEntry,
   sectionScoresSchema,
-  scoreForSectionResult,
   type LiftPrSetLocation,
   type ResultPart,
   type SectionScore,
 } from "@/lib/result-parts";
-import { buildScore, feedbackFields, scoreFields } from "@/lib/result-score";
+import {
+  buildResultScore,
+  feedbackFields,
+  scoreFields,
+} from "@/lib/result-score";
 import { createClient } from "@/lib/supabase/server";
 import { fromKgPrecise } from "@/lib/units";
 import { getViewer } from "@/lib/viewer";
@@ -139,7 +142,7 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
   );
 
   const fallbackLoadKg = maxDoneSetLoad(parts);
-  const scoreResult = buildScore(
+  const scoreResult = buildResultScore(
     {
       ...r,
       load:
@@ -150,29 +153,16 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
     },
     workout.workout_type,
     viewer.units,
+    Boolean(version.sections?.length),
+    parts,
+    sectionScores,
+    fallbackLoadKg,
   );
-  let score: {
-    time_seconds: number | null;
-    rounds: number | null;
-    reps: number | null;
-    load_kg: number | null;
-  };
   if ("error" in scoreResult) {
-    const sectionScore = version.sections?.length
-      ? scoreForSectionResult(parts, sectionScores, fallbackLoadKg)
-      : null;
-    if (!sectionScore)
-      return failure(
-        formData,
-        version.sections?.length
-          ? "Enter a score for at least one section."
-          : scoreResult.error,
-      );
-    score = sectionScore;
-  } else {
-    score = { ...scoreResult.score };
-    if (r.load == null && fallbackLoadKg != null) score.load_kg = fallbackLoadKg;
+    return failure(formData, scoreResult.error);
   }
+  const score = { ...scoreResult.score };
+  if (r.load == null && fallbackLoadKg != null) score.load_kg = fallbackLoadKg;
   if (r.result_id && r.load != null && score.load_kg != null) {
     // Keep the stored load when the athlete didn't change the value the edit form showed.
     const { data: existing } = await supabase.from("workout_results").select("load_kg").eq("id", r.result_id).maybeSingle();
