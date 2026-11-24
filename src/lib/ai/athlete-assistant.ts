@@ -14,6 +14,8 @@ import { assistantCardSchema, coachMessageDraftSchema, type AssistantCard } from
 import { FRIENDLY_ERROR, resolveModel } from "./chat";
 import { aiLimitMessage } from "./service-core";
 import { athleteProgrammingStyleNote } from "@/lib/programming-style";
+import { athleteAccountChangeSchema } from "./account-change";
+import { accountChangeTopic, snapshotAthleteAccountChange } from "./athlete-account-change";
 
 type Client = SupabaseClient<Database>;
 const jsonError = (error: string, status: number) => Response.json({ error }, { status });
@@ -161,6 +163,21 @@ export async function streamAthleteAssistant(
       execute: async ({ description }) => {
         if (!config.assistant_training || safety.flagged) return unavailableTopic;
         return addCard({ kind: "activity", draft: await extractActivityDraft(description, today, viewer.units, model) });
+      },
+    }),
+    propose_account_change: tool({
+      description: "Create an unsaved account-change card for this athlete's own goals, injuries, food preferences, body weight, reminder time, or macros. Confirm exact details in chat first. This tool never writes data.",
+      inputSchema: z.object({ change: athleteAccountChangeSchema }).strict(),
+      execute: async ({ change }) => {
+        const topic = accountChangeTopic(change);
+        if (!config[`assistant_${topic}`] || safety.flagged || assistantSafety(JSON.stringify(change)).flagged)
+          return unavailableTopic;
+        try {
+          const before = await snapshotAthleteAccountChange(supabase, viewer, change, today, timeZone);
+          return addCard({ kind: "account_change", change, before });
+        } catch {
+          return { error: "Couldn't load the current account details for that change." };
+        }
       },
     }),
   };

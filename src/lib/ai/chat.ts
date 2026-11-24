@@ -15,6 +15,8 @@ import { SUGGESTION_REGISTRY } from "./suggestions";
 import { LIFT_LOAD_RULE } from "./lift-context";
 import { getAthleteContext } from "./athlete-chat-context";
 import { appendProgrammingStyle, athleteProgrammingStyleNote, coachProgrammingStyleNote } from "@/lib/programming-style";
+import { coachAccountChangeSchema } from "./account-change";
+import { createCoachAccountChangeSuggestion } from "./coach-account-change";
 
 export const chatContextSchema = z.object({
   athleteId: z.string().uuid().optional(),
@@ -40,7 +42,9 @@ Rules:
 - Only use real data from your tools. Never invent athletes, results, PRs, injuries, goals or workouts. If data is missing, say so.
 - Look data up before answering questions about athletes, programs or workouts.
 - Only use movements from the coach's movement library (listed below). Never suggest other movements.
-- You cannot change any data. To write or change programming, call a propose_* tool. Each call creates one pending suggestion that the coach must review and approve on the approval card beside the reply. Nothing changes until they approve.
+- You never change data directly. A propose_* tool creates a pending change for you to review and approve. Nothing changes until you approve it.
+- Use propose_athlete_change for one athlete's profile, injuries, notes, experience, assigned coach, program, body weight or goals. Make one change per call.
+- Before proposing, confirm the exact change in words so the coach can review it.
 - Only propose changes when the coach asks for programming or changes. For questions (for example "Who is overtraining this week?"), just answer.
 - To plan several days for one athlete, call propose_workout once per training day with athlete_id and scheduled_on. At most ${MAX_PROPOSALS_PER_MESSAGE} proposals per message; if more are needed, propose the first ones and offer to continue.
 - To make an existing WOD easier or safer for one athlete, use propose_scaling if available.
@@ -429,6 +433,27 @@ export async function runChatWithClient(supabase: Supabase, opts: ChatOptions): 
       description: "Create pending calorie, protein, carbohydrate and fat targets for one athlete. The coach must approve before targets change.",
       inputSchema: z.object({ athlete_id: z.string().uuid(), note: z.string().max(500).optional().describe("Requested nutrition change and relevant context.") }),
       execute: async ({ athlete_id, note }) => propose("adjust_macros", { athleteId: athlete_id, request: note ?? null }),
+    }),
+    propose_athlete_change: tool({
+      description: "Create one pending account change for an athlete. Confirm the exact change in words first. The coach must approve it; this tool never changes data directly.",
+      inputSchema: z.object({ athlete_id: z.string().uuid(), change: coachAccountChangeSchema }).strict(),
+      execute: safe(async ({ athlete_id, change }) => {
+        if (proposalCount >= MAX_PROPOSALS_PER_MESSAGE)
+          return { error: `Limit of ${MAX_PROPOSALS_PER_MESSAGE} proposals per message reached.` };
+        if (opts.thread && athlete_id !== opts.thread.athleteId)
+          return { error: "Use only the athlete in this thread." };
+        const { data: gymId, error: scopeError } = await supabase.rpc("current_gym_id");
+        if (scopeError || !gymId) return { error: "Couldn't verify your coaching scope." };
+        proposalCount++;
+        try {
+          const result = await createCoachAccountChangeSuggestion(supabase, gymId, athlete_id, units, change);
+          suggestionIds.push(result.suggestion_id);
+          return result;
+        } catch (error) {
+          proposalCount--;
+          return { error: error instanceof Error ? error.message : "Couldn't create this account change." };
+        }
+      }),
     }),
     ...(SUGGESTION_REGISTRY.scale_workout.buildRequest
       ? {

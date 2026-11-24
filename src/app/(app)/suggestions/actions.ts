@@ -142,6 +142,10 @@ export async function approveSuggestion(_: FormState, formData: FormData): Promi
       if (!saveAs.success) return failure(formData, "Choose whether to update the WOD or save it as a new WOD.");
       applyOptions = { saveAs: saveAs.data };
     }
+  } else if (suggestion.suggestion_type === "athlete_account_change") {
+    const proposal = entry.proposalSchema.safeParse(suggestion.proposal);
+    if (!proposal.success) return failure(formData, "This account change is invalid. Ask the assistant for a new proposal.");
+    finalInput = proposal.data;
   } else {
     const values: Record<string, unknown> = Object.fromEntries(formData);
     for (const key of ["calories", "protein_g", "carbs_g", "fat_g"]) {
@@ -161,7 +165,8 @@ export async function approveSuggestion(_: FormState, formData: FormData): Promi
   const threadMessage = await sendThreadApproval(suggestion, result.target, {
     macros, title: workout?.title, date: workoutInput?.scheduled_on,
   });
-  if (suggestion.athlete_id && threadMessage !== "sent") await notifySuggestionApproved(supabase, suggestion.athlete_id, suggestion.id);
+  if (suggestion.athlete_id && threadMessage !== "sent" && suggestion.suggestion_type !== "athlete_account_change")
+    await notifySuggestionApproved(supabase, suggestion.athlete_id, suggestion.id);
   const warning = threadMessage === "failed" ? "The change was saved, but the message could not be sent. Please let the athlete know in Messages." : undefined;
 
   revalidateSuggestion(suggestion.id, suggestion.athlete_id);
@@ -179,6 +184,7 @@ export async function approveSuggestion(_: FormState, formData: FormData): Promi
     return { message: "WOD saved.", warning };
   }
   if (isSummary) return { message: "Saved to the athlete's notes." };
+  if (suggestion.suggestion_type === "athlete_account_change") return { message: "Athlete account change approved." };
   if (isWeeklyReport) {
     revalidatePath("/athlete/reports");
     return { message: "Weekly report shared with the athlete." };

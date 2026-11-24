@@ -7,6 +7,7 @@ import { adjustMacrosSchema, SUGGESTION_LABELS, writeWorkoutInputSchema, writeWo
 import { friendlySuggestionError } from "./service-core";
 import type { Tables } from "@/lib/supabase/database.types";
 import { weeklyReportSchema } from "@/lib/weekly-report";
+import { accountChangeSummaryLines, coachAccountChangeProposalSchema } from "./account-change";
 
 export type InlineSuggestion = ReturnType<typeof inlineSuggestion>;
 
@@ -77,6 +78,18 @@ export function inlineSuggestion(row: Tables<"ai_suggestions">, athleteName?: st
     case "weekly_report": {
       const { data } = weeklyReportSchema.safeParse(raw);
       if (data) return { ...base, type: row.suggestion_type, report: data };
+      break;
+    }
+    case "athlete_account_change": {
+      const { data } = coachAccountChangeProposalSchema.safeParse(raw);
+      if (data) {
+        const units = row.input && typeof row.input === "object" && !Array.isArray(row.input)
+          && row.input.units === "kg" ? "kg" : "lb";
+        return {
+          ...base, type: row.suggestion_type,
+          lines: accountChangeSummaryLines(data.change, data.before, units),
+        };
+      }
       break;
     }
   }

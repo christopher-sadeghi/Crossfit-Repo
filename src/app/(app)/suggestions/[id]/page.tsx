@@ -35,6 +35,7 @@ import { FOOD_DISCLAIMER, foodIdeasInputSchema, foodIdeasSchema } from "@/lib/ai
 import { addedIdeaNames } from "@/lib/food-ideas";
 import { readPreferences } from "@/lib/food-preferences";
 import { DraftProgramReview } from "@/components/suggestions/draft-program-review";
+import { AthleteAccountChangeReview } from "@/components/suggestions/athlete-account-change-review";
 
 type Props = { params: Promise<{ id: string }> };
 type MacroKey = "calories" | "protein_g" | "carbs_g" | "fat_g";
@@ -46,11 +47,22 @@ const MACROS: { key: MacroKey; label: string; unit: string }[] = [
 ];
 
 export default async function SuggestionPage({ params }: Props) {
-  if ((await getViewer())?.kind !== "coach") notFound();
+  const viewer = await getViewer();
+  if (viewer?.kind !== "coach") notFound();
   const { id } = await params;
   const supabase = await createClient();
   const { data: suggestion } = await supabase.from("ai_suggestions").select("*").eq("id", id).maybeSingle();
   if (!suggestion) notFound();
+  if (suggestion.suggestion_type === "athlete_account_change") {
+    const { data: athlete } = suggestion.athlete_id
+      ? await supabase.from("athletes").select("first_name, last_name").eq("id", suggestion.athlete_id).maybeSingle()
+      : { data: null };
+    return <AthleteAccountChangeReview
+      suggestion={suggestion}
+      athleteName={athlete ? `${athlete.first_name} ${athlete.last_name}` : "Athlete unavailable"}
+      units={viewer.units}
+    />;
+  }
   if (suggestion.suggestion_type === "draft_program") return <DraftProgramReview suggestion={suggestion} />;
   if (suggestion.suggestion_type === "athlete_adjust_workout") return <AthleteAdjustmentReview suggestion={suggestion} />;
   if (suggestion.suggestion_type === "weekly_report") {

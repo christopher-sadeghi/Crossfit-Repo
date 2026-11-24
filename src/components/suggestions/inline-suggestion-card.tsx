@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import type { InlineSuggestion } from "@/lib/ai/inline-suggestion";
 import { InlineDecisionContext } from "./inline-decision";
 import { ScaleWorkoutReview } from "./scale-workout-review";
-import { ApproveProgramForm, ApproveProgressSummaryForm, ApproveSuggestionForm, ApproveWeeklyReportForm, ApproveWorkoutSuggestionForm, RejectSuggestionForm } from "./suggestion-forms";
+import { ApproveAccountChangeForm, ApproveProgramForm, ApproveProgressSummaryForm, ApproveSuggestionForm, ApproveWeeklyReportForm, ApproveWorkoutSuggestionForm, RejectSuggestionForm } from "./suggestion-forms";
 
 export function InlineSuggestionCard({ id, suggestion, onOpenReview }: {
   id: string;
@@ -74,6 +74,17 @@ export function InlineSuggestionCard({ id, suggestion, onOpenReview }: {
           <p className="whitespace-pre-wrap">{card.report.summary}</p>
           <ul className="list-disc pl-5">{card.report.focus.map((point, index) => <li key={index}>{point}</li>)}</ul>
           {pending && <ApproveWeeklyReportForm id={id} report={card.report} compact />}
+        </>}
+        {card.type === "athlete_account_change" && <>
+          <ul className="grid gap-2">
+            {card.lines.map((line, index) => (
+              <li key={index}>
+                <span className="font-medium">{line.label}: </span>
+                <span>{line.before} → {line.after}</span>
+              </li>
+            ))}
+          </ul>
+          {pending && <ApproveAccountChangeForm id={id} compact />}
         </>}
         {card.type === "failed" && <p>{card.error}</p>}
         {card.type === "unavailable" && pending && <p>The preview is unavailable.</p>}
