@@ -92,6 +92,40 @@ test("scheduled lift parts use the heaviest completed set for each valid rep cou
     ],
   );
 });
+test("non-strength result parts count as lift attempts without double-counting generated rows", () => {
+  const movementId = "10000000-0000-4000-8000-000000000001";
+  const emom = scheduled("emom", "2026-01-01", {
+    parts: [
+      {
+        position: 0,
+        movement_id: movementId,
+        name: "Deadlift",
+        sets: [{ reps: 5, load_kg: 125, done: true }],
+      },
+    ],
+    workouts: {
+      title: "Deadlift EMOM",
+      workout_type: "emom",
+      workout_movements: [{ movement_id: movementId, reps: 5 }],
+    },
+  });
+  const generated = result("generated", "2026-01-01", {
+    benchmark_id: lift.id,
+    load_kg: 125,
+    rep_max: 5,
+    source_result_id: emom.id,
+  });
+  const attempts = normalizeBenchmarkHistory(
+    { ...lift, movement_id: movementId },
+    [generated],
+    [emom],
+  );
+  assert.equal(attempts.length, 1);
+  assert.equal(attempts[0].id, emom.id);
+  assert.equal(attempts[0].source, "workout");
+  assert.equal(attempts[0].rep_max, 5);
+  assert.equal(attempts[0].load_kg, 125);
+});
 test("generated direct lift rows are skipped when their scheduled result is present", () => {
   const scheduledResult = strengthResult({ parts: [] });
   const generated = result("generated", "2026-01-01", {

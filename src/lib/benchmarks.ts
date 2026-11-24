@@ -63,7 +63,6 @@ export function normalizeBenchmarkHistory(benchmark: Benchmark, direct: DirectRe
     const movements = details?.success ? details.data.movements : w.workout_movements;
     const movement = movements.find((m) => m.movement_id === benchmark.movement_id);
     if (benchmark.kind === "lift") {
-      if (w.workout_type !== "strength") continue;
       const parsedParts = resultPartsSchema.safeParse(r.parts);
       if (parsedParts.success && parsedParts.data.length > 0) {
         const loadsByReps = new Map<number, number>();
@@ -97,7 +96,7 @@ export function normalizeBenchmarkHistory(benchmark: Benchmark, direct: DirectRe
         }
         continue;
       }
-      if (!movement) continue;
+      if (w.workout_type !== "strength" || !movement) continue;
       const rep_max = movement.reps ?? r.reps ?? 1;
       attempts.push({
         ...r,
