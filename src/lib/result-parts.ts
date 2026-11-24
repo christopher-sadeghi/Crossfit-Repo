@@ -52,6 +52,7 @@ export function partsForVersion(
   parts: ResultPart[],
   version: ResultPartVersion,
 ): ResultPart[] | null {
+  if (parts.length === 0) return [];
   const movements = version.movements.slice(0, 40);
   if (parts.length !== movements.length) return null;
   if (

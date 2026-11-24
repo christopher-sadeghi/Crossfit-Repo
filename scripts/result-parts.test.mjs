@@ -139,6 +139,7 @@ test("partsForVersion validates order and movement identity", () => {
   };
   const parts = defaultParts(version, "kg");
   assert.deepEqual(partsForVersion(parts, version), parts);
+  assert.deepEqual(partsForVersion([], version), []);
   assert.equal(
     partsForVersion(
       [{ ...parts[0], movement_id: "10000000-0000-4000-8000-000000000002" }],
