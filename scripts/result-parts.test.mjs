@@ -36,11 +36,13 @@ function load(filename) {
 
 const {
   defaultParts,
+  initialPartsDirty,
   liftPrCandidates,
   liftPrSetLocations,
   partsForVersion,
   partsSummary,
   resultPartsSchema,
+  samePartsContent,
   shouldResetParts,
 } = load("src/lib/result-parts.ts");
 const { maxDoneSetLoad, submittedParts } = load("src/lib/result-part-prs.ts");
@@ -184,31 +186,53 @@ test("partsForVersion validates order and movement identity", () => {
   );
 });
 
-test("parts reset when clean template content changes but preserve dirty values for the same movements", () => {
-  const template = [
+test("saved parts remain dirty when their same-movement template changes", () => {
+  const saved = [
     {
       position: 0,
       movement_id: movementId,
       name: "Back Squat",
+      sets: [{ reps: 5, load_kg: 115, done: true }],
+    },
+  ];
+  const firstTemplate = [
+    {
+      ...saved[0],
       sets: [{ reps: 5, load_kg: 100, done: true }],
     },
   ];
-  const changedPrescription = [
+  const otherDateTemplate = [
     {
-      ...template[0],
-      sets: [{ reps: 3, load_kg: 110, done: true }],
+      ...firstTemplate[0],
+      sets: [{ reps: 3, load_kg: 105, done: true }],
     },
   ];
   const changedMovement = [
     {
-      ...changedPrescription[0],
+      ...otherDateTemplate[0],
       movement_id: "10000000-0000-4000-8000-000000000002",
     },
   ];
-  assert.equal(shouldResetParts(template, changedPrescription, false), true);
-  assert.equal(shouldResetParts(template, changedPrescription, true), false);
-  assert.equal(shouldResetParts(template, changedMovement, true), true);
-  assert.equal(shouldResetParts(template, template, false), false);
+  assert.equal(initialPartsDirty(saved), false);
+  assert.equal(initialPartsDirty(saved, saved), false);
+  assert.equal(initialPartsDirty(saved, firstTemplate), true);
+  assert.equal(
+    shouldResetParts(
+      saved,
+      otherDateTemplate,
+      initialPartsDirty(saved, firstTemplate),
+    ),
+    false,
+  );
+  assert.equal(
+    shouldResetParts(
+      saved,
+      changedMovement,
+      initialPartsDirty(saved, firstTemplate),
+    ),
+    true,
+  );
+  assert.equal(samePartsContent(saved, saved), true);
 });
 
 test("submitted part loads convert to kg and the fallback uses completed sets only", () => {

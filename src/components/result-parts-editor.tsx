@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { Enums } from "@/lib/supabase/database.types";
 import { fromKgPrecise, type Units } from "@/lib/units";
 import {
+  initialPartsDirty,
   shouldResetParts,
   type LiftPrCandidate,
   type ResultPart,
@@ -173,7 +174,9 @@ export function ResultPartsEditor({
   resetKey?: string;
 }) {
   const [parts, setParts] = useState(() => toDraftParts(initialParts, units));
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirty] = useState(() =>
+    initialPartsDirty(initialParts, templateParts),
+  );
   const activeTemplate = templateParts ?? initialParts;
   const previousTemplate = useRef({ parts: activeTemplate, resetKey });
   const definitions = useMemo(

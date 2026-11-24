@@ -31,17 +31,7 @@ export const resultPartsSchema = z.array(resultPartSchema).max(40);
 export type ResultPartSet = z.infer<typeof resultPartSetSchema>;
 export type ResultPart = z.infer<typeof resultPartSchema>;
 
-export function shouldResetParts(
-  previous: ResultPart[],
-  next: ResultPart[],
-  dirty: boolean,
-): boolean {
-  if (
-    previous.length !== next.length ||
-    previous.some((part, index) => part.movement_id !== next[index].movement_id)
-  )
-    return true;
-  if (dirty) return false;
+export function samePartsContent(a: ResultPart[], b: ResultPart[]): boolean {
   const content = (parts: ResultPart[]) =>
     JSON.stringify(
       parts.map((part) => ({
@@ -55,7 +45,27 @@ export function shouldResetParts(
         notes: part.notes ?? null,
       })),
     );
-  return content(previous) !== content(next);
+  return content(a) === content(b);
+}
+
+export function initialPartsDirty(
+  initialParts: ResultPart[],
+  templateParts?: ResultPart[],
+): boolean {
+  return templateParts != null && !samePartsContent(initialParts, templateParts);
+}
+
+export function shouldResetParts(
+  previous: ResultPart[],
+  next: ResultPart[],
+  dirty: boolean,
+): boolean {
+  if (
+    previous.length !== next.length ||
+    previous.some((part, index) => part.movement_id !== next[index].movement_id)
+  )
+    return true;
+  return !dirty && !samePartsContent(previous, next);
 }
 
 export type ResultPartMovement = {
