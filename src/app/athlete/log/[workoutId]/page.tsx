@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getToday } from "@/lib/time-zone";
 import { workoutPrefill } from "@/lib/workout-prefill";
 import { defaultParts, resultPartsSchema } from "@/lib/result-parts";
+import { scaleWorkoutDetailsSchema } from "@/lib/ai/scale-workout-schema";
 import { workoutVersion } from "@/lib/workout-version";
 import { formatHeadline } from "@/app/(app)/programs/workouts/whiteboard";
 import type { Tables } from "@/lib/supabase/database.types";
@@ -118,6 +119,25 @@ export default async function AthleteLogResultPage({ params, searchParams }: Pro
     .eq("athlete_id", viewer.athleteId)
     .maybeSingle();
   const version = workoutVersion(baseVersion, scaling, existingResult?.performed_on ?? defaultDate);
+  const adjustedDetails = scaling?.athlete_adjusted_at
+    ? scaleWorkoutDetailsSchema.safeParse(scaling.details)
+    : null;
+  const scheduledOn = adjustedDetails?.success
+    ? adjustedDetails.data.scheduled_on ?? null
+    : null;
+  const otherDate = scheduledOn === todayIso ? minDateIso : todayIso;
+  const scheduledVersion = scheduledOn
+    ? workoutVersion(baseVersion, scaling, scheduledOn)
+    : null;
+  const otherDateVersion = scheduledOn
+    ? workoutVersion(baseVersion, scaling, otherDate)
+    : null;
+  const scheduledParts = scheduledVersion
+    ? defaultParts(scheduledVersion, viewer.units)
+    : undefined;
+  const otherDateParts = otherDateVersion
+    ? defaultParts(otherDateVersion, viewer.units)
+    : undefined;
   const savedParts = existingResult
     ? resultPartsSchema.safeParse(existingResult.parts)
     : null;
@@ -149,6 +169,11 @@ export default async function AthleteLogResultPage({ params, searchParams }: Pro
         existingResult={existingResult}
         initialParts={initialParts}
         movements={version.movements}
+        scheduledOn={scheduledOn ?? undefined}
+        scheduledParts={scheduledParts}
+        otherDateParts={otherDateParts}
+        scheduledMovements={scheduledVersion?.movements}
+        otherDateMovements={otherDateVersion?.movements}
         partsHandoffToken={partsHandoffToken}
         prefill={existingResult ? undefined : workoutPrefill(query)}
       />

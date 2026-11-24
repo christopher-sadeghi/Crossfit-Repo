@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState } from "react";
+import { startTransition, useActionState, useEffect, useState } from "react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -53,6 +53,11 @@ export function AthleteResultForm({
   existingResult,
   initialParts,
   movements,
+  scheduledOn,
+  scheduledParts,
+  otherDateParts,
+  scheduledMovements,
+  otherDateMovements,
   partsHandoffToken,
   prefill,
   inline = false,
@@ -66,6 +71,11 @@ export function AthleteResultForm({
   existingResult: WorkoutResult | null;
   initialParts: ResultPart[];
   movements: ResultPartMovement[];
+  scheduledOn?: string;
+  scheduledParts?: ResultPart[];
+  otherDateParts?: ResultPart[];
+  scheduledMovements?: ResultPartMovement[];
+  otherDateMovements?: ResultPartMovement[];
   partsHandoffToken?: string;
   prefill?: Record<string, string>;
   inline?: boolean;
@@ -92,6 +102,26 @@ export function AthleteResultForm({
     ...(!existingResult ? prefill : {}),
   };
   const values = state.error ? state.values ?? {} : initialValues;
+  const [selectedDate, setSelectedDate] = useState(
+    values.performed_on ?? today,
+  );
+  useEffect(() => {
+    if (state.error)
+      setSelectedDate(state.values?.performed_on ?? today);
+  }, [state.error, state.values?.performed_on, today]);
+  const templateDate = inline ? today : selectedDate;
+  const templateParts =
+    scheduledOn && scheduledParts && otherDateParts
+      ? templateDate === scheduledOn
+        ? scheduledParts
+        : otherDateParts
+      : initialParts;
+  const templateMovements =
+    scheduledOn && scheduledMovements && otherDateMovements
+      ? templateDate === scheduledOn
+        ? scheduledMovements
+        : otherDateMovements
+      : movements;
 
   return (
     <form
@@ -117,14 +147,16 @@ export function AthleteResultForm({
             type="date"
             min={minDate}
             max={today}
-            defaultValue={values.performed_on ?? today}
+            value={selectedDate}
+            onChange={(event) => setSelectedDate(event.currentTarget.value)}
             required
           />
         </div>
       )}
       <ResultPartsEditor
         initialParts={state.savedParts ?? initialParts}
-        movements={movements}
+        templateParts={templateParts}
+        movements={templateMovements}
         units={units}
         workoutType={workoutType}
         inputId={id("parts")}

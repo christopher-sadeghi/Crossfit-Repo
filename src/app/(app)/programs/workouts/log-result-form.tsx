@@ -121,8 +121,9 @@ export function LogResultForm({
         />
       </div>
       <ResultPartsEditor
-        key={`${selectedAthlete}-${selectedDate}-${state.successes ?? 0}`}
         initialParts={initialParts}
+        templateParts={initialParts}
+        resetKey={`${selectedAthlete}-${state.successes ?? 0}`}
         movements={version.movements}
         units={units}
         workoutType={workoutType}

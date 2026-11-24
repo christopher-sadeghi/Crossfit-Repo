@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -153,6 +153,8 @@ export function ResultPartsEditor({
   initialRawParts,
   handoffToken,
   newPrSets = [],
+  templateParts,
+  resetKey,
 }: {
   initialParts: ResultPart[];
   movements: ResultPartMovement[];
@@ -162,12 +164,29 @@ export function ResultPartsEditor({
   initialRawParts?: string;
   handoffToken?: string;
   newPrSets?: Pick<LiftPrCandidate, "position" | "set_index">[];
+  templateParts?: ResultPart[];
+  resetKey?: string;
 }) {
   const [parts, setParts] = useState(() => toDraftParts(initialParts, units));
+  const activeTemplate = templateParts ?? initialParts;
+  const templateMovementIds = activeTemplate
+    .map((part) => part.movement_id)
+    .join("\u0000");
+  const previousTemplate = useRef({ templateMovementIds, resetKey });
   const definitions = useMemo(
     () => new Map(movements.map((movement, position) => [position, movement])),
     [movements],
   );
+
+  useEffect(() => {
+    if (
+      previousTemplate.current.templateMovementIds === templateMovementIds &&
+      previousTemplate.current.resetKey === resetKey
+    )
+      return;
+    previousTemplate.current = { templateMovementIds, resetKey };
+    setParts(toDraftParts(activeTemplate, units));
+  }, [activeTemplate, resetKey, templateMovementIds, units]);
 
   useEffect(() => {
     if (initialRawParts) {
