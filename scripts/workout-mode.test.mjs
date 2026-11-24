@@ -268,6 +268,51 @@ test("EMOM movement cycling stays within the timed section", () => {
   assert.equal(emomMovementAt(movements, 2, null).name, "Power Clean");
 });
 
+test("section score fields for each format are the fields serialized", () => {
+  const { sectionScoreKeys, serializeSectionScores } = load(
+    "src/components/result-parts-editor.tsx",
+    {
+      react: {
+        useEffect: () => {},
+        useMemo: () => {},
+        useRef: () => {},
+        useState: () => {},
+      },
+      "lucide-react": { Trash2: "Trash2" },
+      "@/components/ui/badge": { Badge: "Badge" },
+      "@/components/ui/button": { Button: "Button" },
+      "@/components/ui/input": { Input: "Input" },
+      "@/components/ui/label": { Label: "Label" },
+      "@/components/ui/textarea": { Textarea: "Textarea" },
+    },
+  );
+  const movements = [
+    { calories: 12, distance_m: null },
+    { calories: null, distance_m: 500 },
+  ];
+  const formats = [
+    ["for_time", ["time_seconds", "reps"]],
+    ["amrap", ["rounds", "reps"]],
+    ["emom", ["rounds", "reps"]],
+    ["other", ["time_seconds", "rounds", "reps"]],
+  ];
+
+  for (const [format, baseFields] of formats) {
+    const fields = sectionScoreKeys({ format }, movements);
+    assert.deepEqual(fields, [...baseFields, "calories", "distance_m"]);
+    const [submitted] = serializeSectionScores([
+      {
+        section: 2,
+        score: Object.fromEntries(fields.map((field) => [field, "7"])),
+        notes: "",
+        notesExpanded: false,
+      },
+    ]);
+    assert.deepEqual(Object.keys(submitted.score), fields);
+    assert.deepEqual(Object.values(submitted.score), fields.map(() => 7));
+  }
+});
+
 test("section timers use section caps and reset only the clock", () => {
   assert.deepEqual(
     timerForSection({ format: "amrap", time_cap_seconds: 1200 }),

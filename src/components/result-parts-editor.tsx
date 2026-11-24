@@ -179,7 +179,7 @@ function fromRawSectionScores(raw: string): DraftSectionScore[] | null {
   }
 }
 
-function serializeSectionScores(scores: DraftSectionScore[]): SectionScore[] {
+export function serializeSectionScores(scores: DraftSectionScore[]): SectionScore[] {
   return scores.map(({ section, score, notes }) => ({
     section,
     score: Object.fromEntries(
@@ -191,7 +191,7 @@ function serializeSectionScores(scores: DraftSectionScore[]): SectionScore[] {
   }));
 }
 
-function sectionScoreKeys(
+export function sectionScoreKeys(
   section: WorkoutSection,
   movements: ResultPartMovement[],
 ): ScoreKey[] {
@@ -201,7 +201,7 @@ function sectionScoreKeys(
       : section.format === "amrap"
         ? ["rounds", "reps"]
         : section.format === "emom"
-          ? ["rounds"]
+          ? ["rounds", "reps"]
           : section.format === "other"
             ? ["time_seconds", "rounds", "reps"]
             : [];
