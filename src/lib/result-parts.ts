@@ -41,6 +41,27 @@ export type ResultPart = z.infer<typeof resultPartSchema>;
 export type ResultPartScore = z.infer<typeof resultPartScoreSchema>;
 export type SectionScore = z.infer<typeof sectionScoreSchema>;
 
+export function scoreForSectionResult(
+  parts: ResultPart[],
+  sectionScores: SectionScore[],
+  fallbackLoadKg: number | null,
+) {
+  const hasEntry =
+    sectionScores.some(({ score }) => Object.keys(score).length > 0) ||
+    parts.some(
+      (part) =>
+        part.load_kg != null || part.sets.some((set) => set.done),
+    );
+  return hasEntry
+    ? {
+        time_seconds: null,
+        rounds: null,
+        reps: null,
+        load_kg: fallbackLoadKg,
+      }
+    : null;
+}
+
 export function samePartsContent(a: ResultPart[], b: ResultPart[]): boolean {
   const content = (parts: ResultPart[]) =>
     JSON.stringify(

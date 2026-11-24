@@ -42,6 +42,7 @@ const {
   partsForVersion,
   partsSummary,
   resultPartsSchema,
+  scoreForSectionResult,
   samePartsContent,
   shouldResetParts,
 } = load("src/lib/result-parts.ts");
@@ -71,6 +72,59 @@ test("result parts schema is strict and enforces part, set, and value limits", (
     false,
   );
   assert.equal(resultPartsSchema.safeParse(Array(41).fill(valid)).success, false);
+});
+
+test("section-only results require an entry and keep the fallback overall load", () => {
+  const part = {
+    position: 0,
+    movement_id: movementId,
+    name: "Power Clean",
+    sets: [],
+    load_kg: null,
+  };
+  assert.equal(scoreForSectionResult([part], [], null), null);
+  assert.equal(
+    scoreForSectionResult([part], [{ section: 0, score: {} }], null),
+    null,
+  );
+  assert.deepEqual(
+    scoreForSectionResult(
+      [part],
+      [{ section: 0, score: { rounds: 3 } }],
+      null,
+    ),
+    { time_seconds: null, rounds: null, reps: null, load_kg: null },
+  );
+  assert.deepEqual(
+    scoreForSectionResult(
+      [
+        {
+          ...part,
+          sets: [{ reps: 5, load_kg: 100, done: true }],
+        },
+      ],
+      [],
+      100,
+    ),
+    { time_seconds: null, rounds: null, reps: null, load_kg: 100 },
+  );
+  assert.deepEqual(
+    scoreForSectionResult(
+      [
+        {
+          ...part,
+          sets: [{ reps: 5, load_kg: null, done: true }],
+        },
+      ],
+      [],
+      null,
+    ),
+    { time_seconds: null, rounds: null, reps: null, load_kg: null },
+  );
+  assert.deepEqual(
+    scoreForSectionResult([{ ...part, load_kg: 0 }], [], null),
+    { time_seconds: null, rounds: null, reps: null, load_kg: null },
+  );
 });
 
 test("defaultParts prefill strength, conditioning, and scaled movements", () => {

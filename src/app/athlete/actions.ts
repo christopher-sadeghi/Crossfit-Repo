@@ -16,6 +16,7 @@ import {
   partsForVersion,
   resultPartsSchema,
   sectionScoresSchema,
+  scoreForSectionResult,
   type LiftPrSetLocation,
   type ResultPart,
   type SectionScore,
@@ -131,7 +132,9 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
   if (!parsedSectionScores.success)
     return failure(formData, parsedSectionScores.error.issues[0]?.message ?? "Check the section scores.");
   const sectionScores = parsedSectionScores.data.filter(
-    (score) => score.section < (version.sections?.length ?? 0),
+    (score) =>
+      score.section < (version.sections?.length ?? 0) &&
+      Object.keys(score.score).length > 0,
   );
 
   const fallbackLoadKg = maxDoneSetLoad(parts);
@@ -147,9 +150,28 @@ export async function saveAthleteResult(_: FormState, formData: FormData): Promi
     workout.workout_type,
     viewer.units,
   );
-  if ("error" in scoreResult) return failure(formData, scoreResult.error);
-  const score = { ...scoreResult.score };
-  if (r.load == null && fallbackLoadKg != null) score.load_kg = fallbackLoadKg;
+  let score: {
+    time_seconds: number | null;
+    rounds: number | null;
+    reps: number | null;
+    load_kg: number | null;
+  };
+  if ("error" in scoreResult) {
+    const sectionScore = version.sections?.length
+      ? scoreForSectionResult(parts, sectionScores, fallbackLoadKg)
+      : null;
+    if (!sectionScore)
+      return failure(
+        formData,
+        version.sections?.length
+          ? "Enter a score for at least one section."
+          : scoreResult.error,
+      );
+    score = sectionScore;
+  } else {
+    score = { ...scoreResult.score };
+    if (r.load == null && fallbackLoadKg != null) score.load_kg = fallbackLoadKg;
+  }
   if (r.result_id && r.load != null && score.load_kg != null) {
     // Keep the stored load when the athlete didn't change the value the edit form showed.
     const { data: existing } = await supabase.from("workout_results").select("load_kg").eq("id", r.result_id).maybeSingle();
