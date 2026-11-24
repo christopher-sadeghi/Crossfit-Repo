@@ -90,6 +90,60 @@ export function elapsedTime(clock: TimerClock, now: number) {
   return clock.accumulated + (clock.startedAt == null ? 0 : Math.max(0, (clock.pausedAt ?? now) - clock.startedAt));
 }
 
+export type TimedSectionResult = {
+  time_seconds?: number;
+  rounds?: number;
+  reps?: number;
+};
+
+export function sectionResultForTimer(
+  section: Pick<WorkoutSection, "format" | "time_cap_seconds">,
+  config: TimerConfig,
+  clock: TimerClock,
+  rounds: number,
+  reps: number,
+  completedAtCap: boolean,
+  now: number,
+): TimedSectionResult | null {
+  if (clock.startedAt == null && clock.accumulated === 0) return null;
+
+  if (section.format === "for_time") {
+    const total = elapsedTime(clock, now);
+    const workSeconds = Math.min(
+      timerDuration(config),
+      Math.max(0, Math.floor(total / 1000 - (config.readySeconds ?? 10))),
+    );
+    const cap =
+      config.mode === "for_time"
+        ? config.capSeconds
+        : section.time_cap_seconds ?? undefined;
+    if (cap != null && workSeconds >= cap && !completedAtCap)
+      return { time_seconds: cap, reps };
+    return {
+      time_seconds: cap == null ? workSeconds : Math.min(cap, workSeconds),
+    };
+  }
+
+  if (section.format === "amrap" || section.format === "emom")
+    return { rounds, reps };
+
+  return null;
+}
+
+export function emomMovementAt<T extends { section?: number | null }>(
+  movements: T[],
+  intervalIndex: number,
+  timedSection: number | null,
+): T | null {
+  const eligible =
+    timedSection == null
+      ? movements
+      : movements.filter((movement) => movement.section === timedSection);
+  if (!eligible.length) return null;
+  const index = ((Math.trunc(intervalIndex) % eligible.length) + eligible.length) % eligible.length;
+  return eligible[index] ?? null;
+}
+
 export function defaultTimer(workout: { workout_type: string; time_cap_seconds: number | null; rounds: number | null; title: string; description?: string | null }): TimerConfig {
   switch (workout.workout_type) {
     case "for_time": return { mode: "for_time", capSeconds: workout.time_cap_seconds ?? undefined };

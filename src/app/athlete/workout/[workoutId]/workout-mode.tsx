@@ -18,7 +18,9 @@ import { fromKgPrecise, type Units } from "@/lib/units";
 import {
   crossedCues,
   defaultTimer,
+  emomMovementAt,
   elapsedTime,
+  sectionResultForTimer,
   timerForSection,
   timerDuration,
   timerView,
@@ -28,6 +30,11 @@ import type { WorkoutMovement } from "@/lib/workout-version";
 import type { Enums } from "@/lib/supabase/database.types";
 
 const positive = z.number().int().min(1).max(86400);
+const timedSectionResultSchema = z.object({
+  time_seconds: z.number().int().min(0).max(100000).optional(),
+  rounds: z.number().int().min(0).max(100000).optional(),
+  reps: z.number().int().min(0).max(100000).optional(),
+}).strict();
 const ready = { readySeconds: z.number().int().min(0).max(60).optional() };
 const configSchema = z.discriminatedUnion("mode", [
   z.object({
@@ -67,6 +74,8 @@ const savedSchema = z.object({
   notes: z.string().max(500),
   rx: z.boolean(),
   completedAtCap: z.boolean().default(false),
+  timedSection: z.number().int().min(0).max(9).nullable().optional().default(null),
+  sectionResults: z.record(z.string(), timedSectionResultSchema).optional().default({}),
 });
 type Session = z.infer<typeof savedSchema>;
 type Workout = {
@@ -99,6 +108,8 @@ function createSession(workout: Workout, versionFingerprint: string): Session {
     notes: "",
     rx: !workout.isScaled,
     completedAtCap: false,
+    timedSection: null,
+    sectionResults: {},
   };
 }
 
@@ -122,17 +133,19 @@ export function WorkoutMode({
   const barKey = `workout-bar:${athleteId}:${units}`;
   const versionFingerprint = JSON.stringify({
     movements: workout.movements.map(
-      ({ movement_id, sets, reps, load_kg, notes, reason }) => ({
+      ({ movement_id, sets, reps, load_kg, notes, reason, section }) => ({
         movement_id,
         sets,
         reps,
         load_kg,
         notes,
         reason,
+        section,
       }),
     ),
     rounds: workout.rounds,
     time_cap_seconds: workout.time_cap_seconds,
+    sections: workout.sections,
     isScaled: workout.isScaled,
     modifications: workout.modifications,
   });
@@ -160,6 +173,23 @@ export function WorkoutMode({
     session.clock.startedAt !== null || session.clock.accumulated > 0;
   const update = (changes: Partial<Session>) =>
     setSession((s) => ({ ...s, ...changes }));
+  function recordSectionResult(current: Session, timestamp: number) {
+    const sectionIndex = current.timedSection;
+    const section = sectionIndex == null ? null : workout.sections?.[sectionIndex];
+    if (sectionIndex == null || !section) return current.sectionResults;
+    const score = sectionResultForTimer(
+      section,
+      current.config,
+      current.clock,
+      current.rounds,
+      current.reps,
+      current.completedAtCap,
+      timestamp,
+    );
+    return score
+      ? { ...current.sectionResults, [String(sectionIndex)]: score }
+      : current.sectionResults;
+  }
 
   useEffect(() => {
     const timestamp = Date.now();
@@ -320,12 +350,24 @@ export function WorkoutMode({
     update({ clock: emptyClock });
   }
 
-  function timeSection(section: WorkoutSection) {
+  function timeSection(index: number) {
+    const section = workout.sections?.[index];
+    if (!section) return;
     const config = timerForSection(section);
     if (!config) return;
+    const timestamp = Date.now();
+    const sectionResults = recordSectionResult(session, timestamp);
     previousElapsed.current = 0;
-    setNow(Date.now());
-    update({ config, clock: emptyClock });
+    setNow(timestamp);
+    update({
+      config,
+      clock: emptyClock,
+      rounds: 0,
+      reps: 0,
+      completedAtCap: false,
+      timedSection: index,
+      sectionResults,
+    });
   }
 
   function movementLoad(movement: WorkoutMovement, set: number) {
@@ -357,7 +399,10 @@ export function WorkoutMode({
   }
 
   function finish() {
-    const total = elapsedTime(session.clock, Date.now());
+    const timestamp = Date.now();
+    const total = elapsedTime(session.clock, timestamp);
+    const sectionResults = recordSectionResult(session, timestamp);
+    const hasSectionResults = Object.keys(sectionResults).length > 0;
     const workSeconds = Math.min(
       timerDuration(session.config),
       Math.max(
@@ -370,23 +415,25 @@ export function WorkoutMode({
       is_rx: session.rx ? "rx" : "scaled",
     });
     const type = workout.workout_type;
-    if (type === "for_time") {
-      const cap =
-        session.config.mode === "for_time"
-          ? session.config.capSeconds
-          : workout.time_cap_seconds;
-      if (cap && workSeconds >= cap && !session.completedAtCap) {
-        params.set("time_seconds", String(cap));
+    if (!hasSectionResults) {
+      if (type === "for_time") {
+        const cap =
+          session.config.mode === "for_time"
+            ? session.config.capSeconds
+            : workout.time_cap_seconds;
+        if (cap && workSeconds >= cap && !session.completedAtCap) {
+          params.set("time_seconds", String(cap));
+          params.set("reps", String(session.reps));
+        } else
+          params.set(
+            "time_seconds",
+            String(cap ? Math.min(cap, workSeconds) : workSeconds),
+          );
+      } else if (type === "amrap" || type === "emom" || type === "other") {
+        params.set("rounds", String(session.rounds));
         params.set("reps", String(session.reps));
-      } else
-        params.set(
-          "time_seconds",
-          String(cap ? Math.min(cap, workSeconds) : workSeconds),
-        );
-    } else if (type === "amrap" || type === "emom" || type === "other") {
-      params.set("rounds", String(session.rounds));
-      params.set("reps", String(session.reps));
-      if (type === "other") params.set("time_seconds", String(workSeconds));
+        if (type === "other") params.set("time_seconds", String(workSeconds));
+      }
     }
     params.set("notes", session.notes.slice(0, 500));
     const isStrength = type === "strength";
@@ -425,19 +472,33 @@ export function WorkoutMode({
       };
     });
     const handoffToken = crypto.randomUUID();
+    const sectionScores = Object.entries(sectionResults)
+      .map(([section, score]) => ({ section: Number(section), score }))
+      .filter(
+        ({ section }) =>
+          Number.isInteger(section) &&
+          section >= 0 &&
+          section < (workout.sections?.length ?? 0),
+      )
+      .sort((a, b) => a.section - b.section);
     try {
       sessionStorage.setItem(
         `workout-result-parts:${handoffToken}`,
         JSON.stringify(parts),
       );
+      sessionStorage.setItem(
+        `workout-result-sections:${handoffToken}`,
+        JSON.stringify(sectionScores),
+      );
       params.set("parts_handoff", handoffToken);
     } catch {
       setStorageWarning(
-        "Could not prepare part results for logging. Enter them on the next screen.",
+        "Could not prepare workout results for logging. Enter them on the next screen.",
       );
     }
     const paused = {
       ...session,
+      sectionResults,
       clock: {
         ...session.clock,
         pausedAt: session.clock.pausedAt ?? Date.now(),
@@ -454,9 +515,11 @@ export function WorkoutMode({
     router.push(`/athlete/log/${workout.id}?${params}`);
   }
 
-  const currentMovement = workout.movements.length
-    ? workout.movements[view.index % workout.movements.length]
-    : null;
+  const currentMovement = emomMovementAt(
+    workout.movements,
+    view.index,
+    session.timedSection,
+  );
   const activeCap =
     session.config.mode === "for_time"
       ? session.config.capSeconds
@@ -699,7 +762,7 @@ export function WorkoutMode({
                       <button
                         type="button"
                         className="rounded-lg border border-slate-500 px-3 py-2 text-sm"
-                        onClick={() => timeSection(group.section!)}
+                        onClick={() => timeSection(group.index!)}
                       >
                         Time this section
                       </button>

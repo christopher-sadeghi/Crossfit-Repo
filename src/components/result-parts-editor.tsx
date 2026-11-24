@@ -332,6 +332,24 @@ export function ResultPartsEditor({
     }
   }, [initialRawSectionScores]);
 
+  useEffect(() => {
+    if (initialRawSectionScores !== undefined || !handoffToken) return;
+    try {
+      const key = `workout-result-sections:${handoffToken}`;
+      const raw = sessionStorage.getItem(key);
+      sessionStorage.removeItem(key);
+      if (raw) {
+        const handoff = fromRawSectionScores(raw);
+        if (handoff) {
+          setSectionScores(handoff);
+          setDirty(true);
+        }
+      }
+    } catch {
+      return;
+    }
+  }, [handoffToken, initialRawSectionScores]);
+
   const updateParts = (update: (current: DraftPart[]) => DraftPart[]) => {
     setDirty(true);
     setParts(update);
