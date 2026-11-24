@@ -426,6 +426,41 @@ test("completed-at-cap control appears for a timed For Time section", () => {
   assert.ok(completedLabel);
 });
 
+test("standalone For Time retains its cap control with a different timer mode", () => {
+  const h = workoutHarness({
+    workout: {
+      id: "w",
+      title: "WOD",
+      workout_type: "for_time",
+      time_cap_seconds: 300,
+      rounds: null,
+      sections: [],
+      movements: [],
+      isScaled: false,
+    },
+  });
+  const timestamp = Date.now();
+  h.states[0] = {
+    ...h.states[0],
+    config: { mode: "amrap", durationSeconds: 600 },
+    clock: { startedAt: timestamp - 311000, pausedAt: null, accumulated: 0 },
+  };
+  h.states[1] = true;
+  h.states[5] = timestamp;
+
+  const completedLabel = elements(h.render()).find(
+    (node) =>
+      node.type === "label" &&
+      Array.isArray(node.props.children) &&
+      node.props.children.some(
+        (child) =>
+          typeof child === "string" &&
+          child.includes("Completed all reps before the cap"),
+      ),
+  );
+  assert.ok(completedLabel);
+});
+
 test("switching timed sections records the previous section result", () => {
   const sections = [
     { title: "A. AMRAP", format: "amrap", time_cap_seconds: 600, rounds: null },

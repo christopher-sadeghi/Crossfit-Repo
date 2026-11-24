@@ -1032,7 +1032,8 @@ export function WorkoutMode({
             onChange={(e) => update({ notes: e.target.value })}
           />
         </label>
-        {session.config.mode === "for_time" &&
+        {(workout.workout_type === "for_time" ||
+          session.config.mode === "for_time") &&
           activeCap &&
           elapsed / 1000 - (session.config.readySeconds ?? 10) >= activeCap && (
             <label className="flex min-h-12 items-center gap-3">
