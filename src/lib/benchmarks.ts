@@ -105,14 +105,15 @@ export function normalizeBenchmarkHistory(benchmark: Benchmark, direct: DirectRe
         );
         if (hasLoadedDoneSet) continue;
       }
+      const matchingWithSets = parsedParts.success
+        ? parsedParts.data.filter(
+            (part) =>
+              part.movement_id === benchmark.movement_id && part.sets.length > 0,
+          )
+        : [];
       if (
-        parsedParts.success &&
-        parsedParts.data.some(
-          (part) =>
-            part.movement_id === benchmark.movement_id &&
-            part.sets.length > 0 &&
-            part.sets.every((set) => !set.done),
-        )
+        matchingWithSets.length > 0 &&
+        matchingWithSets.every((part) => part.sets.every((set) => !set.done))
       )
         continue;
       if (w.workout_type !== "strength" || !movement) continue;

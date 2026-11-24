@@ -150,6 +150,39 @@ test("strength results with every matching set skipped do not create a lift atte
     [],
   );
 });
+test("one skipped lift block does not suppress fallback for a block with a done unloaded set", () => {
+  const movementId = "10000000-0000-4000-8000-000000000001";
+  const result = strengthResult({
+    load_kg: 105,
+    parts: [
+      {
+        position: 0,
+        movement_id: movementId,
+        name: "Squat Heavy",
+        sets: [{ reps: 1, load_kg: 115, done: false }],
+      },
+      {
+        position: 1,
+        movement_id: movementId,
+        name: "Squat Back-Off",
+        sets: [{ reps: 5, load_kg: null, done: true }],
+      },
+    ],
+    workouts: {
+      title: "Strength",
+      workout_type: "strength",
+      workout_movements: [{ movement_id: movementId, reps: 5 }],
+    },
+  });
+  assert.deepEqual(
+    normalizeBenchmarkHistory(
+      { ...lift, movement_id: movementId },
+      [],
+      [result],
+    ).map(({ rep_max, load_kg }) => [rep_max, load_kg]),
+    [[5, 105]],
+  );
+});
 test("loaded sets in other parts prevent overall load from being credited to a lift", () => {
   const movementId = "10000000-0000-4000-8000-000000000001";
   const otherMovementId = "10000000-0000-4000-8000-000000000002";
