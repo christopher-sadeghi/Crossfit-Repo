@@ -10,6 +10,9 @@ insert into public.athletes(id, coach_id, user_id, first_name, last_name) values
 insert into public.movements(id, coach_id, name, category) values
   ('46000000-0000-0000-0000-000000000021', '46000000-0000-0000-0000-000000000001', 'Section squat', 'weightlifting');
 
+insert into public.athlete_intakes(athlete_id, coach_id, status, current_step, answers, completed_at) values
+  ('46000000-0000-0000-0000-000000000011', '46000000-0000-0000-0000-000000000001', 'completed', 7, '{"days_per_week":1}', now());
+
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"46000000-0000-0000-0000-000000000001","role":"authenticated"}', true);
 
@@ -74,8 +77,6 @@ begin
   assert (select section = 0 from public.workout_movements m join public.workouts w on w.id = m.workout_id where w.program_id = v_program_copy),
     'copy_program_for_athlete carries movement section';
 
-  insert into public.athlete_intakes(athlete_id, coach_id, status, current_step, answers, completed_at) values
-    ('46000000-0000-0000-0000-000000000011', auth.uid(), 'completed', 7, '{"days_per_week":1}', now());
   select jsonb_build_object(
     'name','Section draft','rationale','Section test','start_date','2026-11-25',
     'weeks', jsonb_agg(jsonb_build_object(

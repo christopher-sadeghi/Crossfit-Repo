@@ -1,5 +1,5 @@
 import { WORKOUT_TYPE_LABELS } from "@/app/(app)/programs/options";
-import { draftProgramSchema } from "./draft-program-schema";
+import { draftProgramStoredSchema } from "./draft-program-schema";
 import { progressNoteParts, progressSummarySchema } from "./progress-summary";
 import { scaleReviewMovements } from "./scale-review";
 import { scaleWorkoutInputSchema, scaleWorkoutSchema } from "./scale-workout";
@@ -67,7 +67,7 @@ export function inlineSuggestion(row: Tables<"ai_suggestions">, athleteName?: st
       break;
     }
     case "draft_program": {
-      const { data } = draftProgramSchema.safeParse(raw);
+      const { data } = draftProgramStoredSchema.safeParse(raw);
       if (data) return {
         ...base, type: row.suggestion_type, name: data.name, startDate: data.start_date, rationale: data.rationale,
         workouts: [...data.weeks].sort((a, b) => a.week_number - b.week_number).flatMap((week) =>

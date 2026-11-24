@@ -7,7 +7,7 @@ import { getToday } from "@/lib/time-zone";
 import { toKg } from "@/lib/units";
 import { filterMovementsByEquipment } from "@/lib/movement-equipment";
 import type { Database, Json, Tables } from "@/lib/supabase/database.types";
-import { draftProgramInputSchema, draftProgramSchema, programMovementSchema, programWeekSchema, programWorkoutSchema, validateDraftProgram } from "./draft-program-schema";
+import { draftProgramInputSchema, draftProgramSchema, draftProgramStoredSchema, programMovementSchema, programWeekSchema, programWorkoutSchema, validateDraftProgram } from "./draft-program-schema";
 import { ApprovalError } from "./errors";
 import { formatLiftMaxes, LIFT_LOAD_RULE } from "./lift-context";
 import { movementIdSchema } from "./movement-schema";
@@ -64,7 +64,7 @@ async function buildRequest(db: SupabaseClient<Database>, { athleteId }: { athle
 
 async function apply(db: SupabaseClient<Database>, suggestion: Tables<"ai_suggestions">, final: unknown) {
   if (!suggestion.athlete_id) throw new ApprovalError("This suggestion has no athlete.");
-  const program = draftProgramSchema.parse(final);
+  const program = draftProgramStoredSchema.parse(final);
   const saved = draftProgramInputSchema.parse(suggestion.input);
   const today = await getToday();
   if (program.start_date < today) throw new ApprovalError("Choose a start date today or later.");
@@ -73,13 +73,19 @@ async function apply(db: SupabaseClient<Database>, suggestion: Tables<"ai_sugges
   try { validateDraftProgram(program, { ...saved, library: context.library.filter((movement) => allowedIds.has(movement.id)) }); }
   catch { throw new ApprovalError("This draft no longer matches the movement library or training schedule. Request a new draft."); }
   const payload = { ...program, weeks: program.weeks.map((week) => ({ ...week, workouts: week.workouts.map((workout) => {
-    const normalized = normalizeSections(
-      workout.sections.map(({ time_cap_minutes, ...section }) => ({
-        ...section,
-        time_cap_seconds: time_cap_minutes == null ? null : time_cap_minutes * 60,
-      })),
-      workout.movements,
-    );
+    const normalized = (() => {
+      try {
+        return normalizeSections(
+          workout.sections.map(({ time_cap_minutes, ...section }) => ({
+            ...section,
+            time_cap_seconds: time_cap_minutes == null ? null : time_cap_minutes * 60,
+          })),
+          workout.movements,
+        );
+      } catch {
+        throw new ApprovalError("This WOD's sections don't line up. Ask for a new suggestion.");
+      }
+    })();
     return {
       ...workout,
       sections: normalized.sections,
@@ -101,4 +107,4 @@ async function apply(db: SupabaseClient<Database>, suggestion: Tables<"ai_sugges
   return { target_table: "programs", target_id: result.data };
 }
 
-export const draftProgramEntry = { label: "Draft first 4 weeks", proposalSchema: draftProgramSchema, buildRequest, validate: validateDraftProgram, apply };
+export const draftProgramEntry = { label: "Draft first 4 weeks", proposalSchema: draftProgramStoredSchema, buildRequest, validate: validateDraftProgram, apply };

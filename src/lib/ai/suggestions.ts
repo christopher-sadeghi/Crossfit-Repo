@@ -401,12 +401,17 @@ function withWorkoutSectionDefaults(proposal: unknown): unknown {
   return { ...record, sections: record.sections ?? [], movements };
 }
 
+export const writeWorkoutProposalSchema = z.preprocess(
+  withWorkoutSectionDefaults,
+  writeWorkoutSchema,
+);
+
 export function safeParseWriteWorkoutProposal(proposal: unknown) {
-  return writeWorkoutSchema.safeParse(withWorkoutSectionDefaults(proposal));
+  return writeWorkoutProposalSchema.safeParse(proposal);
 }
 
 function parseWriteWorkoutProposal(proposal: unknown) {
-  return writeWorkoutSchema.parse(withWorkoutSectionDefaults(proposal));
+  return writeWorkoutProposalSchema.parse(proposal);
 }
 
 function validateWorkoutProposal(proposal: unknown, input: Json) {
@@ -451,7 +456,12 @@ async function applyWorkoutSuggestion(
     }
   }
 
-  const payload = prepareWorkoutSavePayload(parsed, input.data.units);
+  let payload: ReturnType<typeof prepareWorkoutSavePayload>;
+  try {
+    payload = prepareWorkoutSavePayload(parsed, input.data.units);
+  } catch {
+    throw new ApprovalError("This WOD's sections don't line up. Ask for a new suggestion.");
+  }
   const workout = payload.workout satisfies Json;
   const movements = payload.movements satisfies Json;
   const { data: targetId, error } = await supabase.rpc("save_ai_workout", {
@@ -512,7 +522,7 @@ export const SUGGESTION_REGISTRY: Record<Enums<"suggestion_type">, SuggestionEnt
   movement_guide: movementGuideEntry,
   write_workout: {
     label: SUGGESTION_LABELS.write_workout,
-    proposalSchema: writeWorkoutSchema,
+    proposalSchema: writeWorkoutProposalSchema,
     buildRequest: buildWorkoutRequest,
     validate: validateWorkoutProposal,
     apply: applyWorkoutSuggestion,

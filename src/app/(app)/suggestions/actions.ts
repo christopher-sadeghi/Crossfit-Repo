@@ -12,7 +12,7 @@ import { requestRegisteredSuggestion } from "@/lib/ai/request";
 import { runSuggestion } from "@/lib/ai/service";
 import { progressSummarySchema } from "@/lib/ai/progress-summary";
 import { adjustMacrosSchema, safeParseWriteWorkoutProposal, SUGGESTION_REGISTRY, writeWorkoutInputSchema } from "@/lib/ai/suggestions";
-import { draftProgramSchema } from "@/lib/ai/draft-program-schema";
+import { draftProgramStoredSchema } from "@/lib/ai/draft-program-schema";
 import type { SuggestionApplyOptions } from "@/lib/ai/suggestions";
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { notifySuggestionApproved } from "@/lib/notifications";
@@ -115,9 +115,9 @@ export async function approveSuggestion(_: FormState, formData: FormData): Promi
   let finalInput: unknown;
   let applyOptions: SuggestionApplyOptions | undefined;
   if (suggestion.suggestion_type === "draft_program") {
-    const proposal = draftProgramSchema.safeParse(suggestion.proposal);
+    const proposal = draftProgramStoredSchema.safeParse(suggestion.proposal);
     if (!proposal.success) return failure(formData, "This draft is invalid. Request a new draft.");
-    const final = draftProgramSchema.safeParse({ ...proposal.data, name: formData.get("name"), start_date: formData.get("start_date") });
+    const final = draftProgramStoredSchema.safeParse({ ...proposal.data, name: formData.get("name"), start_date: formData.get("start_date") });
     if (!final.success) return failure(formData, final.error.issues[0]?.message ?? "Check program name and start date.");
     finalInput = final.data;
   } else if (isSummary) {

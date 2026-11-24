@@ -21,11 +21,21 @@ export function createLoader(overrides = {}) {
   };
 }
 const load = createLoader();
-const { draftProgramSchema, validateDraftProgram } = load("src/lib/ai/draft-program-schema.ts");
+const { draftProgramSchema, draftProgramStoredSchema, validateDraftProgram } = load("src/lib/ai/draft-program-schema.ts");
 const movementId = "35000000-0000-4000-8000-000000000021";
 const context = { units: "lb", days_per_week: 1, library: [{ id: movementId, name: "Squat" }] };
 function proposal() {
-  return { name: "First four weeks", rationale: "Build gradually.", start_date: "2026-11-23", weeks: [1, 2, 3, 4].map((week_number) => ({ week_number, workouts: [{ day_number: 1, title: "Strength", workout_type: "strength", time_cap_minutes: 30, rounds: null, description: "Warm up, then squat.", notes: null, movements: [{ movement_id: movementId, sets: 3, reps: 5, load: 100, distance_m: null, calories: null, duration_seconds: null, notes: "Conservative load." }] }] })) };
+  return { name: "First four weeks", rationale: "Build gradually.", start_date: "2026-11-23", weeks: [1, 2, 3, 4].map((week_number) => ({ week_number, workouts: [{ day_number: 1, title: "Strength", workout_type: "strength", time_cap_minutes: 30, rounds: null, description: "Warm up, then squat.", notes: null, sections: [], movements: [{ movement_id: movementId, sets: 3, reps: 5, load: 100, distance_m: null, calories: null, duration_seconds: null, notes: "Conservative load.", section: null }] }] })) };
+}
+function legacyProposal() {
+  const program = proposal();
+  for (const week of program.weeks) {
+    for (const workout of week.workouts) {
+      delete workout.sections;
+      for (const movement of workout.movements) delete movement.section;
+    }
+  }
+  return program;
 }
 test("inline previews show workout prescriptions and scheduled program days", () => {
   const inline = createLoader({ "server-only": {} })("src/lib/ai/inline-suggestion.ts").inlineSuggestion;
@@ -56,6 +66,17 @@ test("draft validation accepts four weeks and rejects empty, unknown movements, 
   const p = proposal(); p.weeks.forEach((w) => w.workouts.push(structuredClone(w.workouts[0])));
   assert.throws(() => validateDraftProgram(p, { ...context, days_per_week: 2 }), /Duplicate day/);
 });
+test("legacy draft programs default sections and movement assignments before application", async () => {
+  const f = fixture();
+  const old = legacyProposal();
+  assert.equal(draftProgramSchema.safeParse(old).success, false);
+  assert.equal(draftProgramStoredSchema.safeParse(old).success, true);
+  validateDraftProgram(old, context);
+  await f.entry.apply(f.db, { athlete_id: "athlete", input: context }, old);
+  const workout = f.calls[0].args.p_program.weeks[0].workouts[0];
+  assert.deepEqual(workout.sections, []);
+  assert.equal(workout.movements[0].section, null);
+});
 
 function fixture({ status = "completed", athleteStatus = "active", rpcError = null, library = context.library, location = "gym", equipment = ["Barbell"] } = {}) {
   const calls = [];
@@ -71,7 +92,12 @@ function fixture({ status = "completed", athleteStatus = "active", rpcError = nu
     "@/lib/benchmarks": { loadLiftMaxes: async () => [] },
     "./workout-context": { ageOn: () => 36, loadWorkoutContext: async () => ({ units: "lb", library }) },
   });
-  return { db, calls, entry: loader("src/lib/ai/draft-program.ts").draftProgramEntry };
+  return {
+    db,
+    calls,
+    entry: loader("src/lib/ai/draft-program.ts").draftProgramEntry,
+    ApprovalError: loader("src/lib/ai/errors.ts").ApprovalError,
+  };
 }
 test("draft name and rationale fit the program editor limits", () => {
   assert.equal(draftProgramSchema.safeParse({ ...proposal(), name: "x".repeat(80), rationale: "x".repeat(1000) }).success, true);
@@ -86,6 +112,7 @@ test("build requires completed intake, sets next Monday, includes profile/contex
   assert.equal(request.input.athlete.age, 36);
   assert.equal(request.input.intake.session_minutes, 60);
   assert.equal(request.schema.safeParse(proposal()).success, true);
+  assert.equal(request.schema.safeParse(legacyProposal()).success, false);
   const bad = proposal(); bad.weeks[0].workouts[0].movements[0].movement_id = "unknown";
   assert.equal(request.schema.safeParse(bad).success, false);
   const missing = fixture({ status: "requested" });
@@ -105,6 +132,58 @@ test("apply validates current library, converts lb, returns target and handles s
     const failed = fixture({ rpcError: { message } });
     await assert.rejects(failed.entry.apply(failed.db, suggestion, proposal()), expected);
   }
+});
+test("draft apply returns a friendly approval error for invalid section assignments", async () => {
+  const f = fixture();
+  const invalid = proposal();
+  invalid.weeks[0].workouts[0].sections = [{ title: "Block A", format: "strength", time_cap_minutes: null, rounds: null }];
+  invalid.weeks[0].workouts[0].movements[0].section = 2;
+  await assert.rejects(
+    f.entry.apply(f.db, { athlete_id: "athlete", input: context }, invalid),
+    (error) => error instanceof f.ApprovalError && error.message === "This WOD's sections don't line up. Ask for a new suggestion.",
+  );
+  assert.equal(f.calls.length, 0);
+});
+test("legacy write-workout proposals backfill section fields for the save payload", () => {
+  const loader = createLoader({ "server-only": {} });
+  const { ApprovalError, SUGGESTION_REGISTRY, writeWorkoutProposalSchema, writeWorkoutSchema } = loader("src/lib/ai/suggestions.ts");
+  const { prepareWorkoutSavePayload } = loader("src/lib/ai/workout-save-payload.ts");
+  const old = {
+    title: "Legacy WOD",
+    workout_type: "amrap",
+    time_cap_minutes: 20,
+    rounds: null,
+    description: null,
+    notes: null,
+    movements: [{
+      movement_id: movementId, sets: null, reps: 8, load: 40, distance_m: null,
+      calories: null, duration_seconds: null, notes: null,
+    }],
+    rationale: "A simple AMRAP.",
+  };
+  assert.equal(writeWorkoutSchema.safeParse(old).success, false);
+  const parsed = writeWorkoutProposalSchema.parse(old);
+  assert.deepEqual(parsed.sections, []);
+  assert.equal(parsed.movements[0].section, null);
+  const payload = prepareWorkoutSavePayload(parsed, "lb");
+  assert.deepEqual(payload.workout.sections, []);
+  assert.equal(payload.movements[0].section, null);
+  assert.equal(payload.movements[0].load_kg, 18.14);
+
+  const invalid = {
+    ...parsed,
+    sections: [{ title: "Block A", format: "strength", time_cap_minutes: null, rounds: null }],
+    movements: [{ ...parsed.movements[0], section: 1 }],
+  };
+  const input = {
+    mode: "write", request: "Write an AMRAP", units: "kg",
+    library: [{ id: movementId, name: "Squat", category: "weightlifting", measure: "reps", easier_movement_id: null, harder_movement_id: null }],
+  };
+  const supabase = { rpc: async () => { throw new Error("The save RPC should not run."); } };
+  return assert.rejects(
+    SUGGESTION_REGISTRY.write_workout.apply(supabase, { input }, invalid),
+    (error) => error instanceof ApprovalError && error.message === "This WOD's sections don't line up. Ask for a new suggestion.",
+  );
 });
 test("draft context exposes shared movement variations and prefers appropriate scaling without relaxing ids", async () => {
   const easierId = "35000000-0000-4000-8000-000000000022";
@@ -196,7 +275,7 @@ test("off-equipment ids are removed from prompt, variation links and generation 
     assert.throws(() => f.entry.validate(draft, request.input), /Unknown movement/);
     await assert.rejects(f.entry.apply(f.db, { athlete_id: "athlete", input: request.input }, draft), /movement library/);
   }
-  assert.equal(f.calls.length, 0);
+  assert.equal(f.calls.some(({ name }) => name === "apply_draft_program"), false);
   const gym = fixture({ library, equipment: [] });
   const gymRequest = await gym.entry.buildRequest(gym.db, { athleteId: "athlete" });
   assert.deepEqual(gymRequest.input.library.map((m) => m.id), library.map((m) => m.id));
