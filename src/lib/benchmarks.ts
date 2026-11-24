@@ -94,7 +94,13 @@ export function normalizeBenchmarkHistory(benchmark: Benchmark, direct: DirectRe
             isPr: false,
           });
         }
-        continue;
+        if (loadsByReps.size > 0) continue;
+        const hasLoadedDoneSet = parsedParts.data.some((part) =>
+          part.sets.some(
+            (set) => set.done && set.load_kg != null && set.load_kg > 0,
+          ),
+        );
+        if (hasLoadedDoneSet) continue;
       }
       if (w.workout_type !== "strength" || !movement) continue;
       const rep_max = movement.reps ?? r.reps ?? 1;

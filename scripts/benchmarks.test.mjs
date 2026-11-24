@@ -92,6 +92,62 @@ test("scheduled lift parts use the heaviest completed set for each valid rep cou
     ],
   );
 });
+test("strength parts without loaded completed sets fall back to overall load", () => {
+  const movementId = "10000000-0000-4000-8000-000000000001";
+  const result = strengthResult({
+    load_kg: 105,
+    parts: [
+      {
+        position: 0,
+        movement_id: movementId,
+        name: "Squat",
+        sets: [{ reps: 5, load_kg: null, done: true }],
+      },
+    ],
+    workouts: {
+      title: "Strength",
+      workout_type: "strength",
+      workout_movements: [{ movement_id: movementId, reps: 5 }],
+    },
+  });
+  const attempts = normalizeBenchmarkHistory(
+    { ...lift, movement_id: movementId },
+    [],
+    [result],
+  );
+  assert.deepEqual(
+    attempts.map(({ rep_max, load_kg }) => [rep_max, load_kg]),
+    [[5, 105]],
+  );
+});
+test("loaded sets in other parts prevent overall load from being credited to a lift", () => {
+  const movementId = "10000000-0000-4000-8000-000000000001";
+  const otherMovementId = "10000000-0000-4000-8000-000000000002";
+  const result = strengthResult({
+    load_kg: 105,
+    parts: [
+      {
+        position: 0,
+        movement_id: otherMovementId,
+        name: "Deadlift",
+        sets: [{ reps: 5, load_kg: 100, done: true }],
+      },
+    ],
+    workouts: {
+      title: "Strength",
+      workout_type: "strength",
+      workout_movements: [{ movement_id: movementId, reps: 5 }],
+    },
+  });
+  assert.deepEqual(
+    normalizeBenchmarkHistory(
+      { ...lift, movement_id: movementId },
+      [],
+      [result],
+    ),
+    [],
+  );
+});
 test("non-strength result parts count as lift attempts without double-counting generated rows", () => {
   const movementId = "10000000-0000-4000-8000-000000000001";
   const emom = scheduled("emom", "2026-01-01", {
