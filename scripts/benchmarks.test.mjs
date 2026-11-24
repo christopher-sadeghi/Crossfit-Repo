@@ -182,6 +182,36 @@ test("non-strength result parts count as lift attempts without double-counting g
   assert.equal(attempts[0].rep_max, 5);
   assert.equal(attempts[0].load_kg, 125);
 });
+test("for-time parts-based lift attempts do not retain the workout score", () => {
+  const movementId = "10000000-0000-4000-8000-000000000001";
+  const forTime = scheduled("for-time-lift", "2026-01-01", {
+    time_seconds: 300,
+    rounds: 3,
+    reps: 2,
+    parts: [
+      {
+        position: 0,
+        movement_id: movementId,
+        name: "Deadlift",
+        sets: [{ reps: 5, load_kg: 125, done: true }],
+      },
+    ],
+    workouts: {
+      title: "Deadlift For Time",
+      workout_type: "for_time",
+      workout_movements: [{ movement_id: movementId, reps: 5 }],
+    },
+  });
+  const [attempt] = normalizeBenchmarkHistory(
+    { ...lift, movement_id: movementId },
+    [],
+    [forTime],
+  );
+  assert.equal(attempt.time_seconds, null);
+  assert.equal(attempt.rounds, null);
+  assert.equal(attempt.reps, null);
+  assert.equal(attempt.load_kg, 125);
+});
 test("generated direct lift rows are skipped when their scheduled result is present", () => {
   const scheduledResult = strengthResult({ parts: [] });
   const generated = result("generated", "2026-01-01", {

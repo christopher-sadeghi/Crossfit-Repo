@@ -88,6 +88,9 @@ export function normalizeBenchmarkHistory(benchmark: Benchmark, direct: DirectRe
           attempts.push({
             ...r,
             source: "workout",
+            time_seconds: null,
+            rounds: null,
+            reps: null,
             rep_max,
             load_kg,
             estimatedOneRmKg: estimateOneRepMax(load_kg, rep_max),
