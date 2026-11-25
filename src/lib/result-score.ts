@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  scoreForSectionResult,
+  type ResultPart,
+  type SectionScore,
+} from "@/lib/result-parts";
 import type { Enums } from "@/lib/supabase/database.types";
 import { toKg, type Units } from "@/lib/units";
 
@@ -78,4 +83,29 @@ export function buildScore(
   }[workoutType];
 
   return missing ? { error: missing } : { score };
+}
+
+export function buildResultScore(
+  input: ScoreInput,
+  workoutType: Enums<"workout_type">,
+  units: Units,
+  sectioned: boolean,
+  parts: ResultPart[],
+  sectionScores: SectionScore[],
+  fallbackLoadKg: number | null,
+): ReturnType<typeof buildScore> {
+  const scoreResult = buildScore(input, workoutType, units);
+  if (!("error" in scoreResult) || !sectioned) return scoreResult;
+
+  const overallResult = buildScore(input, "other", units);
+  if (!("error" in overallResult)) return overallResult;
+
+  const sectionScore = scoreForSectionResult(
+    parts,
+    sectionScores,
+    fallbackLoadKg,
+  );
+  return sectionScore
+    ? { score: sectionScore }
+    : { error: "Enter a score for at least one section." };
 }

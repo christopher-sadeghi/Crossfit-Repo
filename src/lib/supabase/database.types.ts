@@ -1349,14 +1349,14 @@ isOneToOne: false
                   ]
                 },"workout_movements": {
                   Row: {
-                    "calories": number | null,"coach_id": string,"distance_m": number | null,"duration_seconds": number | null,"id": string,"load_kg": number | null,"movement_id": string,"notes": string | null,"position": number,"reps": number | null,"sets": number | null,"workout_id": string
+                    "calories": number | null,"coach_id": string,"distance_m": number | null,"duration_seconds": number | null,"id": string,"load_kg": number | null,"movement_id": string,"notes": string | null,"position": number,"reps": number | null,"section": number | null,"sets": number | null,"workout_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "calories"?: number | null,"coach_id"?: string,"distance_m"?: number | null,"duration_seconds"?: number | null,"id"?: string,"load_kg"?: number | null,"movement_id": string,"notes"?: string | null,"position"?: number,"reps"?: number | null,"sets"?: number | null,"workout_id": string
+                    "calories"?: number | null,"coach_id"?: string,"distance_m"?: number | null,"duration_seconds"?: number | null,"id"?: string,"load_kg"?: number | null,"movement_id": string,"notes"?: string | null,"position"?: number,"reps"?: number | null,"section"?: number | null,"sets"?: number | null,"workout_id": string
                   }
                   Update: {
-                    "calories"?: number | null,"coach_id"?: string,"distance_m"?: number | null,"duration_seconds"?: number | null,"id"?: string,"load_kg"?: number | null,"movement_id"?: string,"notes"?: string | null,"position"?: number,"reps"?: number | null,"sets"?: number | null,"workout_id"?: string
+                    "calories"?: number | null,"coach_id"?: string,"distance_m"?: number | null,"duration_seconds"?: number | null,"id"?: string,"load_kg"?: number | null,"movement_id"?: string,"notes"?: string | null,"position"?: number,"reps"?: number | null,"section"?: number | null,"sets"?: number | null,"workout_id"?: string
                   }
                   Relationships: [
                     {
@@ -1381,14 +1381,14 @@ isOneToOne: false
                   ]
                 },"workout_results": {
                   Row: {
-                    "athlete_id": string,"coach_id": string,"created_at": string,"energy": number | null,"id": string,"is_rx": boolean,"load_kg": number | null,"logged_by": string | null,"notes": string | null,"pain_notes": string | null,"parts": Json,"performed_on": string,"reps": number | null,"rounds": number | null,"rpe": number | null,"sleep_hours": number | null,"soreness": number | null,"time_seconds": number | null,"updated_at": string | null,"workout_id": string
+                    "athlete_id": string,"coach_id": string,"created_at": string,"energy": number | null,"id": string,"is_rx": boolean,"load_kg": number | null,"logged_by": string | null,"notes": string | null,"pain_notes": string | null,"parts": Json,"performed_on": string,"reps": number | null,"rounds": number | null,"rpe": number | null,"section_scores": Json,"sleep_hours": number | null,"soreness": number | null,"time_seconds": number | null,"updated_at": string | null,"workout_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "athlete_id": string,"coach_id"?: string,"created_at"?: string,"energy"?: number | null,"id"?: string,"is_rx"?: boolean,"load_kg"?: number | null,"logged_by"?: string | null,"notes"?: string | null,"pain_notes"?: string | null,"parts"?: Json,"performed_on"?: string,"reps"?: number | null,"rounds"?: number | null,"rpe"?: number | null,"sleep_hours"?: number | null,"soreness"?: number | null,"time_seconds"?: number | null,"updated_at"?: string | null,"workout_id": string
+                    "athlete_id": string,"coach_id"?: string,"created_at"?: string,"energy"?: number | null,"id"?: string,"is_rx"?: boolean,"load_kg"?: number | null,"logged_by"?: string | null,"notes"?: string | null,"pain_notes"?: string | null,"parts"?: Json,"performed_on"?: string,"reps"?: number | null,"rounds"?: number | null,"rpe"?: number | null,"section_scores"?: Json,"sleep_hours"?: number | null,"soreness"?: number | null,"time_seconds"?: number | null,"updated_at"?: string | null,"workout_id": string
                   }
                   Update: {
-                    "athlete_id"?: string,"coach_id"?: string,"created_at"?: string,"energy"?: number | null,"id"?: string,"is_rx"?: boolean,"load_kg"?: number | null,"logged_by"?: string | null,"notes"?: string | null,"pain_notes"?: string | null,"parts"?: Json,"performed_on"?: string,"reps"?: number | null,"rounds"?: number | null,"rpe"?: number | null,"sleep_hours"?: number | null,"soreness"?: number | null,"time_seconds"?: number | null,"updated_at"?: string | null,"workout_id"?: string
+                    "athlete_id"?: string,"coach_id"?: string,"created_at"?: string,"energy"?: number | null,"id"?: string,"is_rx"?: boolean,"load_kg"?: number | null,"logged_by"?: string | null,"notes"?: string | null,"pain_notes"?: string | null,"parts"?: Json,"performed_on"?: string,"reps"?: number | null,"rounds"?: number | null,"rpe"?: number | null,"section_scores"?: Json,"sleep_hours"?: number | null,"soreness"?: number | null,"time_seconds"?: number | null,"updated_at"?: string | null,"workout_id"?: string
                   }
                   Relationships: [
                     {
@@ -1413,14 +1413,14 @@ isOneToOne: false
                   ]
                 },"workouts": {
                   Row: {
-                    "athlete_id": string | null,"coach_id": string,"created_at": string,"day_number": number | null,"description": string | null,"id": string,"notes": string | null,"program_id": string | null,"rounds": number | null,"scheduled_on": string | null,"source_workout_id": string | null,"time_cap_seconds": number | null,"title": string,"updated_at": string,"week_number": number | null,"workout_type": Database["public"]['Enums']["workout_type"]
+                    "athlete_id": string | null,"coach_id": string,"created_at": string,"day_number": number | null,"description": string | null,"id": string,"notes": string | null,"program_id": string | null,"rounds": number | null,"scheduled_on": string | null,"sections": Json,"source_workout_id": string | null,"time_cap_seconds": number | null,"title": string,"updated_at": string,"week_number": number | null,"workout_type": Database["public"]['Enums']["workout_type"]
                   }
                   ComputedFields: never
                   Insert: {
-                    "athlete_id"?: string | null,"coach_id"?: string,"created_at"?: string,"day_number"?: number | null,"description"?: string | null,"id"?: string,"notes"?: string | null,"program_id"?: string | null,"rounds"?: number | null,"scheduled_on"?: string | null,"source_workout_id"?: string | null,"time_cap_seconds"?: number | null,"title": string,"updated_at"?: string,"week_number"?: number | null,"workout_type": Database["public"]['Enums']["workout_type"]
+                    "athlete_id"?: string | null,"coach_id"?: string,"created_at"?: string,"day_number"?: number | null,"description"?: string | null,"id"?: string,"notes"?: string | null,"program_id"?: string | null,"rounds"?: number | null,"scheduled_on"?: string | null,"sections"?: Json,"source_workout_id"?: string | null,"time_cap_seconds"?: number | null,"title": string,"updated_at"?: string,"week_number"?: number | null,"workout_type": Database["public"]['Enums']["workout_type"]
                   }
                   Update: {
-                    "athlete_id"?: string | null,"coach_id"?: string,"created_at"?: string,"day_number"?: number | null,"description"?: string | null,"id"?: string,"notes"?: string | null,"program_id"?: string | null,"rounds"?: number | null,"scheduled_on"?: string | null,"source_workout_id"?: string | null,"time_cap_seconds"?: number | null,"title"?: string,"updated_at"?: string,"week_number"?: number | null,"workout_type"?: Database["public"]['Enums']["workout_type"]
+                    "athlete_id"?: string | null,"coach_id"?: string,"created_at"?: string,"day_number"?: number | null,"description"?: string | null,"id"?: string,"notes"?: string | null,"program_id"?: string | null,"rounds"?: number | null,"scheduled_on"?: string | null,"sections"?: Json,"source_workout_id"?: string | null,"time_cap_seconds"?: number | null,"title"?: string,"updated_at"?: string,"week_number"?: number | null,"workout_type"?: Database["public"]['Enums']["workout_type"]
                   }
                   Relationships: [
                     {

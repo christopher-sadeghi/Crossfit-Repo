@@ -1,3 +1,5 @@
+import type { WorkoutSection } from "@/lib/workout-sections";
+
 export type TimerConfig = (
   | { mode: "for_time"; capSeconds?: number }
   | { mode: "amrap"; durationSeconds: number }
@@ -6,6 +8,38 @@ export type TimerConfig = (
   | { mode: "rest"; seconds: number }
 ) & { readySeconds?: number };
 export type TimerView = { phase: "countdown" | "work" | "rest" | "done"; displaySeconds: number; index: number; remaining: number | null };
+
+export function shouldShowCompletedAtCap(
+  workoutType: string,
+  timerMode: TimerConfig["mode"],
+  timedSection: number | null,
+): boolean {
+  return (
+    timerMode === "for_time" ||
+    (timedSection == null && workoutType === "for_time")
+  );
+}
+
+export function timerForSection(
+  section: Pick<WorkoutSection, "format" | "time_cap_seconds">,
+): TimerConfig | null {
+  const capSeconds = section.time_cap_seconds;
+  if (capSeconds == null) return null;
+  switch (section.format) {
+    case "amrap":
+      return { mode: "amrap", durationSeconds: capSeconds };
+    case "for_time":
+      return { mode: "for_time", capSeconds };
+    case "emom": {
+      const intervals = capSeconds / 60;
+      return Number.isInteger(intervals) && intervals >= 1
+        ? { mode: "emom", intervalSeconds: 60, intervals }
+        : null;
+    }
+    default:
+      return null;
+  }
+}
 
 export function timerDuration(config: TimerConfig) {
   switch (config.mode) {
@@ -65,6 +99,60 @@ export function crossedCues(config: TimerConfig, previousMs: number, elapsedMs: 
 export type TimerClock = { startedAt: number | null; pausedAt: number | null; accumulated: number };
 export function elapsedTime(clock: TimerClock, now: number) {
   return clock.accumulated + (clock.startedAt == null ? 0 : Math.max(0, (clock.pausedAt ?? now) - clock.startedAt));
+}
+
+export type TimedSectionResult = {
+  time_seconds?: number;
+  rounds?: number;
+  reps?: number;
+};
+
+export function sectionResultForTimer(
+  section: Pick<WorkoutSection, "format" | "time_cap_seconds">,
+  config: TimerConfig,
+  clock: TimerClock,
+  rounds: number,
+  reps: number,
+  completedAtCap: boolean,
+  now: number,
+): TimedSectionResult | null {
+  if (clock.startedAt == null && clock.accumulated === 0) return null;
+
+  if (section.format === "for_time") {
+    const total = elapsedTime(clock, now);
+    const workSeconds = Math.min(
+      timerDuration(config),
+      Math.max(0, Math.floor(total / 1000 - (config.readySeconds ?? 10))),
+    );
+    const cap =
+      config.mode === "for_time"
+        ? config.capSeconds
+        : section.time_cap_seconds ?? undefined;
+    if (cap != null && workSeconds >= cap && !completedAtCap)
+      return { time_seconds: cap, reps };
+    return {
+      time_seconds: cap == null ? workSeconds : Math.min(cap, workSeconds),
+    };
+  }
+
+  if (section.format === "amrap" || section.format === "emom")
+    return { rounds, reps };
+
+  return null;
+}
+
+export function emomMovementAt<T extends { section?: number | null }>(
+  movements: T[],
+  intervalIndex: number,
+  timedSection: number | null,
+): T | null {
+  const eligible =
+    timedSection == null
+      ? movements
+      : movements.filter((movement) => movement.section === timedSection);
+  if (!eligible.length) return null;
+  const index = ((Math.trunc(intervalIndex) % eligible.length) + eligible.length) % eligible.length;
+  return eligible[index] ?? null;
 }
 
 export function defaultTimer(workout: { workout_type: string; time_cap_seconds: number | null; rounds: number | null; title: string; description?: string | null }): TimerConfig {

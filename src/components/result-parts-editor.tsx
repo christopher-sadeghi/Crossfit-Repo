@@ -16,7 +16,13 @@ import {
   type LiftPrCandidate,
   type ResultPart,
   type ResultPartMovement,
+  type SectionScore,
 } from "@/lib/result-parts";
+import {
+  formatSectionHeadline,
+  groupBySection,
+  type WorkoutSection,
+} from "@/lib/workout-sections";
 
 type ScoreKey = "time_seconds" | "rounds" | "reps" | "calories" | "distance_m";
 type DraftSet = { reps: string; load: string; done: boolean };
@@ -26,6 +32,7 @@ type DraftPart = {
   name: string;
   sets: DraftSet[];
   score: Partial<Record<ScoreKey, string>>;
+  load: string;
   notes: string;
   notesExpanded: boolean;
 };
@@ -48,6 +55,7 @@ function toDraftParts(parts: ResultPart[], units: Units): DraftPart[] {
     score: Object.fromEntries(
       Object.entries(part.score ?? {}).map(([key, value]) => [key, String(value)]),
     ) as Partial<Record<ScoreKey, string>>,
+    load: part.load_kg == null ? "" : String(fromKgPrecise(part.load_kg, units)),
     notes: part.notes ?? "",
     notesExpanded: Boolean(part.notes?.trim()),
   }));
@@ -90,6 +98,7 @@ function fromRawParts(raw: string): DraftPart[] | null {
         movement_id: String(part.movement_id),
         name: String(part.name),
         sets,
+        load: part.load_kg == null ? "" : String(part.load_kg),
         score: Object.fromEntries(
           Object.entries(score).map(([key, value]) => [key, String(value)]),
         ) as Partial<Record<ScoreKey, string>>,
@@ -119,10 +128,88 @@ function serializeParts(parts: DraftPart[]): PartSubmission[] {
         load_kg: set.load === "" ? null : Number(set.load),
         done: set.done,
       })),
+      ...(part.load === "" ? {} : { load_kg: Number(part.load) }),
       ...(Object.keys(score).length ? { score } : {}),
       ...(part.notes.trim() ? { notes: part.notes.trim() } : {}),
     };
   });
+}
+
+type DraftSectionScore = {
+  section: number;
+  score: Partial<Record<ScoreKey, string>>;
+  notes: string;
+  notesExpanded: boolean;
+};
+
+function toDraftSectionScores(scores: SectionScore[] = []): DraftSectionScore[] {
+  return scores.map(({ section, score, notes }) => ({
+    section,
+    score: Object.fromEntries(
+      Object.entries(score).map(([key, value]) => [key, String(value)]),
+    ) as Partial<Record<ScoreKey, string>>,
+    notes: notes ?? "",
+    notesExpanded: Boolean(notes?.trim()),
+  }));
+}
+
+function fromRawSectionScores(raw: string): DraftSectionScore[] | null {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed.map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item))
+        throw new Error("invalid section score");
+      const record = item as Record<string, unknown>;
+      const score =
+        record.score && typeof record.score === "object" && !Array.isArray(record.score)
+          ? (record.score as Record<string, unknown>)
+          : {};
+      return {
+        section: Number(record.section),
+        score: Object.fromEntries(
+          Object.entries(score).map(([key, value]) => [key, String(value)]),
+        ) as Partial<Record<ScoreKey, string>>,
+        notes: typeof record.notes === "string" ? record.notes : "",
+        notesExpanded: typeof record.notes === "string" && Boolean(record.notes.trim()),
+      };
+    });
+  } catch {
+    return null;
+  }
+}
+
+export function serializeSectionScores(scores: DraftSectionScore[]): SectionScore[] {
+  return scores.map(({ section, score, notes }) => ({
+    section,
+    score: Object.fromEntries(
+      Object.entries(score)
+        .filter(([, value]) => value !== "")
+        .map(([key, value]) => [key, Number(value)]),
+    ),
+    ...(notes.trim() ? { notes: notes.trim() } : {}),
+  }));
+}
+
+export function sectionScoreKeys(
+  section: WorkoutSection,
+  movements: ResultPartMovement[],
+): ScoreKey[] {
+  const keys: ScoreKey[] =
+    section.format === "for_time"
+      ? ["time_seconds", "reps"]
+      : section.format === "amrap"
+        ? ["rounds", "reps"]
+        : section.format === "emom"
+          ? ["rounds", "reps"]
+          : section.format === "other"
+            ? ["time_seconds", "rounds", "reps"]
+            : [];
+  if (movements.some((movement) => movement.calories != null))
+    keys.push("calories");
+  if (movements.some((movement) => movement.distance_m != null))
+    keys.push("distance_m");
+  return [...new Set(keys)];
 }
 
 function scoreKeys(
@@ -161,6 +248,9 @@ export function ResultPartsEditor({
   newPrSets = [],
   templateParts,
   resetKey,
+  sections,
+  initialSectionScores = [],
+  initialRawSectionScores,
 }: {
   initialParts: ResultPart[];
   movements: ResultPartMovement[];
@@ -172,8 +262,14 @@ export function ResultPartsEditor({
   newPrSets?: Pick<LiftPrCandidate, "position" | "set_index">[];
   templateParts?: ResultPart[];
   resetKey?: string;
+  sections?: WorkoutSection[];
+  initialSectionScores?: SectionScore[];
+  initialRawSectionScores?: string;
 }) {
   const [parts, setParts] = useState(() => toDraftParts(initialParts, units));
+  const [sectionScores, setSectionScores] = useState(() =>
+    toDraftSectionScores(initialSectionScores),
+  );
   const [dirty, setDirty] = useState(() =>
     initialPartsDirty(initialParts, templateParts),
   );
@@ -182,6 +278,13 @@ export function ResultPartsEditor({
   const definitions = useMemo(
     () => new Map(movements.map((movement, position) => [position, movement])),
     [movements],
+  );
+  const sectionGroups = groupBySection(
+    parts.map((part) => ({
+      ...part,
+      section: definitions.get(part.position)?.section ?? null,
+    })),
+    sections,
   );
 
   useEffect(() => {
@@ -220,6 +323,33 @@ export function ResultPartsEditor({
     }
   }, [handoffToken, initialRawParts]);
 
+  useEffect(() => {
+    if (!initialRawSectionScores) return;
+    const submitted = fromRawSectionScores(initialRawSectionScores);
+    if (submitted) {
+      setSectionScores(submitted);
+      setDirty(true);
+    }
+  }, [initialRawSectionScores]);
+
+  useEffect(() => {
+    if (initialRawSectionScores !== undefined || !handoffToken) return;
+    try {
+      const key = `workout-result-sections:${handoffToken}`;
+      const raw = sessionStorage.getItem(key);
+      sessionStorage.removeItem(key);
+      if (raw) {
+        const handoff = fromRawSectionScores(raw);
+        if (handoff) {
+          setSectionScores(handoff);
+          setDirty(true);
+        }
+      }
+    } catch {
+      return;
+    }
+  }, [handoffToken, initialRawSectionScores]);
+
   const updateParts = (update: (current: DraftPart[]) => DraftPart[]) => {
     setDirty(true);
     setParts(update);
@@ -244,14 +374,110 @@ export function ResultPartsEditor({
     );
 
   const rawParts = JSON.stringify(serializeParts(parts));
+  const rawSectionScores = JSON.stringify(serializeSectionScores(sectionScores));
+  const updateSectionScore = (section: number, key: ScoreKey, value: string) => {
+    setDirty(true);
+    setSectionScores((current) => {
+      const existing = current.find((score) => score.section === section);
+      if (existing)
+        return current.map((score) =>
+          score.section === section
+            ? { ...score, score: { ...score.score, [key]: value } }
+            : score,
+        );
+      return [...current, { section, score: { [key]: value }, notes: "", notesExpanded: false }];
+    });
+  };
+  const updateSectionNotes = (section: number, notes: string, expanded?: boolean) => {
+    setDirty(true);
+    setSectionScores((current) => {
+      const existing = current.find((score) => score.section === section);
+      if (existing)
+        return current.map((score) =>
+          score.section === section
+            ? { ...score, notes, ...(expanded == null ? {} : { notesExpanded: expanded }) }
+            : score,
+        );
+      return [...current, {
+        section,
+        score: {},
+        notes,
+        notesExpanded: expanded ?? Boolean(notes.trim()),
+      }];
+    });
+  };
 
   return (
     <section className="grid gap-3">
       <h2 className="text-base font-semibold">Parts</h2>
       <input type="hidden" name="parts" value={rawParts} />
-      {parts.map((part, partIndex) => {
+      <input type="hidden" name="section_scores" value={rawSectionScores} />
+      {sectionGroups.flatMap((group) => [
+        ...(group.section
+          ? [
+              <div key={`section-${group.index}`} className="grid gap-3 rounded-lg border border-amber-500/40 bg-amber-50/40 p-3 dark:bg-amber-950/10">
+                <div>
+                  <h3 className="font-semibold">{group.section.title}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {formatSectionHeadline(group.section)}
+                  </p>
+                </div>
+                {group.section.format !== "strength" && group.index != null && (() => {
+                  const score = sectionScores.find((item) => item.section === group.index);
+                  const fields = sectionScoreKeys(
+                    group.section!,
+                    group.items
+                      .map(({ movement }) => definitions.get(movement.position))
+                      .filter((movement): movement is ResultPartMovement => Boolean(movement)),
+                  );
+                  return (
+                    <fieldset className="grid gap-3">
+                      <legend className="text-sm font-medium">Section score</legend>
+                      <div className="grid grid-cols-2 gap-2">
+                        {fields.map((field) => (
+                          <label key={field} className="grid gap-1 text-xs text-muted-foreground">
+                            {SCORE_LABELS[field]}
+                            <Input
+                              type="number"
+                              min="0"
+                              step={field === "calories" || field === "distance_m" ? "any" : "1"}
+                              value={score?.score[field] ?? ""}
+                              onChange={(event) => updateSectionScore(group.index!, field, event.target.value)}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                      {score?.notes?.trim() || score?.notesExpanded ? (
+                        <div className="grid gap-1">
+                          <Label htmlFor={`${inputId}-section-${group.index}-notes`}>Section notes</Label>
+                          <Textarea
+                            id={`${inputId}-section-${group.index}-notes`}
+                            maxLength={300}
+                            rows={2}
+                            value={score?.notes ?? ""}
+                            onChange={(event) => updateSectionNotes(group.index!, event.currentTarget.value, true)}
+                            onBlur={(event) => {
+                              if (event.currentTarget.value.trim()) return;
+                              updateSectionNotes(group.index!, "", false);
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <Button type="button" variant="link" className="h-auto w-fit justify-start p-0" onClick={() => updateSectionNotes(group.index!, "", true)}>
+                          Add note
+                        </Button>
+                      )}
+                    </fieldset>
+                  );
+                })()}
+              </div>,
+            ]
+          : []),
+        ...group.items.map(({ movement: part }, partIndex) => {
         const movement = definitions.get(part.position);
-        const fields = scoreKeys(movement, workoutType);
+        const section = sections?.[movement?.section ?? -1];
+        const sectionedConditioning = Boolean(section && section.format !== "strength");
+        const fields = sectionedConditioning ? [] : scoreKeys(movement, workoutType);
         return (
           <details
             key={`${part.position}-${part.movement_id}`}
@@ -399,7 +625,8 @@ export function ResultPartsEditor({
                         min="0"
                         step={field === "time_seconds" || field === "rounds" || field === "reps" ? "1" : "any"}
                         value={part.score[field] ?? ""}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          const value = event.currentTarget.value;
                           updateParts((current) =>
                             current.map((item) =>
                               item.position === part.position
@@ -407,19 +634,40 @@ export function ResultPartsEditor({
                                     ...item,
                                     score: {
                                       ...item.score,
-                                      [field]: event.currentTarget.value,
+                                      [field]: value,
                                     },
                                   }
                                 : item,
                             ),
-                          )
-                        }
+                          );
+                        }}
                       />
                     </div>
                   ))}
                 </div>
-              ) : (
+              ) : sectionedConditioning ? null : (
                 <p className="text-sm text-muted-foreground">Score-only part</p>
+              )}
+              {sectionedConditioning && movement?.load_kg != null && (
+                <label className="grid max-w-xs gap-1 text-xs text-muted-foreground">
+                  Weight used ({units})
+                  <Input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={part.load}
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
+                      updateParts((current) =>
+                        current.map((item) =>
+                          item.position === part.position
+                            ? { ...item, load: value }
+                            : item,
+                        ),
+                      );
+                    }}
+                  />
+                </label>
               )}
               {part.notes.trim() || part.notesExpanded ? (
                 <div className="grid gap-1">
@@ -429,15 +677,16 @@ export function ResultPartsEditor({
                     maxLength={300}
                     rows={2}
                     value={part.notes}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const value = event.currentTarget.value;
                       updateParts((current) =>
                         current.map((item) =>
                           item.position === part.position
-                            ? { ...item, notes: event.currentTarget.value }
+                            ? { ...item, notes: value }
                             : item,
                         ),
-                      )
-                    }
+                      );
+                    }}
                     onBlur={(event) => {
                       if (event.currentTarget.value.trim()) return;
                       updateParts((current) =>
@@ -471,7 +720,8 @@ export function ResultPartsEditor({
             </div>
           </details>
         );
-      })}
+      }),
+      ])}
       {parts.length === 0 && (
         <p className="text-sm text-muted-foreground">No workout parts are available.</p>
       )}

@@ -15,7 +15,16 @@ function load(filename, overrides = {}) {
   new Function("require", "module", "exports", js)((id) => overrides[id] ?? (id.startsWith(".") ? load(path.resolve(path.dirname(filename), `${id}.ts`), overrides) : id.startsWith("@/") ? load(`src/${id.slice(2)}.ts`, overrides) : require(id)), loaded, loaded.exports);
   return loaded.exports;
 }
-const { timerView, crossedCues, elapsedTime, defaultTimer } = load("src/lib/workout-timer.ts");
+const {
+  timerView,
+  crossedCues,
+  elapsedTime,
+  defaultTimer,
+  emomMovementAt,
+  sectionResultForTimer,
+  shouldShowCompletedAtCap,
+  timerForSection,
+} = load("src/lib/workout-timer.ts");
 const { platesPerSide, roundToLoadable } = load("src/lib/plates.ts");
 const { parsePercentages, percentageLoad } = load("src/lib/percent-loads.ts");
 const { workoutVersion } = load("src/lib/workout-version.ts");
@@ -27,7 +36,7 @@ function workoutHarness(extra = {}) {
   let stateIndex, refIndex, effects;
   const navigations = [];
   const props = { athleteId: "a", date: "2026-01-01", units: "kg", maxes: [], workout: { id: "w", title: "WOD", workout_type: "for_time", time_cap_seconds: 600, rounds: 5, movements: [], isScaled: false }, ...extra };
-  const { WorkoutMode } = load("src/app/athlete/workout/[workoutId]/workout-mode.tsx", {
+  const { WorkoutMode, workoutModeVersionFingerprint } = load("src/app/athlete/workout/[workoutId]/workout-mode.tsx", {
     react: {
       useEffect: (effect) => { effects.push(effect); },
       useRef: (value) => refs[refIndex++] ??= { current: value },
@@ -43,7 +52,14 @@ function workoutHarness(extra = {}) {
   });
   const render = () => { stateIndex = 0; refIndex = 0; effects = []; return WorkoutMode(props); };
   render();
-  return { states, navigations, render, effects: () => effects, props };
+  return {
+    states,
+    navigations,
+    render,
+    effects: () => effects,
+    props,
+    workoutModeVersionFingerprint,
+  };
 }
 
 function withWorkoutStorage(run) {
@@ -80,6 +96,75 @@ test("finish retains paused progress until a result newer than the session is sa
   assert.equal(records.has(key), false);
 }));
 
+test("saved sessions without section timer fields still restore", () => withWorkoutStorage((records) => {
+  const h = workoutHarness();
+  const { timedSection, sectionResults, ...oldSession } = h.states[0];
+  assert.equal(timedSection, null);
+  assert.deepEqual(sectionResults, {});
+  records.set(
+    "workout:a:w:2026-01-01:kg",
+    JSON.stringify(oldSession),
+  );
+  h.effects()[0]();
+  assert.equal(h.states[0].timedSection, null);
+  assert.deepEqual(h.states[0].sectionResults, {});
+}));
+
+test("sectionless workout fingerprints preserve the legacy shape", () => {
+  const h = workoutHarness();
+  const movement = {
+    movement_id: "10000000-0000-4000-8000-000000000001",
+    sets: 5,
+    reps: 5,
+    load_kg: 100,
+    notes: "tempo",
+    reason: null,
+    section: null,
+  };
+  const workout = {
+    id: "w",
+    title: "WOD",
+    description: null,
+    notes: null,
+    workout_type: "strength",
+    time_cap_seconds: null,
+    rounds: null,
+    sections: [],
+    movements: [movement],
+    isScaled: false,
+    modifications: "",
+  };
+  assert.equal(
+    h.workoutModeVersionFingerprint(workout),
+    JSON.stringify({
+      movements: [
+        {
+          movement_id: movement.movement_id,
+          sets: movement.sets,
+          reps: movement.reps,
+          load_kg: movement.load_kg,
+          notes: movement.notes,
+          reason: movement.reason,
+        },
+      ],
+      rounds: null,
+      time_cap_seconds: null,
+      isScaled: false,
+      modifications: "",
+    }),
+  );
+  assert.notEqual(
+    h.workoutModeVersionFingerprint({
+      ...workout,
+      sections: [
+        { title: "A. Back Squat", format: "strength", time_cap_seconds: null, rounds: null },
+      ],
+      movements: [{ ...movement, section: 0 }],
+    }),
+    h.workoutModeVersionFingerprint(workout),
+  );
+});
+
 test("capped For Time handoff includes cap time plus reps accepted by buildScore", () => {
   const h = workoutHarness();
   h.states[0] = { ...h.states[0], reps: 42, clock: { startedAt: Date.now() - 611000, pausedAt: null, accumulated: 0 } };
@@ -92,6 +177,510 @@ test("capped For Time handoff includes cap time plus reps accepted by buildScore
   const { buildScore, scoreSchema } = load("src/lib/result-score.ts");
   assert.deepEqual(buildScore(scoreSchema.parse(workoutPrefill(query)), "for_time", "kg"), { score: { time_seconds: 600, reps: 42, rounds: null, load_kg: null } });
 });
+
+test("section timer results use the active section's score format", () => {
+  const clock = { startedAt: 0, pausedAt: null, accumulated: 0 };
+  assert.deepEqual(
+    sectionResultForTimer(
+      { format: "for_time", time_cap_seconds: 600 },
+      { mode: "for_time", capSeconds: 600 },
+      clock,
+      4,
+      42,
+      false,
+      611000,
+    ),
+    { time_seconds: 600, reps: 42 },
+  );
+  assert.deepEqual(
+    sectionResultForTimer(
+      { format: "for_time", time_cap_seconds: 600 },
+      { mode: "for_time", capSeconds: 600 },
+      clock,
+      4,
+      42,
+      true,
+      611000,
+    ),
+    { time_seconds: 600 },
+  );
+  assert.deepEqual(
+    sectionResultForTimer(
+      { format: "amrap", time_cap_seconds: 1200 },
+      { mode: "amrap", durationSeconds: 1200 },
+      clock,
+      3,
+      8,
+      false,
+      30000,
+    ),
+    { rounds: 3, reps: 8 },
+  );
+  assert.deepEqual(
+    sectionResultForTimer(
+      { format: "emom", time_cap_seconds: 600 },
+      { mode: "emom", intervalSeconds: 60, intervals: 10 },
+      clock,
+      5,
+      2,
+      false,
+      30000,
+    ),
+    { rounds: 5, reps: 2 },
+  );
+  assert.equal(
+    sectionResultForTimer(
+      { format: "amrap", time_cap_seconds: 1200 },
+      { mode: "amrap", durationSeconds: 1200 },
+      { startedAt: null, pausedAt: null, accumulated: 0 },
+      0,
+      0,
+      false,
+      30000,
+    ),
+    null,
+  );
+});
+
+test("a completed For Time section at its cap omits reps", () => {
+  assert.deepEqual(
+    sectionResultForTimer(
+      { format: "for_time", time_cap_seconds: 600 },
+      { mode: "for_time", capSeconds: 600 },
+      { startedAt: 0, pausedAt: null, accumulated: 0 },
+      3,
+      21,
+      true,
+      611000,
+    ),
+    { time_seconds: 600 },
+  );
+});
+
+test("completed-at-cap visibility respects timed sections", () => {
+  assert.equal(shouldShowCompletedAtCap("for_time", "amrap", null), true);
+  assert.equal(shouldShowCompletedAtCap("for_time", "amrap", 0), false);
+  assert.equal(shouldShowCompletedAtCap("other", "for_time", 0), true);
+});
+
+test("EMOM movement cycling stays within the timed section", () => {
+  const movements = [
+    { name: "Back Squat", section: 0 },
+    { name: "Row", section: 1 },
+    { name: "Power Clean", section: 1 },
+  ];
+  assert.equal(emomMovementAt(movements, 0, 1).name, "Row");
+  assert.equal(emomMovementAt(movements, 1, 1).name, "Power Clean");
+  assert.equal(emomMovementAt(movements, 2, 1).name, "Row");
+  assert.equal(emomMovementAt(movements, 2, null).name, "Power Clean");
+});
+
+test("section score fields for each format are the fields serialized", () => {
+  const { sectionScoreKeys, serializeSectionScores } = load(
+    "src/components/result-parts-editor.tsx",
+    {
+      react: {
+        useEffect: () => {},
+        useMemo: () => {},
+        useRef: () => {},
+        useState: () => {},
+      },
+      "lucide-react": { Trash2: "Trash2" },
+      "@/components/ui/badge": { Badge: "Badge" },
+      "@/components/ui/button": { Button: "Button" },
+      "@/components/ui/input": { Input: "Input" },
+      "@/components/ui/label": { Label: "Label" },
+      "@/components/ui/textarea": { Textarea: "Textarea" },
+    },
+  );
+  const movements = [
+    { calories: 12, distance_m: null },
+    { calories: null, distance_m: 500 },
+  ];
+  const formats = [
+    ["for_time", ["time_seconds", "reps"]],
+    ["amrap", ["rounds", "reps"]],
+    ["emom", ["rounds", "reps"]],
+    ["other", ["time_seconds", "rounds", "reps"]],
+  ];
+
+  for (const [format, baseFields] of formats) {
+    const fields = sectionScoreKeys({ format }, movements);
+    assert.deepEqual(fields, [...baseFields, "calories", "distance_m"]);
+    const [submitted] = serializeSectionScores([
+      {
+        section: 2,
+        score: Object.fromEntries(fields.map((field) => [field, "7"])),
+        notes: "",
+        notesExpanded: false,
+      },
+    ]);
+    assert.deepEqual(Object.keys(submitted.score), fields);
+    assert.deepEqual(Object.values(submitted.score), fields.map(() => 7));
+  }
+});
+
+test("section timers use section caps and reset only the clock", () => {
+  assert.deepEqual(
+    timerForSection({ format: "amrap", time_cap_seconds: 1200 }),
+    { mode: "amrap", durationSeconds: 1200 },
+  );
+  assert.deepEqual(
+    timerForSection({ format: "for_time", time_cap_seconds: 900 }),
+    { mode: "for_time", capSeconds: 900 },
+  );
+  assert.deepEqual(
+    timerForSection({ format: "emom", time_cap_seconds: 720 }),
+    { mode: "emom", intervalSeconds: 60, intervals: 12 },
+  );
+  assert.equal(timerForSection({ format: "emom", time_cap_seconds: null }), null);
+  assert.equal(timerForSection({ format: "other", time_cap_seconds: 600 }), null);
+
+  const section = { title: "C. AMRAP", format: "amrap", time_cap_seconds: 1200, rounds: null };
+  const h = workoutHarness({
+    workout: {
+      id: "w",
+      title: "WOD",
+      workout_type: "other",
+      time_cap_seconds: null,
+      rounds: null,
+      sections: [section],
+      movements: [
+        {
+          movement_id: "10000000-0000-4000-8000-000000000001",
+          name: "Row",
+          sets: 3,
+          reps: 10,
+          load_kg: null,
+          section: 0,
+        },
+      ],
+      isScaled: false,
+    },
+  });
+  h.states[0] = {
+    ...h.states[0],
+    clock: { startedAt: Date.now() - 5000, pausedAt: null, accumulated: 0 },
+    done: ["0-0"],
+    weights: { "0-0": 43 },
+    rounds: 2,
+    reps: 6,
+    completedAtCap: true,
+  };
+  h.states[1] = true;
+  elements(h.render())
+    .find((node) => node.type === "button" && node.props.children === "Time this section")
+    .props.onClick();
+  assert.deepEqual(h.states[0].config, { mode: "amrap", durationSeconds: 1200 });
+  assert.deepEqual(h.states[0].clock, { startedAt: null, pausedAt: null, accumulated: 0 });
+  assert.deepEqual(h.states[0].done, ["0-0"]);
+  assert.deepEqual(h.states[0].weights, { "0-0": 43 });
+  assert.equal(h.states[0].timedSection, 0);
+  assert.deepEqual(h.states[0].sectionResults, {});
+  assert.equal(h.states[0].rounds, 0);
+  assert.equal(h.states[0].reps, 0);
+  assert.equal(h.states[0].completedAtCap, false);
+
+  h.states[0] = {
+    ...h.states[0],
+    clock: { startedAt: Date.now() - 5000, pausedAt: null, accumulated: 0 },
+  };
+  elements(h.render())
+    .find((node) => node.type === "button" && node.props.children === "Reset timer")
+    .props.onClick();
+  assert.deepEqual(h.states[0].config, { mode: "amrap", durationSeconds: 1200 });
+  assert.deepEqual(h.states[0].clock, { startedAt: null, pausedAt: null, accumulated: 0 });
+  assert.deepEqual(h.states[0].done, ["0-0"]);
+  assert.deepEqual(h.states[0].weights, { "0-0": 43 });
+  assert.equal(h.states[0].timedSection, 0);
+});
+
+test("completed-at-cap control appears for a timed For Time section", () => {
+  const h = workoutHarness({
+    workout: {
+      id: "w",
+      title: "WOD",
+      workout_type: "other",
+      time_cap_seconds: null,
+      rounds: null,
+      sections: [
+        { title: "A. For Time", format: "for_time", time_cap_seconds: 300, rounds: null },
+      ],
+      movements: [],
+      isScaled: false,
+    },
+  });
+  const timestamp = Date.now();
+  h.states[0] = {
+    ...h.states[0],
+    timedSection: 0,
+    config: { mode: "for_time", capSeconds: 300 },
+    clock: { startedAt: timestamp - 311000, pausedAt: null, accumulated: 0 },
+  };
+  h.states[1] = true;
+  h.states[5] = timestamp;
+
+  const completedLabel = elements(h.render()).find(
+    (node) =>
+      node.type === "label" &&
+      Array.isArray(node.props.children) &&
+      node.props.children.some(
+        (child) =>
+          typeof child === "string" &&
+          child.includes("Completed all reps before the cap"),
+      ),
+  );
+  assert.ok(completedLabel);
+});
+
+test("standalone For Time retains its cap control with a different timer mode", () => {
+  const h = workoutHarness({
+    workout: {
+      id: "w",
+      title: "WOD",
+      workout_type: "for_time",
+      time_cap_seconds: 300,
+      rounds: null,
+      sections: [],
+      movements: [],
+      isScaled: false,
+    },
+  });
+  const timestamp = Date.now();
+  h.states[0] = {
+    ...h.states[0],
+    config: { mode: "amrap", durationSeconds: 600 },
+    clock: { startedAt: timestamp - 311000, pausedAt: null, accumulated: 0 },
+  };
+  h.states[1] = true;
+  h.states[5] = timestamp;
+
+  const completedLabel = elements(h.render()).find(
+    (node) =>
+      node.type === "label" &&
+      Array.isArray(node.props.children) &&
+      node.props.children.some(
+        (child) =>
+          typeof child === "string" &&
+          child.includes("Completed all reps before the cap"),
+      ),
+  );
+  assert.ok(completedLabel);
+});
+
+test("For Time workout hides the cap control while timing an AMRAP section", () => {
+  const h = workoutHarness({
+    workout: {
+      id: "w",
+      title: "WOD",
+      workout_type: "for_time",
+      time_cap_seconds: 600,
+      rounds: null,
+      sections: [
+        { title: "A. AMRAP", format: "amrap", time_cap_seconds: 600, rounds: null },
+      ],
+      movements: [],
+      isScaled: false,
+    },
+  });
+  const timestamp = Date.now();
+  h.states[0] = {
+    ...h.states[0],
+    timedSection: 0,
+    config: { mode: "amrap", durationSeconds: 600 },
+    clock: { startedAt: timestamp - 611000, pausedAt: null, accumulated: 0 },
+  };
+  h.states[1] = true;
+  h.states[5] = timestamp;
+
+  const completedLabel = elements(h.render()).find(
+    (node) =>
+      node.type === "label" &&
+      Array.isArray(node.props.children) &&
+      node.props.children.some(
+        (child) =>
+          typeof child === "string" &&
+          child.includes("Completed all reps before the cap"),
+      ),
+  );
+  assert.equal(completedLabel, undefined);
+});
+
+test("switching timed sections records the previous section result", () => {
+  const sections = [
+    { title: "A. AMRAP", format: "amrap", time_cap_seconds: 600, rounds: null },
+    { title: "B. For Time", format: "for_time", time_cap_seconds: 300, rounds: null },
+  ];
+  const h = workoutHarness({
+    workout: {
+      id: "w",
+      title: "WOD",
+      workout_type: "other",
+      time_cap_seconds: null,
+      rounds: null,
+      sections,
+      movements: [
+        {
+          movement_id: "10000000-0000-4000-8000-000000000001",
+          name: "Row",
+          sets: null,
+          reps: 10,
+          load_kg: null,
+          section: 0,
+        },
+        {
+          movement_id: "10000000-0000-4000-8000-000000000002",
+          name: "Power Clean",
+          sets: null,
+          reps: 6,
+          load_kg: null,
+          section: 1,
+        },
+      ],
+      isScaled: false,
+    },
+  });
+  h.states[0] = {
+    ...h.states[0],
+    timedSection: 0,
+    config: { mode: "amrap", durationSeconds: 600 },
+    clock: { startedAt: Date.now() - 30000, pausedAt: null, accumulated: 0 },
+    rounds: 2,
+    reps: 8,
+    done: ["0-0"],
+    weights: { "0-0": 43 },
+  };
+  h.states[1] = true;
+  const sectionButtons = elements(h.render()).filter(
+    (node) => node.type === "button" && node.props.children === "Time this section",
+  );
+  sectionButtons[1].props.onClick();
+  assert.deepEqual(h.states[0].sectionResults, { "0": { rounds: 2, reps: 8 } });
+  assert.equal(h.states[0].timedSection, 1);
+  assert.deepEqual(h.states[0].config, { mode: "for_time", capSeconds: 300 });
+  assert.equal(h.states[0].rounds, 0);
+  assert.equal(h.states[0].reps, 0);
+  assert.equal(h.states[0].completedAtCap, false);
+  assert.deepEqual(h.states[0].done, ["0-0"]);
+  assert.deepEqual(h.states[0].weights, { "0-0": 43 });
+});
+
+test("checking a strength set saves and stops the timed section", () => {
+  const h = workoutHarness({
+    workout: {
+      id: "w",
+      title: "WOD",
+      workout_type: "other",
+      time_cap_seconds: null,
+      rounds: null,
+      sections: [
+        { title: "A. AMRAP", format: "amrap", time_cap_seconds: 600, rounds: null },
+        { title: "B. Back Squat", format: "strength", time_cap_seconds: null, rounds: null },
+      ],
+      movements: [
+        {
+          movement_id: "10000000-0000-4000-8000-000000000001",
+          name: "Row",
+          sets: null,
+          reps: 10,
+          load_kg: null,
+          section: 0,
+        },
+        {
+          movement_id: "10000000-0000-4000-8000-000000000002",
+          name: "Back Squat",
+          sets: 1,
+          reps: 5,
+          load_kg: 50,
+          section: 1,
+        },
+      ],
+      isScaled: false,
+    },
+  });
+  h.states[0] = {
+    ...h.states[0],
+    timedSection: 0,
+    config: { mode: "amrap", durationSeconds: 600 },
+    clock: { startedAt: Date.now() - 30000, pausedAt: null, accumulated: 0 },
+    rounds: 3,
+    reps: 7,
+    completedAtCap: true,
+  };
+  h.states[1] = true;
+
+  const setCheckbox = elements(h.render()).find(
+    (node) =>
+      node.type === "input" &&
+      node.props.type === "checkbox" &&
+      node.props.className === "size-6" &&
+      node.props.checked === false,
+  );
+  setCheckbox.props.onChange({ target: { checked: true } });
+
+  assert.deepEqual(h.states[0].sectionResults, { "0": { rounds: 3, reps: 7 } });
+  assert.equal(h.states[0].timedSection, null);
+  assert.equal(h.states[0].rounds, 0);
+  assert.equal(h.states[0].reps, 0);
+  assert.equal(h.states[0].completedAtCap, false);
+  assert.deepEqual(h.states[0].done, ["1-0"]);
+  assert.deepEqual(h.states[0].weights, { "1-0": 50 });
+  assert.equal(h.states[0].config.mode, "rest");
+  assert.equal(h.states[0].clock.startedAt > 0, true);
+});
+
+test("finish hands section scores to the result form without an overall timer score", () => withWorkoutStorage((records, sessionRecords) => {
+  const section = {
+    title: "C. 10-min AMRAP",
+    format: "amrap",
+    time_cap_seconds: 600,
+    rounds: null,
+  };
+  const h = workoutHarness({
+    workout: {
+      id: "w",
+      title: "WOD",
+      workout_type: "other",
+      time_cap_seconds: null,
+      rounds: null,
+      sections: [section],
+      movements: [
+        {
+          movement_id: "10000000-0000-4000-8000-000000000001",
+          name: "Row",
+          sets: null,
+          reps: 10,
+          load_kg: null,
+          section: 0,
+        },
+      ],
+      isScaled: false,
+    },
+  });
+  h.states[0] = {
+    ...h.states[0],
+    config: { mode: "amrap", durationSeconds: 600 },
+    timedSection: 0,
+    clock: { startedAt: Date.now() - 30000, pausedAt: null, accumulated: 0 },
+    rounds: 3,
+    reps: 7,
+  };
+  h.states[1] = true;
+  elements(h.render())
+    .find((node) => node.type === "button" && node.props.children === "Finish & review result")
+    .props.onClick();
+  const query = new URL(h.navigations[0], "https://example.test").searchParams;
+  const token = query.get("parts_handoff");
+  assert.ok(token);
+  assert.equal(query.has("time_seconds"), false);
+  assert.equal(query.has("rounds"), false);
+  assert.equal(query.has("reps"), false);
+  assert.deepEqual(
+    JSON.parse(sessionRecords.get(`workout-result-sections:${token}`)),
+    [{ section: 0, score: { rounds: 3, reps: 7 } }],
+  );
+  assert.equal(JSON.parse([...records.values()][0]).sectionResults["0"].rounds, 3);
+}));
 
 test("finish hands off completed part sets through session storage", () => withWorkoutStorage((_records, sessionRecords) => {
   const movementId = "10000000-0000-4000-8000-000000000001";

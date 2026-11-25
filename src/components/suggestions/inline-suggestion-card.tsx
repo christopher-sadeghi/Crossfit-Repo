@@ -55,6 +55,17 @@ export function InlineSuggestionCard({ id, suggestion, onOpenReview }: {
           <p className="font-medium">{card.title}{card.scheduledOn ? ` · ${card.scheduledOn}` : ""}</p>
           <p>{card.format}{card.rounds != null ? ` · ${card.rounds} rounds` : ""}{card.timeCapMinutes != null ? ` · ${card.timeCapMinutes} min cap` : ""}</p>
           <p className="whitespace-pre-wrap">{card.description}</p>
+          {card.sections.length > 0 && (
+            <ul className="grid gap-1">
+              {card.sections.map((section, index) => (
+                <li key={index} className="font-medium">
+                  {section.title} · {section.format.replace("_", " ")}
+                  {section.time_cap_minutes != null ? ` · ${section.time_cap_minutes} min` : ""}
+                  {section.rounds != null ? ` · ${section.rounds} rounds` : ""}
+                </li>
+              ))}
+            </ul>
+          )}
           <ul className="list-disc pl-5">{card.movements.map((movement, index) => <li key={index}>{movement}</li>)}</ul>
           {card.notes && <p className="whitespace-pre-wrap">Notes: {card.notes}</p>}
           {pending && <ApproveWorkoutSuggestionForm id={id} mode={card.mode} defaultSaveAs="new" resultCount={0} compact />}

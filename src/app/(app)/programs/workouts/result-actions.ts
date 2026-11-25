@@ -14,13 +14,17 @@ import {
 import {
   partsForVersion,
   resultPartsSchema,
+  hasSectionScoreEntry,
+  sectionScoresSchema,
   type LiftPrSetLocation,
   type ResultPart,
+  type SectionScore,
 } from "@/lib/result-parts";
-import { buildScore, scoreFields } from "@/lib/result-score";
+import { buildResultScore, scoreFields } from "@/lib/result-score";
 import { createClient } from "@/lib/supabase/server";
 import { fromKgPrecise } from "@/lib/units";
 import { workoutVersion } from "@/lib/workout-version";
+import { workoutSectionsSchema } from "@/lib/workout-sections";
 
 const resultSchema = z.object({
   workout_id: z.string().uuid(),
@@ -30,10 +34,12 @@ const resultSchema = z.object({
   is_rx: z.enum(["rx", "scaled"], { message: "Choose Rx or Scaled." }),
   notes: z.string().trim().max(500).transform((v) => v || null),
   parts: z.string().default("[]"),
+  section_scores: z.string().default("[]"),
 });
 
 export type CoachResultState = FormState & {
   savedParts?: ResultPart[];
+  savedSectionScores?: SectionScore[];
   newPrSets?: LiftPrSetLocation[];
   prError?: boolean;
 };
@@ -47,7 +53,7 @@ export async function logResult(_: FormState, formData: FormData): Promise<Coach
   const [{ data: workout }, coach, { data: athlete }] = await Promise.all([
     supabase
       .from("workouts")
-      .select("id, title, workout_type, rounds, time_cap_seconds, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(id, name))")
+      .select("id, title, workout_type, rounds, time_cap_seconds, sections, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, section, movements(id, name))")
       .eq("id", r.workout_id)
       .order("position", { referencedTable: "workout_movements" })
       .maybeSingle(),
@@ -57,6 +63,8 @@ export async function logResult(_: FormState, formData: FormData): Promise<Coach
   if (!workout) return failure(formData, "That WOD no longer exists.");
   if (!coach || !athlete || athlete.coach_id !== coach.gymId)
     return failure(formData, "Choose an athlete in your coaching scope.");
+  const parsedSections = workoutSectionsSchema.safeParse(workout.sections);
+  const sections = parsedSections.success ? parsedSections.data : [];
 
   const { data: scaling } = await supabase
     .from("athlete_workout_scalings")
@@ -73,6 +81,7 @@ export async function logResult(_: FormState, formData: FormData): Promise<Coach
       })),
       rounds: workout.rounds,
       time_cap_seconds: workout.time_cap_seconds,
+      sections,
     },
     scaling,
     r.performed_on,
@@ -85,9 +94,23 @@ export async function logResult(_: FormState, formData: FormData): Promise<Coach
     return failure(formData, parsedParts.error.issues[0]?.message ?? "Check the part results.");
   const parts = partsForVersion(parsedParts.data, version);
   if (!parts) return failure(formData, "The workout parts changed. Refresh and try again.");
+  let rawSectionScores: unknown;
+  try {
+    rawSectionScores = JSON.parse(r.section_scores);
+  } catch {
+    return failure(formData, "Check the section scores.");
+  }
+  const parsedSectionScores = sectionScoresSchema.safeParse(rawSectionScores);
+  if (!parsedSectionScores.success)
+    return failure(formData, parsedSectionScores.error.issues[0]?.message ?? "Check the section scores.");
+  const sectionScores = parsedSectionScores.data.filter(
+    (score) =>
+      score.section < (version.sections?.length ?? 0) &&
+      hasSectionScoreEntry(score),
+  );
 
   const fallbackLoadKg = maxDoneSetLoad(parts);
-  const scoreResult = buildScore(
+  const scoreResult = buildResultScore(
     {
       ...r,
       load:
@@ -98,8 +121,14 @@ export async function logResult(_: FormState, formData: FormData): Promise<Coach
     },
     workout.workout_type,
     coach.units,
+    Boolean(version.sections?.length),
+    parts,
+    sectionScores,
+    fallbackLoadKg,
   );
-  if ("error" in scoreResult) return failure(formData, scoreResult.error);
+  if ("error" in scoreResult) {
+    return failure(formData, scoreResult.error);
+  }
   const score = { ...scoreResult.score };
   if (r.load == null && fallbackLoadKg != null) score.load_kg = fallbackLoadKg;
 
@@ -108,6 +137,7 @@ export async function logResult(_: FormState, formData: FormData): Promise<Coach
     athlete_id: r.athlete_id,
     performed_on: r.performed_on,
     parts,
+    section_scores: sectionScores,
     ...score,
     is_rx: r.is_rx === "rx",
     notes: r.notes,
@@ -134,6 +164,7 @@ export async function logResult(_: FormState, formData: FormData): Promise<Coach
       position,
       set_index,
     })),
+    savedSectionScores: sectionScores,
     prError: Boolean(prSync.error),
   };
 }

@@ -3,6 +3,11 @@ import Link from "next/link";
 import { MovementDemoSheet } from "@/components/movements/movement-demo-sheet";
 import type { Enums } from "@/lib/supabase/database.types";
 import { formatDuration, formatWeight, type Units } from "@/lib/units";
+import {
+  formatSectionHeadline,
+  groupBySection,
+  type WorkoutSection,
+} from "@/lib/workout-sections";
 
 export type WhiteboardWorkout = {
   title: string;
@@ -11,6 +16,7 @@ export type WhiteboardWorkout = {
   rounds: number | null;
   description: string | null;
   notes: string | null;
+  sections?: WorkoutSection[];
 };
 
 export type WhiteboardMovement = {
@@ -23,6 +29,7 @@ export type WhiteboardMovement = {
   calories: number | null;
   duration_seconds: number | null;
   notes: string | null;
+  section?: number | null;
 };
 
 export function formatHeadline(w: Pick<WhiteboardWorkout, "workout_type" | "time_cap_seconds" | "rounds">) {
@@ -71,6 +78,7 @@ export function Whiteboard({
 }) {
   const headline = formatHeadline(workout);
   const showCap = workout.time_cap_seconds && (workout.workout_type === "for_time" || workout.workout_type === "other");
+  const groups = groupBySection(movements, workout.sections);
 
   return (
     <div className="rounded-xl border-8 border-zinc-300 bg-zinc-900 p-6 font-mono text-zinc-50 shadow-inner dark:border-zinc-700">
@@ -79,17 +87,25 @@ export function Whiteboard({
       {workout.description && <p className="mt-3 whitespace-pre-line text-zinc-300">{workout.description}</p>}
       <ul className="mt-4 space-y-1 text-lg">
         {movements.length ? (
-          movements.map((m, i) => (
-            <li key={i}>
-              {m.movement_id && showDemoSheet ? (
-                <MovementDemoSheet movement={{ id: m.movement_id, name: m.name }} className="decoration-amber-300">
-                  {formatMovementLine(m, units)}
-                </MovementDemoSheet>
-              ) : formatMovementLine(m, units)}
-              {m.movement_id && howToHref && <Link href={howToHref(m.movement_id)} aria-label={`How to ${m.name}`} className="ml-3 text-sm text-amber-300 underline underline-offset-4">How to</Link>}
-              {m.notes && <span className="ml-2 text-sm text-zinc-400">({m.notes})</span>}
-            </li>
-          ))
+          groups.flatMap((group) => [
+            ...(group.section
+              ? [<li key={`section-${group.index}`} className="border-t border-zinc-700 pt-3 text-base font-bold text-amber-300">
+                  {group.section.title}
+                  {formatSectionHeadline(group.section) && ` · ${formatSectionHeadline(group.section)}`}
+                </li>]
+              : []),
+            ...group.items.map(({ movement: m, position }) => (
+              <li key={position}>
+                {m.movement_id && showDemoSheet ? (
+                  <MovementDemoSheet movement={{ id: m.movement_id, name: m.name }} className="decoration-amber-300">
+                    {formatMovementLine(m, units)}
+                  </MovementDemoSheet>
+                ) : formatMovementLine(m, units)}
+                {m.movement_id && howToHref && <Link href={howToHref(m.movement_id)} aria-label={`How to ${m.name}`} className="ml-3 text-sm text-amber-300 underline underline-offset-4">How to</Link>}
+                {m.notes && <span className="ml-2 text-sm text-zinc-400">({m.notes})</span>}
+              </li>
+            )),
+          ])
         ) : (
           <li className="text-zinc-500">Add movements to see them here.</li>
         )}

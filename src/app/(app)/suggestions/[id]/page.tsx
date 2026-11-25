@@ -17,8 +17,8 @@ import {
   adjustMacrosSchema,
   MACRO_DISCLAIMER,
   SUGGESTION_LABELS,
+  safeParseWriteWorkoutProposal,
   writeWorkoutInputSchema,
-  writeWorkoutSchema,
 } from "@/lib/ai/suggestions";
 import { getViewer } from "@/lib/viewer";
 import { createClient } from "@/lib/supabase/server";
@@ -101,8 +101,8 @@ export default async function SuggestionPage({ params }: Props) {
   const shownSummary = summaryParsed?.success ? summaryParsed.data : null;
   const summaryInput = summaryType ? progressSummaryInputSchema.safeParse(suggestion.input) : null;
   const goalTitles = new Map((summaryInput?.success ? summaryInput.data.goals : []).map((goal) => [goal.id, goal.title]));
-  const workoutProposal = workoutType ? writeWorkoutSchema.safeParse(suggestion.proposal) : null;
-  const workoutFinal = workoutType ? writeWorkoutSchema.safeParse(suggestion.final) : null;
+  const workoutProposal = workoutType ? safeParseWriteWorkoutProposal(suggestion.proposal) : null;
+  const workoutFinal = workoutType ? safeParseWriteWorkoutProposal(suggestion.final) : null;
   const shownWorkout =
     suggestion.status === "approved" || suggestion.status === "edited"
       ? workoutFinal?.success
@@ -303,6 +303,7 @@ export default async function SuggestionPage({ params }: Props) {
                   workout_type: currentWorkout.workout_type,
                   time_cap_seconds: currentWorkout.time_cap_seconds,
                   rounds: currentWorkout.rounds,
+                  sections: currentWorkout.sections,
                   description: currentWorkout.description,
                   notes: currentWorkout.notes,
                 }}
@@ -320,6 +321,10 @@ export default async function SuggestionPage({ params }: Props) {
                 workout_type: shownWorkout.workout_type,
                 time_cap_seconds: shownWorkout.time_cap_minutes == null ? null : shownWorkout.time_cap_minutes * 60,
                 rounds: shownWorkout.rounds,
+                sections: shownWorkout.sections.map(({ time_cap_minutes, ...section }) => ({
+                  ...section,
+                  time_cap_seconds: time_cap_minutes == null ? null : time_cap_minutes * 60,
+                })),
                 description: shownWorkout.description,
                 notes: shownWorkout.notes,
               }}

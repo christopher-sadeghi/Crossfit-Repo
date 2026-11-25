@@ -2,13 +2,13 @@ import Link from "next/link";
 import { ApproveProgramForm, RejectSuggestionForm } from "./suggestion-forms";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { draftProgramInputSchema, draftProgramSchema } from "@/lib/ai/draft-program-schema";
+import { draftProgramInputSchema, draftProgramStoredSchema } from "@/lib/ai/draft-program-schema";
 import { friendlySuggestionError } from "@/lib/ai/service-core";
 import type { Tables } from "@/lib/supabase/database.types";
 
 export function DraftProgramReview({ suggestion }: { suggestion: Tables<"ai_suggestions"> }) {
   const decided = ["approved", "edited"].includes(suggestion.status);
-  const parsed = draftProgramSchema.safeParse(decided ? suggestion.final : suggestion.proposal);
+  const parsed = draftProgramStoredSchema.safeParse(decided ? suggestion.final : suggestion.proposal);
   const input = draftProgramInputSchema.safeParse(suggestion.input);
   const names = new Map(input.success ? input.data.library.map((m) => [m.id, m.name]) : []);
   const units = input.success ? input.data.units : "kg";

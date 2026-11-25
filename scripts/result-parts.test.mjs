@@ -36,17 +36,19 @@ function load(filename) {
 
 const {
   defaultParts,
+  hasSectionScoreEntry,
   initialPartsDirty,
   liftPrCandidates,
   liftPrSetLocations,
   partsForVersion,
   partsSummary,
   resultPartsSchema,
+  scoreForSectionResult,
   samePartsContent,
   shouldResetParts,
 } = load("src/lib/result-parts.ts");
 const { maxDoneSetLoad, submittedParts } = load("src/lib/result-part-prs.ts");
-const { buildScore, scoreSchema } = load("src/lib/result-score.ts");
+const { buildResultScore, buildScore, scoreSchema } = load("src/lib/result-score.ts");
 const movementId = "10000000-0000-4000-8000-000000000001";
 const benchmarkId = "20000000-0000-4000-8000-000000000001";
 
@@ -71,6 +73,86 @@ test("result parts schema is strict and enforces part, set, and value limits", (
     false,
   );
   assert.equal(resultPartsSchema.safeParse(Array(41).fill(valid)).success, false);
+});
+
+test("section-only results require an entry and keep the fallback overall load", () => {
+  const part = {
+    position: 0,
+    movement_id: movementId,
+    name: "Power Clean",
+    sets: [],
+    load_kg: null,
+  };
+  assert.equal(scoreForSectionResult([part], [], null), null);
+  assert.equal(
+    scoreForSectionResult([part], [{ section: 0, score: {} }], null),
+    null,
+  );
+  assert.equal(
+    scoreForSectionResult(
+      [
+        { ...part, load_kg: 43.09 },
+        { ...part, position: 1, movement_id: "20000000-0000-4000-8000-000000000002", load_kg: 29.48 },
+      ],
+      [],
+      null,
+    ),
+    null,
+  );
+  assert.equal(
+    hasSectionScoreEntry({ section: 0, score: {}, notes: "  " }),
+    false,
+  );
+  assert.equal(
+    hasSectionScoreEntry({ section: 0, score: {}, notes: "Cue notes" }),
+    true,
+  );
+  assert.deepEqual(
+    scoreForSectionResult(
+      [part],
+      [{ section: 0, score: {}, notes: "Cue notes" }],
+      null,
+    ),
+    { time_seconds: null, rounds: null, reps: null, load_kg: null },
+  );
+  assert.deepEqual(
+    scoreForSectionResult(
+      [part],
+      [{ section: 0, score: { rounds: 3 } }],
+      null,
+    ),
+    { time_seconds: null, rounds: null, reps: null, load_kg: null },
+  );
+  assert.deepEqual(
+    scoreForSectionResult(
+      [
+        {
+          ...part,
+          sets: [{ reps: 5, load_kg: 100, done: true }],
+        },
+      ],
+      [],
+      100,
+    ),
+    { time_seconds: null, rounds: null, reps: null, load_kg: 100 },
+  );
+  assert.deepEqual(
+    scoreForSectionResult(
+      [
+        {
+          ...part,
+          sets: [{ reps: 5, load_kg: null, done: true }],
+        },
+      ],
+      [],
+      null,
+    ),
+    { time_seconds: null, rounds: null, reps: null, load_kg: null },
+  );
+  assert.deepEqual(
+    scoreForSectionResult([{ ...part, load_kg: 0 }], [], null),
+    null,
+  );
 });
 
 test("defaultParts prefill strength, conditioning, and scaled movements", () => {
@@ -272,6 +354,52 @@ test("a zero-load strength score is valid for a completed set fallback", () => {
   assert.deepEqual(buildScore(scoreSchema.parse({ load: "0" }), "strength", "kg"), {
     score: { time_seconds: null, rounds: null, reps: null, load_kg: 0 },
   });
+});
+
+test("sectioned scores preserve overall fields accepted by the other format", () => {
+  assert.deepEqual(
+    buildResultScore(
+      {
+        minutes: null,
+        seconds: null,
+        rounds: 3,
+        reps: 7,
+        load: null,
+      },
+      "for_time",
+      "kg",
+      true,
+      [],
+      [],
+      null,
+    ),
+    {
+      score: {
+        time_seconds: null,
+        rounds: 3,
+        reps: 7,
+        load_kg: null,
+      },
+    },
+  );
+  assert.deepEqual(
+    buildResultScore(
+      {
+        minutes: null,
+        seconds: null,
+        rounds: null,
+        reps: null,
+        load: null,
+      },
+      "for_time",
+      "kg",
+      true,
+      [],
+      [],
+      null,
+    ),
+    { error: "Enter a score for at least one section." },
+  );
 });
 
 test("partsSummary formats loads in lb and kg", () => {

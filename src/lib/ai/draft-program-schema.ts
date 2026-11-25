@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SECTION_FORMATS } from "../workout-sections";
 
 export const programMovementSchema = z.object({
   movement_id: z.string(),
@@ -9,6 +10,13 @@ export const programMovementSchema = z.object({
   calories: z.number().int().positive().max(1000).nullable(),
   duration_seconds: z.number().int().positive().max(7200).nullable(),
   notes: z.string().max(500).nullable(),
+  section: z.number().int().min(0).max(9).nullable(),
+});
+const programSectionSchema = z.object({
+  title: z.string().trim().min(1).max(80),
+  format: z.enum(SECTION_FORMATS),
+  time_cap_minutes: z.number().int().min(1).max(180).nullable(),
+  rounds: z.number().int().min(1).max(100).nullable(),
 });
 export const programWorkoutSchema = z.object({
   day_number: z.number().int().min(1).max(7),
@@ -18,6 +26,7 @@ export const programWorkoutSchema = z.object({
   rounds: z.number().int().positive().max(100).nullable(),
   description: z.string().max(3000).nullable(),
   notes: z.string().max(2000).nullable(),
+  sections: z.array(programSectionSchema).max(10),
   movements: z.array(programMovementSchema).min(1).max(15),
 });
 export const programWeekSchema = z.object({ week_number: z.number().int().min(1).max(4), workouts: z.array(programWorkoutSchema).min(1).max(7) });
@@ -25,6 +34,43 @@ export const draftProgramSchema = z.object({
   name: z.string().trim().min(1).max(80), rationale: z.string().trim().min(1).max(1000),
   start_date: z.string().date(), weeks: z.array(programWeekSchema).length(4),
 });
+
+function withDraftProgramSectionDefaults(proposal: unknown): unknown {
+  if (!proposal || typeof proposal !== "object" || Array.isArray(proposal))
+    return proposal;
+  const record = proposal as Record<string, unknown>;
+  const weeks = Array.isArray(record.weeks)
+    ? record.weeks.map((week) => {
+        if (!week || typeof week !== "object" || Array.isArray(week))
+          return week;
+        const weekRecord = week as Record<string, unknown>;
+        const workouts = Array.isArray(weekRecord.workouts)
+          ? weekRecord.workouts.map((workout) => {
+              if (!workout || typeof workout !== "object" || Array.isArray(workout))
+                return workout;
+              const workoutRecord = workout as Record<string, unknown>;
+              const movements = Array.isArray(workoutRecord.movements)
+                ? workoutRecord.movements.map((movement) => {
+                    if (!movement || typeof movement !== "object" || Array.isArray(movement))
+                      return movement;
+                    const movementRecord = movement as Record<string, unknown>;
+                    return { ...movementRecord, section: movementRecord.section ?? null };
+                  })
+                : workoutRecord.movements;
+              return { ...workoutRecord, sections: workoutRecord.sections ?? [], movements };
+            })
+          : weekRecord.workouts;
+        return { ...weekRecord, workouts };
+      })
+    : record.weeks;
+  return { ...record, weeks };
+}
+
+export const draftProgramStoredSchema = z.preprocess(
+  withDraftProgramSectionDefaults,
+  draftProgramSchema,
+);
+
 export const draftProgramInputSchema = z.object({
   units: z.enum(["lb", "kg"]), days_per_week: z.number().int().min(1).max(7),
   library: z.array(z.object({ id: z.string(), name: z.string() })),
@@ -32,7 +78,7 @@ export const draftProgramInputSchema = z.object({
 export type DraftProgram = z.infer<typeof draftProgramSchema>;
 
 export function validateDraftProgram(proposal: unknown, input: unknown) {
-  const program = draftProgramSchema.parse(proposal);
+  const program = draftProgramStoredSchema.parse(proposal);
   const context = draftProgramInputSchema.parse(input);
   const allowed = new Set(context.library.map((m) => m.id));
   if (new Set(program.weeks.map((w) => w.week_number)).size !== 4) throw new Error("Duplicate week number.");

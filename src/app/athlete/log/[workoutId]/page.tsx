@@ -8,9 +8,10 @@ import { getViewer } from "@/lib/viewer";
 import { createClient } from "@/lib/supabase/server";
 import { getToday } from "@/lib/time-zone";
 import { workoutPrefill } from "@/lib/workout-prefill";
-import { defaultParts, resultPartsSchema } from "@/lib/result-parts";
+import { defaultParts, resultPartsSchema, sectionScoresSchema } from "@/lib/result-parts";
 import { scaleWorkoutDetailsSchema } from "@/lib/ai/scale-workout-schema";
 import { workoutVersion } from "@/lib/workout-version";
+import { workoutSectionsSchema } from "@/lib/workout-sections";
 import { formatHeadline } from "@/app/(app)/programs/workouts/whiteboard";
 import type { Tables } from "@/lib/supabase/database.types";
 
@@ -37,6 +38,7 @@ type EditableResult = Pick<
   | "soreness"
   | "logged_by"
   | "parts"
+  | "section_scores"
 >;
 
 export default async function AthleteLogResultPage({ params, searchParams }: Props) {
@@ -51,7 +53,7 @@ export default async function AthleteLogResultPage({ params, searchParams }: Pro
   const [{ data: workout }, { data: authData }] = await Promise.all([
     supabase
       .from("workouts")
-      .select("id, title, workout_type, time_cap_seconds, rounds, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(id, name))")
+      .select("id, title, workout_type, time_cap_seconds, rounds, sections, workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, section, movements(id, name))")
       .eq("id", workoutId)
       .order("position", { referencedTable: "workout_movements" })
       .maybeSingle(),
@@ -60,6 +62,8 @@ export default async function AthleteLogResultPage({ params, searchParams }: Pro
   if (!workout) notFound();
   const { data: canView } = await supabase.rpc("athlete_can_view_workout", { p_workout_id: workoutId });
   if (!canView) notFound();
+  const parsedSections = workoutSectionsSchema.safeParse(workout.sections);
+  const sections = parsedSections.success ? parsedSections.data : [];
 
   let existingResult: EditableResult | null = null;
   if (resultId) {
@@ -70,7 +74,7 @@ export default async function AthleteLogResultPage({ params, searchParams }: Pro
     const { data } = await supabase
       .from("workout_results")
       .select(
-        "id, workout_id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, rpe, energy, soreness, logged_by, parts",
+        "id, workout_id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, rpe, energy, soreness, logged_by, parts, section_scores",
       )
       .eq("id", parsedId.data)
       .eq("workout_id", workout.id)
@@ -111,6 +115,7 @@ export default async function AthleteLogResultPage({ params, searchParams }: Pro
     rounds: workout.rounds,
     time_cap_seconds: workout.time_cap_seconds,
     workout_type: workout.workout_type,
+    sections,
   };
   const { data: scaling } = await supabase
     .from("athlete_workout_scalings")
@@ -141,6 +146,9 @@ export default async function AthleteLogResultPage({ params, searchParams }: Pro
   const savedParts = existingResult
     ? resultPartsSchema.safeParse(existingResult.parts)
     : null;
+  const savedSectionScores = existingResult
+    ? sectionScoresSchema.safeParse(existingResult.section_scores)
+    : null;
   const initialParts =
     savedParts?.success ? savedParts.data : defaultParts(version, viewer.units);
   const partsHandoffToken = z.string().uuid().safeParse(partsHandoff).success
@@ -169,6 +177,10 @@ export default async function AthleteLogResultPage({ params, searchParams }: Pro
         existingResult={existingResult}
         initialParts={initialParts}
         movements={version.movements}
+        sections={version.sections}
+        initialSectionScores={
+          savedSectionScores?.success ? savedSectionScores.data : []
+        }
         scheduledOn={scheduledOn ?? undefined}
         scheduledParts={scheduledParts}
         otherDateParts={otherDateParts}

@@ -15,7 +15,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getToday } from "@/lib/time-zone";
 import { compareScores } from "@/lib/results";
 import { loadResultPrSetLocations } from "@/lib/result-part-prs";
-import { resultPartsSchema } from "@/lib/result-parts";
+import { resultPartsSchema, sectionScoresSchema } from "@/lib/result-parts";
+import { workoutSectionsSchema } from "@/lib/workout-sections";
 import { formatDate, formatScore } from "@/lib/units";
 import { WorkoutResultPartsDisplay } from "@/components/workout-result-parts-display";
 
@@ -31,13 +32,13 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
     getCoach(),
     supabase
       .from("workouts")
-      .select("id, title, workout_type, time_cap_seconds, rounds, description, notes, athlete_id, scheduled_on, week_number, day_number, program_id, athletes(id, first_name, last_name), programs(name), workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, movements(id, name))")
+      .select("id, title, workout_type, time_cap_seconds, rounds, description, notes, sections, athlete_id, scheduled_on, week_number, day_number, program_id, athletes(id, first_name, last_name), programs(name), workout_movements(position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, section, movements(id, name))")
       .eq("id", id)
       .order("position", { referencedTable: "workout_movements" })
       .maybeSingle(),
     supabase
       .from("workout_results")
-      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, logged_by, rpe, parts, athletes(id, first_name, last_name, user_id)")
+      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, logged_by, rpe, parts, section_scores, athletes(id, first_name, last_name, user_id)")
       .eq("workout_id", id),
     supabase.from("athletes").select("id, first_name, last_name").eq("status", "active").order("first_name").order("last_name"),
     supabase
@@ -48,6 +49,8 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
   ]);
   if (!workout) notFound();
 
+  const parsedSections = workoutSectionsSchema.safeParse(workout.sections);
+  const sections = parsedSections.success ? parsedSections.data : [];
   const units = coach?.units ?? "lb";
   const results = (resultRows ?? []).sort(compareScores(workout.workout_type));
   const resultCount = results.length;
@@ -67,6 +70,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
     rounds: workout.rounds,
     time_cap_seconds: workout.time_cap_seconds,
     workout_type: workout.workout_type,
+    sections,
   };
   const scalingAthleteIds = [...new Set((scalingRows ?? []).map((row) => row.athlete_id))];
   const { data: scalingAthletes } = scalingAthleteIds.length
@@ -144,7 +148,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
         </CardContent>
       </Card>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,42rem)_1fr]">
-        <Whiteboard workout={workout} movements={movements} units={units} howToHref={(id) => `/programs/movements/${id}`} />
+        <Whiteboard workout={{ ...workout, sections }} movements={movements} units={units} howToHref={(id) => `/programs/movements/${id}`} />
         <Card className="content-start">
           <CardHeader>
             <CardTitle>Log a result</CardTitle>
@@ -186,6 +190,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
                 {results.map((r, i) => {
                   const name = r.athletes ? `${r.athletes.first_name} ${r.athletes.last_name}` : "Athlete";
                   const parts = resultPartsSchema.safeParse(r.parts);
+                  const sectionScores = sectionScoresSchema.safeParse(r.section_scores);
                   return (
                     <TableRow key={r.id}>
                       <TableCell className="pl-4 font-medium">{i + 1}</TableCell>
@@ -208,6 +213,9 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
                           {parts.success && (
                             <WorkoutResultPartsDisplay
                               parts={parts.data}
+                              sections={sections}
+                              movements={movements}
+                              sectionScores={sectionScores.success ? sectionScores.data : []}
                               units={units}
                               newPrSets={prSetsByResult.get(r.id)}
                             />

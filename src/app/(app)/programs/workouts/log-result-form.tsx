@@ -11,7 +11,8 @@ import type { FormState } from "@/lib/auth/form-state";
 import type { Enums } from "@/lib/supabase/database.types";
 import { ResultPartsEditor } from "@/components/result-parts-editor";
 import { WorkoutResultPartsDisplay } from "@/components/workout-result-parts-display";
-import { defaultParts, type ResultPartMovement } from "@/lib/result-parts";
+import { defaultParts, type ResultPartMovement, type SectionScore } from "@/lib/result-parts";
+import type { WorkoutSection } from "@/lib/workout-sections";
 import type { ScalingRow } from "@/lib/workout-scaling";
 import { workoutVersion } from "@/lib/workout-version";
 import type { Units } from "@/lib/units";
@@ -22,6 +23,7 @@ import { deleteResult, logResult } from "./result-actions";
 type Tracked = FormState & {
   successes?: number;
   savedParts?: import("@/lib/result-parts").ResultPart[];
+  savedSectionScores?: SectionScore[];
   newPrSets?: import("@/lib/result-parts").LiftPrSetLocation[];
   prError?: boolean;
 };
@@ -52,6 +54,7 @@ export function LogResultForm({
     movements: ResultPartMovement[];
     rounds: number | null;
     time_cap_seconds: number | null;
+    sections?: WorkoutSection[];
   };
   scalings: (ScalingRow & { athlete_id: string })[];
 }) {
@@ -123,12 +126,14 @@ export function LogResultForm({
       <ResultPartsEditor
         initialParts={initialParts}
         templateParts={initialParts}
+        sections={version.sections}
         resetKey={`${selectedAthlete}-${state.successes ?? 0}`}
         movements={version.movements}
         units={units}
         workoutType={workoutType}
         inputId={`${workoutId}-coach`}
         initialRawParts={state.error ? v.parts : undefined}
+        initialRawSectionScores={state.error ? v.section_scores : undefined}
       />
       {fields.includes("time") && (
         <fieldset className="grid gap-1.5">
@@ -191,6 +196,9 @@ export function LogResultForm({
           {state.savedParts && (
             <WorkoutResultPartsDisplay
               parts={state.savedParts}
+              sections={version.sections}
+              movements={version.movements}
+              sectionScores={state.savedSectionScores}
               units={units}
               newPrSets={state.newPrSets}
             />

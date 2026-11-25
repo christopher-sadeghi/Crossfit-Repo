@@ -11,8 +11,8 @@ import { sendThreadApproval } from "@/lib/ai/thread-approval";
 import { requestRegisteredSuggestion } from "@/lib/ai/request";
 import { runSuggestion } from "@/lib/ai/service";
 import { progressSummarySchema } from "@/lib/ai/progress-summary";
-import { adjustMacrosSchema, SUGGESTION_REGISTRY, writeWorkoutInputSchema, writeWorkoutSchema } from "@/lib/ai/suggestions";
-import { draftProgramSchema } from "@/lib/ai/draft-program-schema";
+import { adjustMacrosSchema, safeParseWriteWorkoutProposal, SUGGESTION_REGISTRY, writeWorkoutInputSchema } from "@/lib/ai/suggestions";
+import { draftProgramStoredSchema } from "@/lib/ai/draft-program-schema";
 import type { SuggestionApplyOptions } from "@/lib/ai/suggestions";
 import { failure, type FormState } from "@/lib/auth/form-state";
 import { notifySuggestionApproved } from "@/lib/notifications";
@@ -115,9 +115,9 @@ export async function approveSuggestion(_: FormState, formData: FormData): Promi
   let finalInput: unknown;
   let applyOptions: SuggestionApplyOptions | undefined;
   if (suggestion.suggestion_type === "draft_program") {
-    const proposal = draftProgramSchema.safeParse(suggestion.proposal);
+    const proposal = draftProgramStoredSchema.safeParse(suggestion.proposal);
     if (!proposal.success) return failure(formData, "This draft is invalid. Request a new draft.");
-    const final = draftProgramSchema.safeParse({ ...proposal.data, name: formData.get("name"), start_date: formData.get("start_date") });
+    const final = draftProgramStoredSchema.safeParse({ ...proposal.data, name: formData.get("name"), start_date: formData.get("start_date") });
     if (!final.success) return failure(formData, final.error.issues[0]?.message ?? "Check program name and start date.");
     finalInput = final.data;
   } else if (isSummary) {
@@ -132,7 +132,7 @@ export async function approveSuggestion(_: FormState, formData: FormData): Promi
     if (!final.success) return failure(formData, "Enter a summary and two or three focus points.");
     finalInput = final.data;
   } else if (isWorkout) {
-    const proposal = entry.proposalSchema.safeParse(suggestion.proposal);
+    const proposal = safeParseWriteWorkoutProposal(suggestion.proposal);
     if (!proposal.success) return failure(formData, "Couldn't approve this suggestion. Please ask for a new WOD.");
     finalInput = proposal.data;
     const input = z.object({ mode: z.enum(["write", "adjust"]) }).safeParse(suggestion.input);
@@ -160,7 +160,7 @@ export async function approveSuggestion(_: FormState, formData: FormData): Promi
   if ("error" in result) return failure(formData, result.error);
   const fromThread = Boolean(threadSourceMessageId(suggestion.input));
   const macros = fromThread && suggestion.suggestion_type === "adjust_macros" ? adjustMacrosSchema.safeParse(finalInput).data : undefined;
-  const workout = fromThread && isWorkout ? writeWorkoutSchema.safeParse(finalInput).data : undefined;
+  const workout = fromThread && isWorkout ? safeParseWriteWorkoutProposal(finalInput).data : undefined;
   const workoutInput = fromThread && isWorkout ? writeWorkoutInputSchema.safeParse(suggestion.input).data : undefined;
   const threadMessage = await sendThreadApproval(suggestion, result.target, {
     macros, title: workout?.title, date: workoutInput?.scheduled_on,

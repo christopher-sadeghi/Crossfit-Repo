@@ -1,9 +1,9 @@
 import { WORKOUT_TYPE_LABELS } from "@/app/(app)/programs/options";
-import { draftProgramSchema } from "./draft-program-schema";
+import { draftProgramStoredSchema } from "./draft-program-schema";
 import { progressNoteParts, progressSummarySchema } from "./progress-summary";
 import { scaleReviewMovements } from "./scale-review";
 import { scaleWorkoutInputSchema, scaleWorkoutSchema } from "./scale-workout";
-import { adjustMacrosSchema, SUGGESTION_LABELS, writeWorkoutInputSchema, writeWorkoutSchema } from "./suggestions";
+import { adjustMacrosSchema, safeParseWriteWorkoutProposal, SUGGESTION_LABELS, writeWorkoutInputSchema } from "./suggestions";
 import { friendlySuggestionError } from "./service-core";
 import type { Tables } from "@/lib/supabase/database.types";
 import { weeklyReportSchema } from "@/lib/weekly-report";
@@ -43,16 +43,18 @@ export function inlineSuggestion(row: Tables<"ai_suggestions">, athleteName?: st
       break;
     }
     case "write_workout": {
-      const { data } = writeWorkoutSchema.safeParse(raw);
+      const { data } = safeParseWriteWorkoutProposal(raw);
       const { data: input } = writeWorkoutInputSchema.safeParse(row.input);
       if (data && input) {
         const names = new Map(input.library.map((movement) => [movement.id, movement.name]));
         return {
           ...base, type: row.suggestion_type, title: data.title, description: data.description,
           format: WORKOUT_TYPE_LABELS[data.workout_type], rounds: data.rounds, timeCapMinutes: data.time_cap_minutes, notes: data.notes,
+          sections: data.sections,
           mode: input.mode, scheduledOn: input.scheduled_on,
           movements: data.movements.map((movement) =>
-            [names.get(movement.movement_id) ?? "Unavailable movement",
+            [movement.section == null ? null : data.sections[movement.section]?.title,
+              names.get(movement.movement_id) ?? "Unavailable movement",
               movement.sets == null ? null : `${movement.sets} sets`,
               movement.reps == null ? null : `${movement.reps} reps`,
               movement.load == null ? null : `${movement.load} ${input.units}`,
@@ -65,7 +67,7 @@ export function inlineSuggestion(row: Tables<"ai_suggestions">, athleteName?: st
       break;
     }
     case "draft_program": {
-      const { data } = draftProgramSchema.safeParse(raw);
+      const { data } = draftProgramStoredSchema.safeParse(raw);
       if (data) return {
         ...base, type: row.suggestion_type, name: data.name, startDate: data.start_date, rationale: data.rationale,
         workouts: [...data.weeks].sort((a, b) => a.week_number - b.week_number).flatMap((week) =>

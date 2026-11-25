@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { Enums } from "@/lib/supabase/database.types";
 import type { Units } from "@/lib/units";
+import { SECTION_FORMATS, type WorkoutSection } from "@/lib/workout-sections";
 
 import { CATEGORIES, CATEGORY_LABELS, selectClass, WORKOUT_TYPE_LABELS, WORKOUT_TYPES } from "../options";
 import { saveWorkout } from "./actions";
@@ -18,12 +19,13 @@ import { Whiteboard, type WhiteboardWorkout } from "./whiteboard";
 const LB_PER_KG = 2.20462;
 type NumericField = "sets" | "reps" | "load" | "distance_m" | "calories" | "duration_seconds";
 
-type Row = { key: number; movement_id: string; notes: string } & Record<NumericField, string>;
+type Row = { key: number; movement_id: string; notes: string; section: string } & Record<NumericField, string>;
+type SectionDraft = { title: string; format: WorkoutSection["format"]; time_cap_minutes: string; rounds: string };
 type MovementOption = { id: string; name: string; category: Enums<"movement_category"> };
 
 export type BuilderWorkout = WhiteboardWorkout & {
   id: string;
-  movements: ({ movement_id: string; notes: string | null; load_kg: number | null } & Record<
+  movements: ({ movement_id: string; notes: string | null; load_kg: number | null; section?: number | null } & Record<
     Exclude<NumericField, "load">,
     number | null
   >)[];
@@ -40,6 +42,7 @@ const emptyRow = (): Row => ({
   calories: "",
   duration_seconds: "",
   notes: "",
+  section: "",
 });
 
 const num = (v: string) => (v.trim() === "" ? null : Number(v));
@@ -74,6 +77,17 @@ export function WodBuilder({
   const [description, setDescription] = useState(workout?.description ?? "");
   const [notes, setNotes] = useState(workout?.notes ?? "");
   const [scheduledOn, setScheduledOn] = useState(oneOff?.date ?? "");
+  const [sections, setSections] = useState<SectionDraft[]>(() =>
+    (workout?.sections ?? []).map((section) => ({
+      title: section.title,
+      format: section.format,
+      time_cap_minutes:
+        section.time_cap_seconds == null
+          ? ""
+          : String(section.time_cap_seconds / 60),
+      rounds: section.rounds == null ? "" : String(section.rounds),
+    })),
+  );
   const [rows, setRows] = useState<Row[]>(() =>
     workout?.movements.length
       ? workout.movements.map((m) => ({
@@ -86,6 +100,7 @@ export function WodBuilder({
           calories: m.calories?.toString() ?? "",
           duration_seconds: m.duration_seconds?.toString() ?? "",
           notes: m.notes ?? "",
+          section: m.section == null ? "" : String(m.section),
         }))
       : [emptyRow()],
   );
@@ -100,6 +115,16 @@ export function WodBuilder({
     calories: num(r.calories),
     duration_seconds: num(r.duration_seconds),
     notes: r.notes.trim() || null,
+    section: sections.length && r.section !== "" ? Number(r.section) : null,
+  }));
+  const sectionPayload = sections.map((section) => ({
+    title: section.title,
+    format: section.format,
+    time_cap_seconds:
+      section.time_cap_minutes.trim() === ""
+        ? null
+        : Math.round(Number(section.time_cap_minutes) * 60),
+    rounds: num(section.rounds),
   }));
   const capSeconds = num(cap);
 
@@ -111,6 +136,19 @@ export function WodBuilder({
       [next[index], next[index + by]] = [next[index + by], next[index]];
       return next;
     });
+  const removeSection = (index: number) => {
+    const nextCount = sections.length - 1;
+    setSections((current) => current.filter((_, sectionIndex) => sectionIndex !== index));
+    setRows((current) =>
+      current.map((row) => {
+        if (row.section === "") return row;
+        const oldIndex = Number(row.section);
+        if (nextCount === 0) return { ...row, section: "" };
+        if (oldIndex === index) return { ...row, section: String(Math.max(0, index - 1)) };
+        return oldIndex > index ? { ...row, section: String(oldIndex - 1) } : row;
+      }),
+    );
+  };
 
   return (
     <div className="grid gap-8 xl:grid-cols-[1fr_24rem]">
@@ -151,6 +189,7 @@ export function WodBuilder({
           </>
         )}
         <input type="hidden" name="movements" value={JSON.stringify(movements)} />
+        <input type="hidden" name="sections" value={JSON.stringify(sectionPayload)} />
         <div className="grid gap-5 sm:grid-cols-[2fr_1fr_1fr_1fr]">
           <Field label="Name *" id="title">
             <Input id="title" name="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Fran" required />
@@ -181,6 +220,70 @@ export function WodBuilder({
           <Textarea id="description" name="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. 21-15-9" />
         </Field>
 
+        <fieldset className="grid gap-3 rounded-lg border p-3">
+          <legend className="px-1 text-sm font-medium">Sections</legend>
+          {sections.map((section, index) => (
+            <div key={index} className="grid gap-2 rounded-md bg-muted/40 p-3 sm:grid-cols-[2fr_1fr_1fr_1fr_auto]">
+              <label className="grid gap-1 text-xs text-muted-foreground">
+                Title
+                <Input
+                  value={section.title}
+                  maxLength={80}
+                  onChange={(event) =>
+                    setSections((current) =>
+                      current.map((item, i) => i === index ? { ...item, title: event.target.value } : item),
+                    )
+                  }
+                />
+              </label>
+              <label className="grid gap-1 text-xs text-muted-foreground">
+                Format
+                <select
+                  value={section.format}
+                  onChange={(event) =>
+                    setSections((current) =>
+                      current.map((item, i) => i === index
+                        ? { ...item, format: event.target.value as WorkoutSection["format"] }
+                        : item),
+                    )
+                  }
+                  className={`${selectClass} w-full`}
+                >
+                  {SECTION_FORMATS.map((format) => (
+                    <option key={format} value={format}>{format.replace("_", " ")}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1 text-xs text-muted-foreground">
+                Time cap (min)
+                <Input type="number" min="1" max="180" step="0.5" value={section.time_cap_minutes} onChange={(event) => setSections((current) => current.map((item, i) => i === index ? { ...item, time_cap_minutes: event.target.value } : item))} />
+              </label>
+              <label className="grid gap-1 text-xs text-muted-foreground">
+                Rounds
+                <Input type="number" min="1" max="100" step="1" value={section.rounds} onChange={(event) => setSections((current) => current.map((item, i) => i === index ? { ...item, rounds: event.target.value } : item))} />
+              </label>
+              <Button type="button" variant="ghost" size="icon" aria-label={`Remove section ${index + 1}`} onClick={() => removeSection(index)}>
+                <X />
+              </Button>
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            className="justify-self-start"
+            disabled={sections.length >= 10}
+            onClick={() => setSections((current) => [...current, {
+              title: `Section ${current.length + 1}`,
+              format: "other",
+              time_cap_minutes: "",
+              rounds: "",
+            }])}
+          >
+            <Plus /> Add section
+          </Button>
+          {sections.length > 0 && <p className="text-xs text-muted-foreground">Assign movements to sections below. Remove a section to move its movements to the previous section.</p>}
+        </fieldset>
+
         <fieldset className="grid gap-3">
           <legend className="mb-2 text-sm font-medium">Movements *</legend>
           {rows.map((r, i) => (
@@ -206,6 +309,23 @@ export function WodBuilder({
                     </optgroup>
                   ))}
                 </select>
+                {sections.length > 0 && (
+                  <select
+                    aria-label={`Section for movement ${i + 1}`}
+                    value={r.section}
+                    onChange={(e) => update(r.key, { section: e.target.value })}
+                    className={`${selectClass} w-32`}
+                  >
+                    <option value="">
+                      {i === 0 ? "Section 1 (default)" : "Previous section (default)"}
+                    </option>
+                    {sections.map((section, sectionIndex) => (
+                      <option key={sectionIndex} value={sectionIndex}>
+                        {section.title || `Section ${sectionIndex + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <Button type="button" variant="ghost" size="icon" aria-label="Move up" disabled={i === 0} onClick={() => move(i, -1)}>
                   <ArrowUp />
                 </Button>
@@ -292,6 +412,7 @@ export function WodBuilder({
             rounds: num(rounds),
             description: description.trim() || null,
             notes: notes.trim() || null,
+            sections: sectionPayload,
           }}
           movements={movements
             .filter((m) => m.movement_id)

@@ -78,7 +78,7 @@ export async function placeWorkout(_: FormState, formData: FormData): Promise<Fo
   if (placement.week_number > program.weeks) return failure(formData, `This program only has ${program.weeks} weeks.`);
   const { data: workout } = await supabase
     .from("workouts")
-    .select("athlete_id, program_id, title, workout_type, time_cap_seconds, rounds, description, notes, workout_movements(movement_id, position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes)")
+    .select("athlete_id, program_id, title, workout_type, time_cap_seconds, rounds, description, notes, sections, workout_movements(movement_id, position, sets, reps, load_kg, distance_m, calories, duration_seconds, notes, section)")
     .eq("id", workout_id)
     .maybeSingle();
   if (!workout || workout.athlete_id) return failure(formData, "One-off WODs can't be added to a program.");
@@ -93,6 +93,7 @@ export async function placeWorkout(_: FormState, formData: FormData): Promise<Fo
         rounds: workout.rounds,
         description: workout.description,
         notes: workout.notes,
+        sections: workout.sections,
         program_id: placement.program_id,
         week_number: placement.week_number,
         day_number: placement.day_number,

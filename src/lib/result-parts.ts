@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import type { Enums } from "@/lib/supabase/database.types";
 import { fromKg, fromKgPrecise, toKg, type Units } from "@/lib/units";
+import type { WorkoutSection } from "./workout-sections";
 
 const resultPartSetSchema = z.object({
   reps: z.number().int().min(0).max(1000).nullable(),
@@ -9,7 +10,7 @@ const resultPartSetSchema = z.object({
   done: z.boolean(),
 }).strict();
 
-const resultPartScoreSchema = z.object({
+export const resultPartScoreSchema = z.object({
   time_seconds: z.number().int().min(0).optional(),
   rounds: z.number().int().min(0).optional(),
   reps: z.number().int().min(0).optional(),
@@ -22,14 +23,51 @@ export const resultPartSchema = z.object({
   movement_id: z.string().uuid(),
   name: z.string().min(1).max(120),
   sets: z.array(resultPartSetSchema).max(100),
+  load_kg: z.number().min(0).max(1000).nullable().optional(),
   score: resultPartScoreSchema.optional(),
   notes: z.string().max(300).optional(),
 }).strict();
 
 export const resultPartsSchema = z.array(resultPartSchema).max(40);
+export const sectionScoreSchema = z.object({
+  section: z.number().int().min(0).max(9),
+  score: resultPartScoreSchema,
+  notes: z.string().max(300).optional(),
+}).strict();
+export const sectionScoresSchema = z.array(sectionScoreSchema).max(10);
 
 export type ResultPartSet = z.infer<typeof resultPartSetSchema>;
 export type ResultPart = z.infer<typeof resultPartSchema>;
+export type ResultPartScore = z.infer<typeof resultPartScoreSchema>;
+export type SectionScore = z.infer<typeof sectionScoreSchema>;
+
+export function hasSectionScoreEntry(sectionScore: SectionScore): boolean {
+  return (
+    Object.keys(sectionScore.score).length > 0 ||
+    Boolean(sectionScore.notes?.trim())
+  );
+}
+
+export function scoreForSectionResult(
+  parts: ResultPart[],
+  sectionScores: SectionScore[],
+  fallbackLoadKg: number | null,
+) {
+  const hasEntry =
+    sectionScores.some(hasSectionScoreEntry) ||
+    parts.some(
+      (part) =>
+        part.sets.some((set) => set.done),
+    );
+  return hasEntry
+    ? {
+        time_seconds: null,
+        rounds: null,
+        reps: null,
+        load_kg: fallbackLoadKg,
+      }
+    : null;
+}
 
 export function samePartsContent(a: ResultPart[], b: ResultPart[]): boolean {
   const content = (parts: ResultPart[]) =>
@@ -39,6 +77,7 @@ export function samePartsContent(a: ResultPart[], b: ResultPart[]): boolean {
         movement_id: part.movement_id,
         name: part.name,
         sets: part.sets.map(({ reps, load_kg, done }) => [reps, load_kg, done]),
+        load_kg: part.load_kg ?? null,
         score: Object.entries(part.score ?? {}).sort(([a], [b]) =>
           a.localeCompare(b),
         ),
@@ -75,6 +114,7 @@ export type ResultPartMovement = {
   reps: number | null;
   load_kg: number | null;
   notes: string | null;
+  section?: number | null;
   distance_m?: number | null;
   calories?: number | null;
   duration_seconds?: number | null;
@@ -83,6 +123,7 @@ export type ResultPartMovement = {
 export type ResultPartVersion = {
   movements: ResultPartMovement[];
   workout_type?: Enums<"workout_type">;
+  sections?: WorkoutSection[];
 };
 
 export function partsForVersion(
@@ -111,12 +152,20 @@ export function defaultParts(
   units: Units,
 ): ResultPart[] {
   return version.movements.slice(0, 40).map((movement, position) => {
+    const section = version.sections?.[movement.section ?? 0];
+    const isSectioned = Boolean(version.sections?.length);
+    const isStrength =
+      isSectioned && section
+        ? section.format === "strength"
+        : version.workout_type === "strength";
     const setCount =
-      version.workout_type === "strength"
+      isStrength
         ? Math.min(100, Math.max(1, movement.sets ?? 1))
-        : movement.sets != null && movement.sets > 0
-          ? Math.min(100, Math.max(1, movement.sets))
-          : 0;
+        : isSectioned
+          ? 0
+          : movement.sets != null && movement.sets > 0
+            ? Math.min(100, Math.max(1, movement.sets))
+            : 0;
     const plannedLoad =
       movement.load_kg == null
         ? null
@@ -131,7 +180,11 @@ export function defaultParts(
         load_kg: plannedLoad,
         done: true,
       })),
-      ...(setCount ? {} : { score: {} }),
+      ...(setCount
+        ? {}
+        : isSectioned
+          ? { load_kg: plannedLoad }
+          : { score: {} }),
     };
   });
 }
@@ -288,7 +341,10 @@ export function partsSummary(parts: ResultPart[], units: Units): string {
       }
 
       const score = part.score;
-      if (!score) return part.name;
+      if (!score)
+        return part.load_kg == null
+          ? part.name
+          : `${part.name} @ ${displayWeight(part.load_kg, units)} ${units}`;
       const values = [
         score.time_seconds == null ? "" : displayTime(score.time_seconds),
         score.rounds == null && score.reps == null

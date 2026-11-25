@@ -28,7 +28,8 @@ import { WeeklyReportsTab } from "./weekly-reports-tab";
 import { FormChecksTab } from "./form-checks-tab";
 import { personalRecords } from "@/lib/results";
 import { loadResultPrSetLocations } from "@/lib/result-part-prs";
-import { resultPartsSchema } from "@/lib/result-parts";
+import { resultPartsSchema, sectionScoresSchema } from "@/lib/result-parts";
+import { workoutSectionsSchema } from "@/lib/workout-sections";
 import { createClient } from "@/lib/supabase/server";
 import { DEFAULT_LOAD_WARNING_RATIO, gymSessionLoad } from "@/lib/training-load";
 import { loadActivities, loadTrainingLoad } from "@/lib/training-load-data";
@@ -116,7 +117,7 @@ export default async function AthletePage({ params, searchParams }: Props) {
     supabase.from("body_metrics").select("measured_on, weight_kg, body_fat_pct").eq("athlete_id", id).order("measured_on", { ascending: false }),
     supabase
       .from("workout_results")
-      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, workout_id, logged_by, rpe, energy, sleep_hours, soreness, pain_notes, parts, workouts(title, workout_type, time_cap_seconds, workout_movements(movement_id))")
+      .select("id, performed_on, time_seconds, rounds, reps, load_kg, is_rx, notes, workout_id, logged_by, rpe, energy, sleep_hours, soreness, pain_notes, parts, section_scores, workouts(title, workout_type, time_cap_seconds, sections, workout_movements(position, movement_id, section))")
       .eq("athlete_id", id)
       .order("performed_on", { ascending: false })
       .order("created_at", { ascending: false }),
@@ -399,6 +400,8 @@ export default async function AthletePage({ params, searchParams }: Props) {
                 {results.map((r) => {
                   const session = gymSessionLoad(r, r.workouts);
                   const parts = resultPartsSchema.safeParse(r.parts);
+                  const sections = workoutSectionsSchema.safeParse(r.workouts?.sections);
+                  const sectionScores = sectionScoresSchema.safeParse(r.section_scores);
                   return (
                   <TableRow key={r.id}>
                     <TableCell className="pl-4">{formatDate(r.performed_on)}</TableCell>
@@ -415,8 +418,11 @@ export default async function AthletePage({ params, searchParams }: Props) {
                         <span>{formatScore(r, units)}</span>
                         {parts.success && (
                           <WorkoutResultPartsDisplay
-                            parts={parts.data}
-                            units={units}
+                              parts={parts.data}
+                              units={units}
+                              sections={sections.success ? sections.data : undefined}
+                              movements={r.workouts?.workout_movements ?? []}
+                              sectionScores={sectionScores.success ? sectionScores.data : []}
                             newPrSets={resultPrSets.get(r.id)}
                           />
                         )}
