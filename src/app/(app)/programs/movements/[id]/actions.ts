@@ -86,6 +86,11 @@ export async function saveMovementGuide(_: FormState, form: FormData): Promise<F
   }, { onConflict: "coach_id,movement_id" });
   if (error?.code === "23514" || error?.code === "23503") return failure(form, "Choose variations that are in your library.");
   if (error) return failure(form, "Couldn't save this how-to. Please try again.");
+  if (!rawVideo && movement.coach_id === viewer.gymId) {
+    const { data, error: movementError } = await supabase.from("movements").update({ crossfit_url: null })
+      .eq("id", id.data).eq("coach_id", viewer.gymId).select("id").maybeSingle();
+    if (movementError || !data) return failure(form, "Couldn't save this how-to. Please try again.");
+  }
   if (currentClip && currentClip !== clipPath) await storage.remove([currentClip]);
   refresh(id.data);
   return { message: "How-to saved. Athletes can now see your changes." };
@@ -125,23 +130,21 @@ export async function applyCrossfitVideo(movementId: string): Promise<{ error?: 
   const suggestion = await lookupCrossfitVideo(movement.name);
   if (!suggestion) return { error: "No CrossFit video found." };
 
-  if (movement.coach_id === viewer.gymId) {
-    const { data, error } = await supabase.from("movements")
-      .update({ demo_video_url: suggestion.videoUrl, crossfit_url: suggestion.crossfitUrl })
-      .eq("id", id.data)
-      .eq("coach_id", viewer.gymId)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { error: "Couldn't save this CrossFit video. Please try again." };
-  } else if (movement.coach_id === null) {
-    const { error } = await supabase.from("movement_guides").upsert({
-      coach_id: viewer.gymId,
-      movement_id: id.data,
-      video_url: suggestion.videoUrl,
-    }, { onConflict: "coach_id,movement_id" });
-    if (error) return { error: "Couldn't save this CrossFit video. Please try again." };
-  } else {
+  if (movement.coach_id !== viewer.gymId && movement.coach_id !== null) {
     return { error: "Movement not found." };
+  }
+
+  const { error: guideError } = await supabase.from("movement_guides").upsert({
+    coach_id: viewer.gymId,
+    movement_id: id.data,
+    video_url: suggestion.videoUrl,
+  }, { onConflict: "coach_id,movement_id" });
+  if (guideError) return { error: "Couldn't save this CrossFit video. Please try again." };
+
+  if (movement.coach_id === viewer.gymId) {
+    const { data, error } = await supabase.from("movements").update({ crossfit_url: suggestion.crossfitUrl })
+      .eq("id", id.data).eq("coach_id", viewer.gymId).select("id").maybeSingle();
+    if (error || !data) return { error: "Couldn't save this CrossFit video. Please try again." };
   }
 
   refresh(id.data);

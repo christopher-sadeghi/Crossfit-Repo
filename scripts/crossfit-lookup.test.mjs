@@ -112,6 +112,9 @@ function createSupabaseMock() {
   const calls = [];
   return {
     calls,
+    storage: {
+      from: () => ({ info: async () => ({ error: null }), remove: async () => ({ error: null }) }),
+    },
     from(table) {
       const call = { table, filters: [] };
       calls.push(call);
@@ -168,7 +171,7 @@ const actionMocks = {
   "@/lib/movement-guides": {
     canSaveDemoCues: () => true,
     demoEmbedUrl: () => null,
-    editedGuideSchema: {},
+    editedGuideSchema: { safeParse: () => ({ success: true, data: { cues: [] } }) },
     hasGuideText: () => false,
     MOVEMENT_DEMO_BUCKET: "movement-demos",
     readGuideText: () => ({}),
@@ -212,10 +215,16 @@ test("applyCrossfitVideo updates only the coach's own movement", async () => {
   assert.deepEqual(state.lookupNames, ["Dumbbell Power Snatch"]);
   assert.deepEqual(state.loadCalls, [{ id: actionMovementId, coachId: actionGymId }]);
   assert.deepEqual(state.client.calls, [{
+    table: "movement_guides",
+    filters: [],
+    method: "upsert",
+    values: { coach_id: actionGymId, movement_id: actionMovementId, video_url: suggestion.videoUrl },
+    options: { onConflict: "coach_id,movement_id" },
+  }, {
     table: "movements",
     filters: [["id", actionMovementId], ["coach_id", actionGymId]],
     method: "update",
-    values: { demo_video_url: suggestion.videoUrl, crossfit_url: suggestion.crossfitUrl },
+    values: { crossfit_url: suggestion.crossfitUrl },
     returning: "id",
   }]);
   assert.ok(state.revalidated.includes(`/programs/movements/${actionMovementId}`));
@@ -252,4 +261,66 @@ test("suggestCrossfitVideo skips lookup when the movement already has a video or
 
   assert.deepEqual(await movementActions.suggestCrossfitVideo(actionMovementId), { suggestion: null });
   assert.deepEqual(state.lookupNames, []);
+});
+
+test("saveMovementGuide clears CrossFit URL when a coach clears an own movement video", async () => {
+  const state = prepareAction({ guide: { video_url: "https://youtu.be/QmZAiBqPvZw", clip_path: null } });
+  const form = new FormData();
+  form.set("movement_id", actionMovementId);
+  form.set("video_url", "");
+
+  assert.deepEqual(await movementActions.saveMovementGuide({}, form), {
+    message: "How-to saved. Athletes can now see your changes.",
+  });
+  assert.deepEqual(state.client.calls, [{
+    table: "movement_guides",
+    filters: [],
+    method: "upsert",
+    values: {
+      coach_id: actionGymId,
+      movement_id: actionMovementId,
+      video_url: null,
+      clip_path: null,
+      easier_movement_id: null,
+      harder_movement_id: null,
+      cues: [],
+    },
+    options: { onConflict: "coach_id,movement_id" },
+  }, {
+    table: "movements",
+    filters: [["id", actionMovementId], ["coach_id", actionGymId]],
+    method: "update",
+    values: { crossfit_url: null },
+    returning: "id",
+  }]);
+});
+
+test("saveMovementGuide leaves a library movement's CrossFit URL untouched when video is cleared", async () => {
+  const state = prepareAction({
+    coachId: null,
+    role: "coach",
+    guide: { video_url: "https://youtu.be/QmZAiBqPvZw", clip_path: null },
+  });
+  const form = new FormData();
+  form.set("movement_id", actionMovementId);
+  form.set("video_url", "");
+
+  assert.deepEqual(await movementActions.saveMovementGuide({}, form), {
+    message: "How-to saved. Athletes can now see your changes.",
+  });
+  assert.deepEqual(state.client.calls, [{
+    table: "movement_guides",
+    filters: [],
+    method: "upsert",
+    values: {
+      coach_id: actionGymId,
+      movement_id: actionMovementId,
+      video_url: null,
+      clip_path: null,
+      easier_movement_id: null,
+      harder_movement_id: null,
+      cues: [],
+    },
+    options: { onConflict: "coach_id,movement_id" },
+  }]);
 });
