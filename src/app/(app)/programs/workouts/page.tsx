@@ -89,17 +89,17 @@ export default async function WorkoutsPage({ searchParams }: Props) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="pl-4">WOD</TableHead>
-                  <TableHead>Format</TableHead>
-                  <TableHead>Movements</TableHead>
-                  <TableHead>Program</TableHead>
+                  <TableHead className="pl-4 whitespace-normal">WOD</TableHead>
+                  <TableHead className="hidden sm:table-cell">Format</TableHead>
+                  <TableHead className="hidden sm:table-cell">Movements</TableHead>
+                  <TableHead className="hidden sm:table-cell">Program</TableHead>
                   <TableHead>Scheduled</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {workouts.map((w) => (
                   <TableRow key={w.id}>
-                    <TableCell className="pl-4 font-medium">
+                    <TableCell className="pl-4 font-medium whitespace-normal">
                       <div className="flex flex-col items-start gap-1">
                         <Link href={`/programs/workouts/${w.id}`} className="hover:underline">
                           {w.title}
@@ -112,11 +112,11 @@ export default async function WorkoutsPage({ searchParams }: Props) {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden sm:table-cell">
                       <Badge variant="secondary">{formatHeadline(w) || WORKOUT_TYPE_LABELS[w.workout_type]}</Badge>
                     </TableCell>
-                    <TableCell>{w.workout_movements[0]?.count ?? 0}</TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="hidden sm:table-cell">{w.workout_movements[0]?.count ?? 0}</TableCell>
+                    <TableCell className="hidden text-muted-foreground sm:table-cell">
                       {w.programs?.name ?? (w.athlete_id ? "One-off" : "Standalone")}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{w.scheduled_on ? formatDate(w.scheduled_on) : "—"}</TableCell>

@@ -177,12 +177,12 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-12 pl-4">#</TableHead>
-                  <TableHead>Athlete</TableHead>
-                  <TableHead>Score</TableHead>
-                  <TableHead>Rx / Scaled</TableHead>
-                  <TableHead>Effort</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Notes</TableHead>
+                  <TableHead className="whitespace-normal">Athlete</TableHead>
+                  <TableHead className="whitespace-normal">Score</TableHead>
+                  <TableHead className="hidden sm:table-cell">Rx / Scaled</TableHead>
+                  <TableHead className="hidden sm:table-cell">Effort</TableHead>
+                  <TableHead className="hidden sm:table-cell">Date</TableHead>
+                  <TableHead className="hidden sm:table-cell">Notes</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
@@ -194,7 +194,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
                   return (
                     <TableRow key={r.id}>
                       <TableCell className="pl-4 font-medium">{i + 1}</TableCell>
-                      <TableCell className="font-medium">
+                      <TableCell className="font-medium whitespace-normal">
                         <div className="flex flex-wrap items-center gap-2">
                           {r.athletes ? (
                             <Link href={`/athletes/${r.athletes.id}?tab=workouts`} className="hover:underline">
@@ -207,7 +207,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
                           {formReviews.filter((review) => review.workout_result_id === r.id).map((review) => <Link key={review.id} href={`/form-checks/${review.id}`}><Badge variant={review.status === "reviewed" ? "outline" : "default"}>{review.status === "reviewed" ? "Form video" : "Form video · review"}</Badge></Link>)}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-normal">
                         <div className="grid gap-2">
                           <span>{formatScore(r, units)}</span>
                           {parts.success && (
@@ -222,12 +222,12 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden sm:table-cell">
                         <Badge variant={r.is_rx ? "default" : "outline"}>{r.is_rx ? "Rx" : "Scaled"}</Badge>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{r.rpe != null ? `RPE ${r.rpe}/10` : ""}</TableCell>
-                      <TableCell>{formatDate(r.performed_on)}</TableCell>
-                      <TableCell className="max-w-xs truncate text-muted-foreground">{r.notes ?? ""}</TableCell>
+                      <TableCell className="hidden text-muted-foreground sm:table-cell">{r.rpe != null ? `RPE ${r.rpe}/10` : ""}</TableCell>
+                      <TableCell className="hidden sm:table-cell">{formatDate(r.performed_on)}</TableCell>
+                      <TableCell className="hidden max-w-xs truncate text-muted-foreground sm:table-cell">{r.notes ?? ""}</TableCell>
                       <TableCell>
                         <DeleteResultButton id={r.id} label={`${name}'s result`} />
                       </TableCell>

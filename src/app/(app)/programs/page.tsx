@@ -39,25 +39,25 @@ export default async function ProgramsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="pl-4">Program</TableHead>
-                  <TableHead>Length</TableHead>
-                  <TableHead>WODs</TableHead>
+                  <TableHead className="pl-4 whitespace-normal">Program</TableHead>
+                  <TableHead className="hidden sm:table-cell">Length</TableHead>
+                  <TableHead className="hidden sm:table-cell">WODs</TableHead>
                   <TableHead>Athletes</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {groupPrograms.map((p) => (
                   <TableRow key={p.id}>
-                    <TableCell className="max-w-md pl-4">
+                    <TableCell className="max-w-md pl-4 whitespace-normal">
                       <Link href={`/programs/${p.id}`} className="font-medium hover:underline">
                         {p.name}
                       </Link>
-                      {p.description && <p className="truncate text-sm text-muted-foreground">{p.description}</p>}
+                      {p.description && <p className="line-clamp-2 whitespace-normal text-sm text-muted-foreground">{p.description}</p>}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden sm:table-cell">
                       {p.weeks} week{p.weeks === 1 ? "" : "s"}
                     </TableCell>
-                    <TableCell>{p.workouts[0]?.count ?? 0}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{p.workouts[0]?.count ?? 0}</TableCell>
                     <TableCell>{p.program_assignments[0]?.count ?? 0}</TableCell>
                   </TableRow>
                 ))}
@@ -77,30 +77,30 @@ export default async function ProgramsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="pl-4">Program</TableHead>
+                    <TableHead className="pl-4 whitespace-normal">Program</TableHead>
                     <TableHead>Athlete</TableHead>
-                    <TableHead>Length</TableHead>
-                    <TableHead>WODs</TableHead>
+                    <TableHead className="hidden sm:table-cell">Length</TableHead>
+                    <TableHead className="hidden sm:table-cell">WODs</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {personalPrograms.map((program) => (
                     <TableRow key={program.id}>
-                      <TableCell className="max-w-md pl-4">
+                      <TableCell className="max-w-md pl-4 whitespace-normal">
                         <Link href={`/programs/${program.id}`} className="font-medium hover:underline">
                           {program.name}
                         </Link>
-                        {program.description && <p className="truncate text-sm text-muted-foreground">{program.description}</p>}
+                        {program.description && <p className="line-clamp-2 whitespace-normal text-sm text-muted-foreground">{program.description}</p>}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-normal">
                         <Badge variant="secondary">
                           {program.athletes ? `${program.athletes.first_name} ${program.athletes.last_name}` : "Athlete"}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden sm:table-cell">
                         {program.weeks} week{program.weeks === 1 ? "" : "s"}
                       </TableCell>
-                      <TableCell>{program.workouts[0]?.count ?? 0}</TableCell>
+                      <TableCell className="hidden sm:table-cell">{program.workouts[0]?.count ?? 0}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

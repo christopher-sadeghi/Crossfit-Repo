@@ -43,7 +43,7 @@ export function AthleteTabNav({
             <div
               role="group"
               aria-label="Athlete sections"
-              className="grid w-max min-w-full auto-cols-max grid-flow-col gap-2 md:w-full md:grid-cols-5 md:grid-flow-row"
+              className="grid w-full grid-cols-5 gap-1 md:gap-2"
             >
               {groups.map((group) => {
                 const selected = group === activeGroup;
@@ -52,7 +52,7 @@ export function AthleteTabNav({
                     key={group.label}
                     type="button"
                     aria-pressed={selected}
-                    className={`min-h-11 rounded-md border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                    className={`min-h-11 rounded-md border px-1 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:px-3 sm:text-sm ${
                       selected
                         ? "border-primary bg-primary/10 text-foreground"
                         : "border-transparent bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
