@@ -49,7 +49,7 @@ export function CoachTabs({
       aria-label="Coach pages"
       className="fixed inset-x-0 bottom-0 z-20 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur"
     >
-      <div className="mx-auto grid max-w-md grid-cols-4">
+      <div className="mx-auto grid max-w-md grid-cols-5">
         {COACH_PRIMARY_TABS.map(({ href, label, icon: Icon }) => {
           const active = isActivePath(pathname, href);
           const badge = badges[href] ?? 0;
