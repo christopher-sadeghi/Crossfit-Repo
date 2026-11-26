@@ -98,7 +98,6 @@ export function CoachTabs({
           </SheetTrigger>
           <SheetContent
             side="bottom"
-            showCloseButton={false}
             className="mx-auto max-h-[85dvh] w-full max-w-md overflow-y-auto rounded-t-2xl border-x p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
           >
             <SheetHeader className="px-0 pt-0">
