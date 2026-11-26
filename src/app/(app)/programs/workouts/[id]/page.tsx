@@ -229,7 +229,7 @@ export default async function WorkoutPage({ params }: { params: Promise<{ id: st
                       <TableCell className="hidden sm:table-cell">{formatDate(r.performed_on)}</TableCell>
                       <TableCell className="hidden max-w-xs truncate text-muted-foreground sm:table-cell">{r.notes ?? ""}</TableCell>
                       <TableCell>
-                        <DeleteResultButton id={r.id} label={`${name}'s result`} />
+                        <DeleteResultButton id={r.id} label={`${name}'s result from ${formatDate(r.performed_on)}`} />
                       </TableCell>
                     </TableRow>
                   );
