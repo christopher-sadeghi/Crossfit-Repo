@@ -6,7 +6,7 @@ const MODIFIERS = ["strict", "kipping"] as const;
 function tokens(value: string) {
   return value.toLowerCase().replaceAll("&", " and ").split(/[^a-z0-9]+/)
     .filter((token) => token && token !== "the")
-    .map((token) => token.length > 3 && token.endsWith("s") && !token.endsWith("ss") ? token.slice(0, -1) : token);
+    .map((token) => token.length >= 3 && token.endsWith("s") && !token.endsWith("ss") ? token.slice(0, -1) : token);
 }
 
 function sameTokens(left: string[], right: string[]) {
