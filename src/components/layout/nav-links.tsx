@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
 
-const NAV_ITEMS: NavItem[] = [
+export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/athletes", label: "Athletes", icon: Users },
   { href: "/attendance", label: "Attendance", icon: ClipboardCheck },

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { CoachChat } from "@/components/assistant/coach-chat";
 import { NavLinks } from "@/components/layout/nav-links";
+import { CoachTabs } from "@/components/layout/coach-tabs";
 import { NotificationBell } from "@/components/notifications/bell";
 import { getNotifications } from "@/app/notification-actions";
 import { Button } from "@/components/ui/button";
@@ -29,15 +30,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .eq("suggestion_type", "athlete_adjust_workout")
     .in("status", ["approved", "edited"])
     .is("coach_reviewed_at", null);
+  const badges = {
+    "/messages": notifications.unreadMessages + (athleteChanges ?? 0),
+    "/form-checks": awaitingFormChecks,
+  };
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="flex w-60 shrink-0 flex-col border-r bg-muted/30 p-4">
+    <div className="min-h-screen md:flex">
+      <aside className="hidden w-60 shrink-0 flex-col border-r bg-muted/30 p-4 md:flex">
         <div className="mb-6 flex items-center gap-2 px-3 text-lg font-semibold">
           <Dumbbell className="size-5" />
           FitCoach AI
         </div>
-        <NavLinks badges={{ "/messages": notifications.unreadMessages + (athleteChanges ?? 0), "/form-checks": awaitingFormChecks }} />
+        <NavLinks badges={badges} />
         <div className="mt-3"><NotificationBell initial={notifications} timeZone={timeZone} align="start" /></div>
         <div className="mt-auto grid gap-3 border-t pt-4">
           <div className="px-3 text-sm">
@@ -54,7 +59,27 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </form>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 overflow-x-hidden p-5 lg:p-8">{children}</main>
+      <main className="min-w-0 flex-1 overflow-x-hidden px-4 pt-4 pb-24 md:p-5 md:pb-5 lg:p-8">
+        <header className="mb-6 flex items-center justify-between gap-4 md:hidden">
+          <div className="flex min-w-0 items-center gap-2 font-semibold">
+            <Dumbbell className="size-5 shrink-0" />
+            <span className="truncate">FitCoach AI</span>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <NotificationBell initial={notifications} timeZone={timeZone} />
+            <form action={logout}>
+              <Button type="submit" variant="ghost" size="sm">
+                <LogOut className="size-4" />
+                Log out
+              </Button>
+            </form>
+          </div>
+        </header>
+        {children}
+      </main>
+      <div className="md:hidden">
+        <CoachTabs badges={badges} />
+      </div>
       <CoachChat />
     </div>
   );

@@ -88,7 +88,11 @@ export function CoachChat() {
 
   if (!open)
     return (
-      <ChatLauncher label="Ask AI coach" onClick={() => setOpen(true)} className="fixed right-6 bottom-6 z-40" />
+      <ChatLauncher
+        label="Ask AI coach"
+        onClick={() => setOpen(true)}
+        className="fixed right-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-40 md:right-6 md:bottom-6"
+      />
     );
 
   return (
