@@ -16,7 +16,10 @@ const movementSchema = z.object({
   measure: z.enum(MEASURES, { message: "Choose how it's measured." }),
 });
 
-export async function addMovement(_: FormState, formData: FormData): Promise<FormState> {
+export async function addMovement(
+  _: FormState & { movementId?: string; movementName?: string },
+  formData: FormData,
+): Promise<FormState & { movementId?: string; movementName?: string }> {
   const parsed = movementSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return failure(formData, parsed.error.issues[0]?.message ?? "Please check the form.");
 
@@ -28,11 +31,11 @@ export async function addMovement(_: FormState, formData: FormData): Promise<For
     .limit(1);
   if (existing?.length) return failure(formData, `“${parsed.data.name}” is already in your library.`);
 
-  const { error } = await supabase.from("movements").insert(parsed.data);
-  if (error) return failure(formData, "Couldn't add the movement. Please try again.");
+  const { data: movement, error } = await supabase.from("movements").insert(parsed.data).select("id").single();
+  if (error || !movement) return failure(formData, "Couldn't add the movement. Please try again.");
 
   revalidatePath("/programs/movements");
-  return { message: `Added ${parsed.data.name}.` };
+  return { message: `Added ${parsed.data.name}.`, movementId: movement.id, movementName: parsed.data.name };
 }
 
 export async function deleteMovement(id: string): Promise<{ error?: string }> {

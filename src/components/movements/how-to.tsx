@@ -6,9 +6,10 @@ import { demoEmbedUrl, guideSections, videoUrlSchema, type MovementDemo, type Mo
 export function HowTo({ demo, renderVariation, emptyMessage = "Your coach hasn't added this yet. Ask them for guidance." }: {
   demo: MovementDemo; renderVariation: (movement: MovementOption) => ReactNode; emptyMessage?: string;
 }) {
-  const { name, videoUrl, clipUrl, guide, easier, harder } = demo;
+  const { name, videoUrl, clipUrl, crossfitUrl, videoIsDefault, guide, easier, harder } = demo;
   const safeUrl = videoUrl && videoUrlSchema.safeParse(videoUrl).success ? videoUrl : null;
   const embed = safeUrl ? demoEmbedUrl(safeUrl) : null;
+  const safeCrossfitUrl = crossfitUrl?.startsWith("https://www.crossfit.com/") ? crossfitUrl : null;
   return (
     <section aria-label={`How to ${name}`} className="grid gap-6">
       {clipUrl ? (
@@ -21,6 +22,14 @@ export function HowTo({ demo, renderVariation, emptyMessage = "Your coach hasn't
       ) : safeUrl ? (
         <a href={safeUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">Watch the demo</a>
       ) : <p className="text-sm text-muted-foreground">No demo video yet</p>}
+      {safeCrossfitUrl && (
+        <div className="grid gap-1">
+          {videoIsDefault && !clipUrl && <p className="text-xs text-muted-foreground">Video: CrossFit</p>}
+          <a href={safeCrossfitUrl} target="_blank" rel="noopener noreferrer" className="text-sm underline underline-offset-4">
+            See {name} on CrossFit.com
+          </a>
+        </div>
+      )}
       <div className="grid gap-6 sm:grid-cols-2">
         {guideSections.map(([key, label]) => {
           const variation = key === "easier_versions" ? easier : key === "harder_versions" ? harder : null;

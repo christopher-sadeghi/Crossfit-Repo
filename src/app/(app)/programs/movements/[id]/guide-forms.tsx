@@ -33,7 +33,7 @@ export function RequestGuideForm({ movementId }: { movementId: string }) {
 }
 
 type Editor = {
-  coachId: string; videoUrl: string | null; hasClip: boolean; library: MovementOption[];
+  coachId: string; videoUrl: string | null; hasClip: boolean; hasDefaultVideo: boolean; library: MovementOption[];
   easierId: string | null; harderId: string | null; libraryEasier?: string; libraryHarder?: string;
 };
 
@@ -80,6 +80,7 @@ export function GuideForm({ movementId, values, editor, suggestionId }: {
           <div className="grid gap-1.5">
             <Label htmlFor={`${prefix}-video`}>YouTube or Vimeo link</Label>
             <Input id={`${prefix}-video`} name="video_url" type="url" maxLength={2048} defaultValue={submitted?.video_url ?? editor.videoUrl ?? ""} placeholder="https://…" />
+            {editor.hasDefaultVideo && <p className="text-sm text-muted-foreground">Leave blank to use CrossFit&apos;s video.</p>}
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor={`${prefix}-clip`}>{editor.hasClip ? "Replace uploaded clip" : "Or upload a clip"}</Label>

@@ -27,6 +27,8 @@ export type MovementDemo = {
   name: string;
   videoUrl: string | null;
   clipUrl: string | null;
+  crossfitUrl: string | null;
+  videoIsDefault: boolean;
   guide: GuideText;
   easier: MovementOption | null;
   harder: MovementOption | null;

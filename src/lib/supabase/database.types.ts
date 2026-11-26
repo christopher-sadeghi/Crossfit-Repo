@@ -1075,14 +1075,14 @@ isOneToOne: false
                   ]
                 },"movements": {
                   Row: {
-                    "category": Database["public"]['Enums']["movement_category"],"coach_id": string | null,"created_at": string,"demo_common_faults": (string)[],"demo_cues": (string)[],"demo_video_url": string | null,"easier_movement_id": string | null,"harder_movement_id": string | null,"id": string,"measure": Database["public"]['Enums']["movement_measure"],"name": string
+                    "category": Database["public"]['Enums']["movement_category"],"coach_id": string | null,"created_at": string,"crossfit_url": string | null,"demo_common_faults": (string)[],"demo_cues": (string)[],"demo_video_url": string | null,"easier_movement_id": string | null,"harder_movement_id": string | null,"id": string,"measure": Database["public"]['Enums']["movement_measure"],"name": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "category": Database["public"]['Enums']["movement_category"],"coach_id"?: string | null,"created_at"?: string,"demo_common_faults"?: (string)[],"demo_cues"?: (string)[],"demo_video_url"?: string | null,"easier_movement_id"?: string | null,"harder_movement_id"?: string | null,"id"?: string,"measure"?: Database["public"]['Enums']["movement_measure"],"name": string
+                    "category": Database["public"]['Enums']["movement_category"],"coach_id"?: string | null,"created_at"?: string,"crossfit_url"?: string | null,"demo_common_faults"?: (string)[],"demo_cues"?: (string)[],"demo_video_url"?: string | null,"easier_movement_id"?: string | null,"harder_movement_id"?: string | null,"id"?: string,"measure"?: Database["public"]['Enums']["movement_measure"],"name": string
                   }
                   Update: {
-                    "category"?: Database["public"]['Enums']["movement_category"],"coach_id"?: string | null,"created_at"?: string,"demo_common_faults"?: (string)[],"demo_cues"?: (string)[],"demo_video_url"?: string | null,"easier_movement_id"?: string | null,"harder_movement_id"?: string | null,"id"?: string,"measure"?: Database["public"]['Enums']["movement_measure"],"name"?: string
+                    "category"?: Database["public"]['Enums']["movement_category"],"coach_id"?: string | null,"created_at"?: string,"crossfit_url"?: string | null,"demo_common_faults"?: (string)[],"demo_cues"?: (string)[],"demo_video_url"?: string | null,"easier_movement_id"?: string | null,"harder_movement_id"?: string | null,"id"?: string,"measure"?: Database["public"]['Enums']["movement_measure"],"name"?: string
                   }
                   Relationships: [
                     {
