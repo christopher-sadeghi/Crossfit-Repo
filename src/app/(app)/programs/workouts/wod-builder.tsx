@@ -151,7 +151,7 @@ export function WodBuilder({
   };
 
   return (
-    <div className="grid gap-8 xl:grid-cols-[1fr_24rem]">
+    <div className="grid min-w-0 gap-8 xl:grid-cols-[minmax(0,1fr)_24rem]">
       <form
         // Submit manually: React's automatic reset after a form action would visually clear the dropdowns.
         onSubmit={(e) => {
@@ -159,7 +159,7 @@ export function WodBuilder({
           const data = new FormData(e.currentTarget);
           startTransition(() => formAction(data));
         }}
-        className="grid content-start gap-5"
+        className="grid min-w-0 content-start gap-5"
       >
         {workout && <input type="hidden" name="id" value={workout.id} />}
         {placement && (
@@ -184,15 +184,16 @@ export function WodBuilder({
                 value={scheduledOn}
                 onChange={(e) => setScheduledOn(e.target.value)}
                 required
+                className="w-full min-w-0"
               />
             </Field>
           </>
         )}
         <input type="hidden" name="movements" value={JSON.stringify(movements)} />
         <input type="hidden" name="sections" value={JSON.stringify(sectionPayload)} />
-        <div className="grid gap-5 sm:grid-cols-[2fr_1fr_1fr_1fr]">
+        <div className="grid min-w-0 gap-5 sm:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
           <Field label="Name *" id="title">
-            <Input id="title" name="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Fran" required />
+            <Input id="title" name="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Fran" required className="w-full min-w-0" />
           </Field>
           <Field label="Type *" id="workout_type">
             <select
@@ -200,7 +201,7 @@ export function WodBuilder({
               name="workout_type"
               value={type}
               onChange={(e) => setType(e.target.value as Enums<"workout_type">)}
-              className={`${selectClass} w-full`}
+              className={`${selectClass} w-full min-w-0`}
             >
               {WORKOUT_TYPES.map((t) => (
                 <option key={t} value={t}>
@@ -210,21 +211,21 @@ export function WodBuilder({
             </select>
           </Field>
           <Field label={type === "amrap" || type === "emom" ? "Length (min)" : "Time cap (min)"} id="time_cap_minutes">
-            <Input id="time_cap_minutes" name="time_cap_minutes" type="number" min="1" max="180" step="0.5" value={cap} onChange={(e) => setCap(e.target.value)} />
+            <Input id="time_cap_minutes" name="time_cap_minutes" type="number" min="1" max="180" step="0.5" value={cap} onChange={(e) => setCap(e.target.value)} className="w-full min-w-0" />
           </Field>
           <Field label="Rounds" id="rounds">
-            <Input id="rounds" name="rounds" type="number" min="1" step="1" value={rounds} onChange={(e) => setRounds(e.target.value)} />
+            <Input id="rounds" name="rounds" type="number" min="1" step="1" value={rounds} onChange={(e) => setRounds(e.target.value)} className="w-full min-w-0" />
           </Field>
         </div>
         <Field label="Description / rep scheme" id="description">
           <Textarea id="description" name="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="e.g. 21-15-9" />
         </Field>
 
-        <fieldset className="grid gap-3 rounded-lg border p-3">
+        <fieldset className="grid min-w-0 gap-3 rounded-lg border p-3">
           <legend className="px-1 text-sm font-medium">Sections</legend>
           {sections.map((section, index) => (
-            <div key={index} className="grid gap-2 rounded-md bg-muted/40 p-3 sm:grid-cols-[2fr_1fr_1fr_1fr_auto]">
-              <label className="grid gap-1 text-xs text-muted-foreground">
+            <div key={index} className="grid min-w-0 gap-2 rounded-md bg-muted/40 p-3 sm:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))_auto]">
+              <label className="grid min-w-0 gap-1 text-xs text-muted-foreground">
                 Title
                 <Input
                   value={section.title}
@@ -234,9 +235,10 @@ export function WodBuilder({
                       current.map((item, i) => i === index ? { ...item, title: event.target.value } : item),
                     )
                   }
+                  className="w-full min-w-0"
                 />
               </label>
-              <label className="grid gap-1 text-xs text-muted-foreground">
+              <label className="grid min-w-0 gap-1 text-xs text-muted-foreground">
                 Format
                 <select
                   value={section.format}
@@ -247,20 +249,20 @@ export function WodBuilder({
                         : item),
                     )
                   }
-                  className={`${selectClass} w-full`}
+                  className={`${selectClass} w-full min-w-0`}
                 >
                   {SECTION_FORMATS.map((format) => (
                     <option key={format} value={format}>{format.replace("_", " ")}</option>
                   ))}
                 </select>
               </label>
-              <label className="grid gap-1 text-xs text-muted-foreground">
+              <label className="grid min-w-0 gap-1 text-xs text-muted-foreground">
                 Time cap (min)
-                <Input type="number" min="1" max="180" step="0.5" value={section.time_cap_minutes} onChange={(event) => setSections((current) => current.map((item, i) => i === index ? { ...item, time_cap_minutes: event.target.value } : item))} />
+                <Input type="number" min="1" max="180" step="0.5" value={section.time_cap_minutes} onChange={(event) => setSections((current) => current.map((item, i) => i === index ? { ...item, time_cap_minutes: event.target.value } : item))} className="w-full min-w-0" />
               </label>
-              <label className="grid gap-1 text-xs text-muted-foreground">
+              <label className="grid min-w-0 gap-1 text-xs text-muted-foreground">
                 Rounds
-                <Input type="number" min="1" max="100" step="1" value={section.rounds} onChange={(event) => setSections((current) => current.map((item, i) => i === index ? { ...item, rounds: event.target.value } : item))} />
+                <Input type="number" min="1" max="100" step="1" value={section.rounds} onChange={(event) => setSections((current) => current.map((item, i) => i === index ? { ...item, rounds: event.target.value } : item))} className="w-full min-w-0" />
               </label>
               <Button type="button" variant="ghost" size="icon" aria-label={`Remove section ${index + 1}`} onClick={() => removeSection(index)}>
                 <X />
@@ -284,66 +286,70 @@ export function WodBuilder({
           {sections.length > 0 && <p className="text-xs text-muted-foreground">Assign movements to sections below. Remove a section to move its movements to the previous section.</p>}
         </fieldset>
 
-        <fieldset className="grid gap-3">
+        <fieldset className="grid min-w-0 gap-3">
           <legend className="mb-2 text-sm font-medium">Movements *</legend>
           {rows.map((r, i) => (
-            <div key={r.key} className="grid gap-2 rounded-lg border p-3">
-              <div className="flex items-center gap-2">
-                <span className="w-5 text-sm text-muted-foreground">{i + 1}.</span>
-                <select
-                  aria-label={`Movement ${i + 1}`}
-                  value={r.movement_id}
-                  onChange={(e) => update(r.key, { movement_id: e.target.value })}
-                  className={`${selectClass} min-w-0 flex-1`}
-                >
-                  <option value="">Choose a movement…</option>
-                  {CATEGORIES.map((c) => (
-                    <optgroup key={c} label={CATEGORY_LABELS[c]}>
-                      {movementOptions
-                        .filter((m) => m.category === c)
-                        .map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name}
-                          </option>
-                        ))}
-                    </optgroup>
-                  ))}
-                </select>
-                {sections.length > 0 && (
+            <div key={r.key} className="grid min-w-0 gap-2 rounded-lg border p-3">
+              <div className="grid min-w-0 gap-2 sm:flex sm:items-center">
+                <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-1">
+                  <span className="w-5 shrink-0 text-sm text-muted-foreground">{i + 1}.</span>
                   <select
-                    aria-label={`Section for movement ${i + 1}`}
-                    value={r.section}
-                    onChange={(e) => update(r.key, { section: e.target.value })}
-                    className={`${selectClass} w-32`}
+                    aria-label={`Movement ${i + 1}`}
+                    value={r.movement_id}
+                    onChange={(e) => update(r.key, { movement_id: e.target.value })}
+                    className={`${selectClass} w-full min-w-0 sm:w-auto sm:flex-1`}
                   >
-                    <option value="">
-                      {i === 0 ? "Section 1 (default)" : "Previous section (default)"}
-                    </option>
-                    {sections.map((section, sectionIndex) => (
-                      <option key={sectionIndex} value={sectionIndex}>
-                        {section.title || `Section ${sectionIndex + 1}`}
-                      </option>
+                    <option value="">Choose a movement…</option>
+                    {CATEGORIES.map((c) => (
+                      <optgroup key={c} label={CATEGORY_LABELS[c]}>
+                        {movementOptions
+                          .filter((m) => m.category === c)
+                          .map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                            </option>
+                          ))}
+                      </optgroup>
                     ))}
                   </select>
-                )}
-                <Button type="button" variant="ghost" size="icon" aria-label="Move up" disabled={i === 0} onClick={() => move(i, -1)}>
-                  <ArrowUp />
-                </Button>
-                <Button type="button" variant="ghost" size="icon" aria-label="Move down" disabled={i === rows.length - 1} onClick={() => move(i, 1)}>
-                  <ArrowDown />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Remove movement"
-                  disabled={rows.length === 1}
-                  onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}
-                >
-                  <X />
-                </Button>
+                </div>
+                <div className="flex min-w-0 items-center gap-2">
+                  {sections.length > 0 && (
+                    <select
+                      aria-label={`Section for movement ${i + 1}`}
+                      value={r.section}
+                      onChange={(e) => update(r.key, { section: e.target.value })}
+                      className={`${selectClass} w-full min-w-0 flex-1 sm:w-32 sm:flex-none`}
+                    >
+                      <option value="">
+                        {i === 0 ? "Section 1 (default)" : "Previous section (default)"}
+                      </option>
+                      {sections.map((section, sectionIndex) => (
+                        <option key={sectionIndex} value={sectionIndex}>
+                          {section.title || `Section ${sectionIndex + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <Button type="button" variant="ghost" size="icon" aria-label="Move up" disabled={i === 0} onClick={() => move(i, -1)}>
+                    <ArrowUp />
+                  </Button>
+                  <Button type="button" variant="ghost" size="icon" aria-label="Move down" disabled={i === rows.length - 1} onClick={() => move(i, 1)}>
+                    <ArrowDown />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Remove movement"
+                    disabled={rows.length === 1}
+                    onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}
+                  >
+                    <X />
+                  </Button>
+                </div>
               </div>
-              <div className="grid grid-cols-3 gap-2 pl-7 sm:grid-cols-7">
+              <div className="grid grid-cols-2 gap-2 pl-0 sm:grid-cols-4 sm:pl-7 md:grid-cols-7">
                 {(
                   [
                     ["sets", "Sets", "1"],
@@ -354,14 +360,14 @@ export function WodBuilder({
                     ["duration_seconds", "Time (sec)", "1"],
                   ] as const
                 ).map(([field, label, step]) => (
-                  <label key={field} className="grid gap-1 text-xs text-muted-foreground">
+                  <label key={field} className="grid min-w-0 gap-1 text-xs text-muted-foreground">
                     {label}
-                    <Input type="number" min="0" step={step} value={r[field]} onChange={(e) => update(r.key, { [field]: e.target.value })} />
+                    <Input type="number" min="0" step={step} value={r[field]} onChange={(e) => update(r.key, { [field]: e.target.value })} className="w-full min-w-0" />
                   </label>
                 ))}
-                <label className="grid gap-1 text-xs text-muted-foreground">
+                <label className="grid min-w-0 gap-1 text-xs text-muted-foreground">
                   Note
-                  <Input value={r.notes} onChange={(e) => update(r.key, { notes: e.target.value })} placeholder="e.g. Rx 95/65" />
+                  <Input value={r.notes} onChange={(e) => update(r.key, { notes: e.target.value })} placeholder="e.g. Rx 95/65" className="w-full min-w-0" />
                 </label>
               </div>
             </div>
@@ -401,7 +407,7 @@ export function WodBuilder({
         </div>
       </form>
 
-      <aside className="xl:sticky xl:top-6 xl:self-start">
+      <aside className="min-w-0 xl:sticky xl:top-6 xl:self-start">
         <p className="mb-2 text-sm font-medium text-muted-foreground">Whiteboard preview</p>
         <Whiteboard
           units={units}
@@ -425,8 +431,8 @@ export function WodBuilder({
 
 function Field({ label, id, children }: { label: string; id: string; children: React.ReactNode }) {
   return (
-    <div className="grid gap-2">
-      <Label htmlFor={id}>{label}</Label>
+    <div className="grid min-w-0 gap-2">
+      <Label htmlFor={id} className="min-w-0">{label}</Label>
       {children}
     </div>
   );

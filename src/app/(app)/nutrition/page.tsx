@@ -51,33 +51,33 @@ export default async function NutritionPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="pl-4">Athlete</TableHead>
-                  <TableHead>Current target</TableHead>
-                  <TableHead>Avg calories</TableHead>
-                  <TableHead>Avg protein</TableHead>
-                  <TableHead>Days logged</TableHead>
-                  <TableHead>Days on target</TableHead>
+                  <TableHead className="pl-4 whitespace-normal">Athlete</TableHead>
+                  <TableHead className="whitespace-normal">Current target</TableHead>
+                  <TableHead className="hidden sm:table-cell">Avg calories</TableHead>
+                  <TableHead className="hidden sm:table-cell">Avg protein</TableHead>
+                  <TableHead className="hidden sm:table-cell">Days logged</TableHead>
+                  <TableHead className="hidden sm:table-cell">Days on target</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell className="pl-4 font-medium">
+                    <TableCell className="pl-4 font-medium whitespace-normal">
                       <Link href={`/nutrition/${r.id}`} className="hover:underline">
                         {r.first_name} {r.last_name}
                       </Link>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="whitespace-normal">
                       {r.current ? (
                         `${r.current.calories} kcal · P ${r.current.protein_g} · C ${r.current.carbs_g} · F ${r.current.fat_g}`
                       ) : (
                         <span className="text-muted-foreground">No target</span>
                       )}
                     </TableCell>
-                    <TableCell>{r.avgCalories ?? "—"}</TableCell>
-                    <TableCell>{r.avgProtein != null ? `${r.avgProtein}g` : "—"}</TableCell>
-                    <TableCell>{r.loggedDays} / 7</TableCell>
-                    <TableCell>{r.met} / 7</TableCell>
+                    <TableCell className="hidden sm:table-cell">{r.avgCalories ?? "—"}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{r.avgProtein != null ? `${r.avgProtein}g` : "—"}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{r.loggedDays} / 7</TableCell>
+                    <TableCell className="hidden sm:table-cell">{r.met} / 7</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

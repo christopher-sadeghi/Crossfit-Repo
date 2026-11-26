@@ -196,20 +196,30 @@ export function FoodRow({ athleteId, date, entry }: { athleteId: string; date: s
 
   return (
     <TableRow>
-      <TableCell className="pl-4 text-muted-foreground">{MEAL_LABELS[entry.meal]}</TableCell>
-      <TableCell className="font-medium">{entry.food_name}{entry.serving && <p className="text-xs font-normal text-muted-foreground">{entry.serving}</p>}</TableCell>
-      <TableCell>{entry.calories}</TableCell>
-      <TableCell>{Number(entry.protein_g)}g</TableCell>
-      <TableCell>{Number(entry.carbs_g)}g</TableCell>
-      <TableCell>{Number(entry.fat_g)}g</TableCell>
-      <TableCell className="w-24 text-right">
-        <Button type="button" variant="ghost" size="icon" aria-label={`Edit ${entry.food_name}`} onClick={() => setEditing(true)}>
+      <TableCell className="hidden pl-4 text-muted-foreground sm:table-cell">{MEAL_LABELS[entry.meal]}</TableCell>
+      <TableCell className="pl-4 font-medium whitespace-normal">
+        <span className="text-xs font-normal text-muted-foreground sm:hidden">{MEAL_LABELS[entry.meal]} · </span>
+        {entry.food_name}
+        {entry.serving && <p className="text-xs font-normal text-muted-foreground">{entry.serving}</p>}
+      </TableCell>
+      <TableCell className="whitespace-normal">
+        {entry.calories}
+        <p className="text-xs text-muted-foreground sm:hidden">
+          P {Number(entry.protein_g)} · C {Number(entry.carbs_g)} · F {Number(entry.fat_g)}
+        </p>
+      </TableCell>
+      <TableCell className="hidden sm:table-cell">{Number(entry.protein_g)}g</TableCell>
+      <TableCell className="hidden sm:table-cell">{Number(entry.carbs_g)}g</TableCell>
+      <TableCell className="hidden sm:table-cell">{Number(entry.fat_g)}g</TableCell>
+      <TableCell className="w-20 px-1 text-right sm:w-24 sm:px-2">
+        <Button type="button" variant="ghost" size="icon" className="size-8 sm:size-9" aria-label={`Edit ${entry.food_name}`} onClick={() => setEditing(true)}>
           <Pencil />
         </Button>
         <Button
           type="button"
           variant="ghost"
           size="icon"
+          className="size-8 sm:size-9"
           aria-label={`Delete ${entry.food_name}`}
           onClick={() => {
             if (confirm(`Delete "${entry.food_name}"?`)) startTransition(() => deleteFood(entry.id));

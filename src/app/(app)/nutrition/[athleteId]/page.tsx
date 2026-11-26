@@ -172,13 +172,16 @@ export default async function AthleteNutritionPage({ params, searchParams }: Pro
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="pl-4">Meal</TableHead>
-                    <TableHead>Food</TableHead>
-                    <TableHead>kcal</TableHead>
-                    <TableHead>Protein</TableHead>
-                    <TableHead>Carbs</TableHead>
-                    <TableHead>Fat</TableHead>
-                    <TableHead />
+                    <TableHead className="hidden pl-4 sm:table-cell">Meal</TableHead>
+                    <TableHead className="pl-4 whitespace-normal">Food</TableHead>
+                    <TableHead className="whitespace-normal">
+                      <span className="sm:hidden">Calories / macros</span>
+                      <span className="hidden sm:inline">kcal</span>
+                    </TableHead>
+                    <TableHead className="hidden sm:table-cell">Protein</TableHead>
+                    <TableHead className="hidden sm:table-cell">Carbs</TableHead>
+                    <TableHead className="hidden sm:table-cell">Fat</TableHead>
+                    <TableHead className="w-20 px-1 sm:w-24 sm:px-2" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -222,22 +225,22 @@ export default async function AthleteNutritionPage({ params, searchParams }: Pro
                   <TableHead>Protein</TableHead>
                   <TableHead>Carbs</TableHead>
                   <TableHead>Fat</TableHead>
-                  <TableHead>Target</TableHead>
+                  <TableHead className="hidden sm:table-cell">Target</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {weekRows.map((r) => (
                   <TableRow key={r.d} className={r.d === date ? "bg-muted/50" : undefined}>
-                    <TableCell className="pl-4">
+                    <TableCell className="pl-4 whitespace-normal">
                       <Link href={`?date=${r.d}`} className="hover:underline">
                         {weekday(r.d)}
                       </Link>
                     </TableCell>
-                    <TableCell>{r.logged ? `${r.sum.calories}${r.target ? ` / ${r.target.calories}` : ""}` : "—"}</TableCell>
-                    <TableCell>{r.logged ? `${Math.round(r.sum.protein)}g${r.target ? ` / ${r.target.protein_g}g` : ""}` : "—"}</TableCell>
-                    <TableCell>{r.logged ? `${Math.round(r.sum.carbs)}g` : "—"}</TableCell>
-                    <TableCell>{r.logged ? `${Math.round(r.sum.fat)}g` : "—"}</TableCell>
-                    <TableCell>
+                    <TableCell className="whitespace-normal">{r.logged ? `${r.sum.calories}${r.target ? ` / ${r.target.calories}` : ""}` : "—"}</TableCell>
+                    <TableCell className="whitespace-normal">{r.logged ? `${Math.round(r.sum.protein)}g${r.target ? ` / ${r.target.protein_g}g` : ""}` : "—"}</TableCell>
+                    <TableCell className="whitespace-normal">{r.logged ? `${Math.round(r.sum.carbs)}g` : "—"}</TableCell>
+                    <TableCell className="whitespace-normal">{r.logged ? `${Math.round(r.sum.fat)}g` : "—"}</TableCell>
+                    <TableCell className="hidden sm:table-cell">
                       {!r.logged ? (
                         <span className="text-muted-foreground">Not logged</span>
                       ) : !r.target ? (
@@ -274,21 +277,21 @@ export default async function AthleteNutritionPage({ params, searchParams }: Pro
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="pl-4">Dates</TableHead>
-                    <TableHead>Macros</TableHead>
-                    <TableHead>Notes</TableHead>
+                    <TableHead className="pl-4 whitespace-normal">Dates</TableHead>
+                    <TableHead className="whitespace-normal">Macros</TableHead>
+                    <TableHead className="hidden sm:table-cell">Notes</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {allTargets.map((t) => (
                     <TableRow key={t.id}>
-                      <TableCell className="pl-4 whitespace-nowrap">
+                      <TableCell className="pl-4 whitespace-normal">
                         {formatDate(t.start_date)} – {t.end_date ? formatDate(t.end_date) : <Badge>Current</Badge>}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-normal">
                         {t.calories} kcal · P {t.protein_g} · C {t.carbs_g} · F {t.fat_g}
                       </TableCell>
-                      <TableCell className="max-w-48 truncate text-muted-foreground">{t.notes ?? ""}</TableCell>
+                      <TableCell className="hidden max-w-48 truncate text-muted-foreground sm:table-cell">{t.notes ?? ""}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

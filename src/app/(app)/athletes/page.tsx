@@ -149,18 +149,18 @@ export default async function AthletesPage({ searchParams }: Props) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="pl-4">Name</TableHead>
+                  <TableHead className="pl-4 whitespace-normal">Name</TableHead>
                   <TableHead>Level</TableHead>
-                  <TableHead>Injuries / limitations</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>App</TableHead>
+                  <TableHead className="hidden sm:table-cell">Injuries / limitations</TableHead>
+                  <TableHead className="hidden sm:table-cell">Email</TableHead>
+                  <TableHead className="hidden sm:table-cell">App</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {athletes.map((a) => (
                   <TableRow key={a.id}>
-                    <TableCell className="pl-4 font-medium">
-                      <div className="flex flex-wrap items-center gap-2">
+                    <TableCell className="pl-4 font-medium whitespace-normal">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <Link href={`/athletes/${a.id}`} className="hover:underline">
                           {a.first_name} {a.last_name}
                         </Link>
@@ -183,15 +183,20 @@ export default async function AthletesPage({ searchParams }: Props) {
                           <span className="text-xs font-normal text-muted-foreground">Coach: {coachNames.get(a.assigned_coach_id)}</span>
                         )}
                       </div>
+                      {a.injuries && (
+                        <p className="max-w-48 truncate text-xs text-destructive sm:hidden">
+                          {a.injuries}
+                        </p>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary">{LEVEL_LABELS[a.experience_level]}</Badge>
                     </TableCell>
-                    <TableCell className="max-w-xs truncate text-muted-foreground">
+                    <TableCell className="hidden max-w-xs truncate text-muted-foreground sm:table-cell">
                       {a.injuries ? <Badge variant="destructive">{a.injuries}</Badge> : "—"}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{a.email ?? "—"}</TableCell>
-                    <TableCell>
+                    <TableCell className="hidden text-muted-foreground sm:table-cell">{a.email ?? "—"}</TableCell>
+                    <TableCell className="hidden sm:table-cell">
                       {a.user_id ? (
                         <Badge>Joined</Badge>
                       ) : invitedAthletes.has(a.id) ? (

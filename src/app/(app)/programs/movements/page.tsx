@@ -73,20 +73,20 @@ export default async function MovementsPage({ searchParams }: Props) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="pl-4">Movement</TableHead>
+                  <TableHead className="pl-4 whitespace-normal">Movement</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead>Measured in</TableHead>
+                  <TableHead className="hidden sm:table-cell">Measured in</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {movements.map((m) => (
                   <TableRow key={m.id}>
-                    <TableCell className="pl-4 font-medium">
+                    <TableCell className="pl-4 font-medium whitespace-normal">
                       <Link href={`/programs/movements/${m.id}`} className="hover:underline">{m.name}</Link> {m.coach_id && <Badge variant="outline">Custom</Badge>}
                     </TableCell>
                     <TableCell>{CATEGORY_LABELS[m.category]}</TableCell>
-                    <TableCell>{MEASURE_LABELS[m.measure]}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{MEASURE_LABELS[m.measure]}</TableCell>
                     <TableCell>{m.coach_id && <DeleteMovementButton id={m.id} name={m.name} />}</TableCell>
                   </TableRow>
                 ))}
