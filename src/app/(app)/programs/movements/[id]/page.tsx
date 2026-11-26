@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { z } from "zod";
 
 import { DemoVariationLink, HowTo } from "@/components/movements/how-to";
+import { CrossfitVideoSuggestion } from "@/components/movements/crossfit-video-suggestion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { movementGuideSchema } from "@/lib/ai/movement-guides";
 import { buildMovementDemo, loadMovementDemoSource } from "@/lib/movement-demos";
@@ -43,6 +44,9 @@ export default async function MovementPage({ params }: { params: Promise<{ id: s
             <GuideForm movementId={id} suggestionId={pending.id} values={proposal?.success ? proposal.data : null} />
           </CardContent>
         </Card>
+      )}
+      {!demo.videoUrl && !guide?.clip_path && (
+        <CrossfitVideoSuggestion movementId={id} movementName={movement.name} auto={false} />
       )}
       <Card>
         <CardHeader><CardTitle>Edit your gym’s demo</CardTitle></CardHeader>

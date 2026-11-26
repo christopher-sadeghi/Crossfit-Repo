@@ -7,6 +7,7 @@ import { approveSuggestionWithClient, rejectSuggestionWithClient } from "@/lib/a
 import { movementGuideEntry, movementGuideSchema, newMovementGuideSchema } from "@/lib/ai/movement-guides";
 import { runSuggestion } from "@/lib/ai/service";
 import { failure, type FormState } from "@/lib/auth/form-state";
+import { lookupCrossfitVideo } from "@/lib/crossfit-lookup";
 import { loadMovementDemoSource } from "@/lib/movement-demos";
 import { canSaveDemoCues, demoEmbedUrl, editedGuideSchema, hasGuideText, MOVEMENT_DEMO_BUCKET, readGuideText } from "@/lib/movement-guides";
 import { createClient } from "@/lib/supabase/server";
@@ -88,6 +89,64 @@ export async function saveMovementGuide(_: FormState, form: FormData): Promise<F
   if (currentClip && currentClip !== clipPath) await storage.remove([currentClip]);
   refresh(id.data);
   return { message: "How-to saved. Athletes can now see your changes." };
+}
+
+export async function suggestCrossfitVideo(movementId: string): Promise<{
+  suggestion: { crossfitUrl: string; videoUrl: string } | null;
+  error?: string;
+}> {
+  const viewer = await getViewer();
+  const id = uuid.safeParse(movementId);
+  if (viewer?.kind !== "coach" || !id.success) return { suggestion: null, error: "Movement not found." };
+
+  const supabase = await createClient();
+  const source = await loadMovementDemoSource(supabase, id.data, viewer.gymId).catch(() => null);
+  if (!source) return { suggestion: null, error: "Couldn't find this movement." };
+  if (source.movement.demo_video_url || source.guide?.video_url || source.guide?.clip_path) {
+    return { suggestion: null };
+  }
+
+  return { suggestion: await lookupCrossfitVideo(source.movement.name) };
+}
+
+export async function applyCrossfitVideo(movementId: string): Promise<{ error?: string }> {
+  const viewer = await getViewer();
+  const id = uuid.safeParse(movementId);
+  if (viewer?.kind !== "coach" || !id.success) return { error: "Movement not found." };
+
+  const supabase = await createClient();
+  const source = await loadMovementDemoSource(supabase, id.data, viewer.gymId).catch(() => null);
+  if (!source) return { error: "Couldn't find this movement." };
+  const { movement, guide } = source;
+  if (movement.demo_video_url || guide?.video_url || guide?.clip_path) {
+    return { error: "This movement already has a demo video." };
+  }
+
+  const suggestion = await lookupCrossfitVideo(movement.name);
+  if (!suggestion) return { error: "No CrossFit video found." };
+
+  if (movement.coach_id === viewer.gymId) {
+    const { data, error } = await supabase.from("movements")
+      .update({ demo_video_url: suggestion.videoUrl, crossfit_url: suggestion.crossfitUrl })
+      .eq("id", id.data)
+      .eq("coach_id", viewer.gymId)
+      .select("id")
+      .maybeSingle();
+    if (error || !data) return { error: "Couldn't save this CrossFit video. Please try again." };
+  } else if (movement.coach_id === null) {
+    const { error } = await supabase.from("movement_guides").upsert({
+      coach_id: viewer.gymId,
+      movement_id: id.data,
+      video_url: suggestion.videoUrl,
+    }, { onConflict: "coach_id,movement_id" });
+    if (error) return { error: "Couldn't save this CrossFit video. Please try again." };
+  } else {
+    return { error: "Movement not found." };
+  }
+
+  refresh(id.data);
+  revalidatePath("/programs/movements");
+  return {};
 }
 
 export async function decideMovementGuide(_: FormState, form: FormData): Promise<FormState> {
