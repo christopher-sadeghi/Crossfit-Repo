@@ -29,7 +29,7 @@ const { extractCrossfitVideoId, lookupCrossfitVideo, matchCrossfitSlug } = load(
 test("matchCrossfitSlug handles exact, plural, modifier, and unmatched names", () => {
   assert.equal(matchCrossfitSlug("Back Squat", ["back-squat", "the-back-squat"]), "the-back-squat");
   assert.equal(matchCrossfitSlug("Wall Balls", ["the-wall-ball"]), "the-wall-ball");
-  assert.equal(matchCrossfitSlug("Pull-Up", ["the-strict-pull-up", "the-kipping-pull-up"]), "the-kipping-pull-up");
+  assert.equal(matchCrossfitSlug("Pull-Up", ["the-strict-pull-up", "the-kipping-pull-up"]), "the-strict-pull-up");
   assert.equal(matchCrossfitSlug("Run", ["running-a-gym-in-2020", "running-fundamentals"]), null);
   assert.equal(matchCrossfitSlug("Sled Push", []), null);
   assert.equal(matchCrossfitSlug("Dumbbell Power Snatch", ["the-dumbbell-power-snatch"]), "the-dumbbell-power-snatch");

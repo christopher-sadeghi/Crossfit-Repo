@@ -1,7 +1,7 @@
 import "server-only";
 
 const SITEMAP_URL = "https://www.crossfit.com/essentials-sitemap.xml";
-const MODIFIERS = ["kipping", "strict", "dumbbell", "barbell", "kettlebell"] as const;
+const MODIFIERS = ["strict", "kipping", "dumbbell", "barbell", "kettlebell"] as const;
 
 function tokens(value: string) {
   return value.toLowerCase().replaceAll("&", " and ").split(/[^a-z0-9]+/)

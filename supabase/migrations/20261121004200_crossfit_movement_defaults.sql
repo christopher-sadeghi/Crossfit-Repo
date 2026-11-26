@@ -31,7 +31,7 @@ from (values
   ('Wall Ball', 'https://www.crossfit.com/essentials/the-wall-ball', 'https://www.youtube.com/watch?v=EqjGKsiIMCE'),
   ('Front Rack Lunge', 'https://www.crossfit.com/essentials/barbell-front-rack-lunge', 'https://www.youtube.com/watch?v=f3WLs_HutLw'),
   ('Turkish Get-Up', 'https://www.crossfit.com/essentials/the-dumbbell-turkish-get-up', 'https://www.youtube.com/watch?v=saYKvqSscuY'),
-  ('Pull-Up', 'https://www.crossfit.com/essentials/the-kipping-pull-up', 'https://www.youtube.com/watch?v=lzRo-4pq_AY'),
+  ('Pull-Up', 'https://www.crossfit.com/essentials/the-strict-pull-up', 'https://www.youtube.com/watch?v=HRV5YKKaeVw'),
   ('Chest-to-Bar Pull-Up', 'https://www.crossfit.com/essentials/the-kipping-chest-to-bar-pull-up', 'https://www.youtube.com/watch?v=AyPTCEXTjOo'),
   ('Bar Muscle-Up', 'https://www.crossfit.com/essentials/the-kipping-bar-muscle-up', 'https://www.youtube.com/watch?v=OCg3UXgzftc'),
   ('Ring Muscle-Up', 'https://www.crossfit.com/essentials/the-kipping-muscle-up', 'https://www.youtube.com/watch?v=G8W0BhzrWcs'),
