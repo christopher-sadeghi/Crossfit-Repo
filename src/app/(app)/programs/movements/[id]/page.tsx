@@ -48,7 +48,8 @@ export default async function MovementPage({ params }: { params: Promise<{ id: s
         <CardHeader><CardTitle>Edit your gym’s demo</CardTitle></CardHeader>
         <CardContent>
           <GuideForm key={guide?.updated_at ?? "new"} movementId={id} values={demo.guide} editor={{
-            coachId: viewer.gymId, videoUrl: demo.videoUrl, hasClip: !!guide?.clip_path,
+            coachId: viewer.gymId, videoUrl: guide?.video_url ?? null, hasClip: !!guide?.clip_path,
+            hasDefaultVideo: !!movement.demo_video_url && !!movement.crossfit_url,
             library: library.data.filter((option) => option.id !== id),
             easierId: guide?.easier_movement_id ?? null, harderId: guide?.harder_movement_id ?? null,
             libraryEasier: library.data.find((option) => option.id === movement.easier_movement_id)?.name,

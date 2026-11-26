@@ -41,6 +41,8 @@ export async function buildMovementDemo(
     name: movement.name,
     videoUrl: guide?.video_url ?? movement.demo_video_url,
     clipUrl: clip?.data?.signedUrl ?? null,
+    crossfitUrl: movement.crossfit_url,
+    videoIsDefault: !guide?.video_url && !!movement.demo_video_url && !!movement.crossfit_url,
     guide: values,
     easier: library.find(({ id }) => id === values.easier_movement_id) ?? null,
     harder: library.find(({ id }) => id === values.harder_movement_id) ?? null,

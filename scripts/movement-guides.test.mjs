@@ -24,13 +24,13 @@ function load(relative, mocks = {}) {
   return loaded.exports;
 }
 const { movementGuideSchema, movementGuideEntry, newMovementGuideSchema } = load("src/lib/ai/movement-guides.ts");
-const { movementDemoValues } = load("src/lib/movement-demos.ts");
+const { buildMovementDemo, movementDemoValues } = load("src/lib/movement-demos.ts");
 const { canSaveDemoCues, demoEmbedUrl, videoUrlSchema, hasGuideText, readGuideText, editedGuideSchema } = load("src/lib/movement-guides.ts");
 const { HowTo } = load("src/components/movements/how-to.tsx");
 const { renderToStaticMarkup } = require("react-dom/server");
 const { createElement } = require("react");
 const blankGuide = { cues: [], common_mistakes: [], easier_versions: [], harder_versions: [] };
-const blankDemo = { name: "Thruster", videoUrl: null, clipUrl: null, guide: blankGuide, easier: null, harder: null };
+const blankDemo = { name: "Thruster", videoUrl: null, clipUrl: null, crossfitUrl: null, videoIsDefault: false, guide: blankGuide, easier: null, harder: null };
 const valid = {
   cues: [" Stand tall. ", "Brace your trunk.", "Move with control."],
   common_mistakes: ["Rounding your back.", "Losing balance."],
@@ -75,6 +75,70 @@ test("movement demos inherit unset lists but keep explicitly empty coach lists",
   assert.deepEqual(movementDemoValues(movement, { cues: null, common_mistakes: null }).common_mistakes, movement.demo_common_faults);
   assert.deepEqual(movementDemoValues(movement, null).cues, movement.demo_cues);
   assert.deepEqual(movementDemoValues(movement, null).common_mistakes, movement.demo_common_faults);
+});
+
+test("CrossFit movement defaults preserve guide overrides and fallbacks", async () => {
+  const defaultVideo = "https://www.youtube.com/watch?v=QmZAiBqPvZw";
+  const crossfitUrl = "https://www.crossfit.com/essentials/the-back-squat";
+  const movement = {
+    id: "back-squat",
+    name: "Back Squat",
+    demo_video_url: defaultVideo,
+    crossfit_url: crossfitUrl,
+    demo_cues: [],
+    demo_common_faults: [],
+    easier_movement_id: null,
+    harder_movement_id: null,
+  };
+  const guide = (video_url = null) => ({
+    video_url,
+    clip_path: null,
+    cues: [],
+    common_mistakes: [],
+    easier_versions: [],
+    harder_versions: [],
+    easier_movement_id: null,
+    harder_movement_id: null,
+  });
+  const build = (item, movementGuide = null) => buildMovementDemo({}, { movement: item, guide: movementGuide }, []);
+
+  const coachOverride = await build(movement, guide("https://youtu.be/L219ltL15zk"));
+  assert.equal(coachOverride.videoUrl, "https://youtu.be/L219ltL15zk");
+  assert.equal(coachOverride.videoIsDefault, false);
+  assert.equal(coachOverride.crossfitUrl, crossfitUrl);
+
+  const defaultOnly = await build(movement);
+  assert.equal(defaultOnly.videoUrl, defaultVideo);
+  assert.equal(defaultOnly.videoIsDefault, true);
+  assert.equal(defaultOnly.crossfitUrl, crossfitUrl);
+
+  const unmatched = await build({ ...movement, demo_video_url: null, crossfit_url: null });
+  assert.equal(unmatched.videoUrl, null);
+  assert.equal(unmatched.crossfitUrl, null);
+  assert.equal(unmatched.videoIsDefault, false);
+
+  const guideWithoutVideo = await build(movement, guide());
+  assert.equal(guideWithoutVideo.videoUrl, defaultVideo);
+  assert.equal(guideWithoutVideo.videoIsDefault, true);
+  assert.equal(guideWithoutVideo.crossfitUrl, crossfitUrl);
+});
+
+test("CrossFit movement migration maps only valid seeded library demos", () => {
+  const migration = readFileSync(path.join(root, "supabase/migrations/20261121004200_crossfit_movement_defaults.sql"), "utf8");
+  const values = migration.match(/from \(values([\s\S]*?)\) as v\(name, url, video\)/)?.[1];
+  assert.ok(values, "migration contains the movement values list");
+  const mappings = [...values.matchAll(/\(\s*'((?:[^']|'')*)'\s*,\s*'((?:[^']|'')*)'\s*,\s*'((?:[^']|'')*)'\s*\)/g)]
+    .map((match) => match.slice(1).map((value) => value.replaceAll("''", "'")));
+  assert.equal(mappings.length, 53);
+
+  const seed = readFileSync(path.join(root, "supabase/migrations/20261121000100_seed_movement_library.sql"), "utf8");
+  const seededNames = new Set([...seed.matchAll(/^\s*\('((?:[^']|'')*)'/gm)]
+    .map((match) => match[1].replaceAll("''", "'")));
+  for (const [name, url, video] of mappings) {
+    assert.ok(seededNames.has(name), `${name} is in the built-in movement library`);
+    assert.ok(url.startsWith("https://www.crossfit.com/essentials/"), `${name} uses a CrossFit essentials URL`);
+    assert.ok(demoEmbedUrl(video), `${name} has an embeddable demo video`);
+  }
 });
 
 test("demo reset collects only its coach's custom movement clips before deleting them", async () => {
@@ -204,6 +268,41 @@ test("HowTo renders uploaded video controls and links to variation demos", () =>
   assert.match(text, /demo\.mp4\?token=signed/);
   assert.match(text, /href="\/athlete\/movements\/press">Push Press/);
   assert.match(text, /href="\/athlete\/movements\/jerk">Push Jerk/);
+});
+
+test("HowTo labels CrossFit defaults and keeps the CrossFit page link under overrides", () => {
+  const crossfitUrl = "https://www.crossfit.com/essentials/the-back-squat";
+  const renderDemo = (demo) => renderToStaticMarkup(createElement(HowTo, {
+    demo,
+    renderVariation: () => null,
+  }));
+
+  const defaultVideo = renderDemo({
+    ...blankDemo,
+    name: "Back Squat",
+    videoUrl: "https://www.youtube.com/watch?v=QmZAiBqPvZw",
+    crossfitUrl,
+    videoIsDefault: true,
+  });
+  assert.match(defaultVideo, /youtube-nocookie\.com\/embed\/QmZAiBqPvZw/);
+  assert.match(defaultVideo, /Video: CrossFit/);
+  assert.match(defaultVideo, /href="https:\/\/www\.crossfit\.com\/essentials\/the-back-squat" target="_blank" rel="noopener noreferrer" class="text-sm underline underline-offset-4">See Back Squat on CrossFit\.com/);
+
+  const coachOverride = renderDemo({
+    ...blankDemo,
+    name: "Back Squat",
+    videoUrl: "https://youtu.be/L219ltL15zk",
+    crossfitUrl,
+    videoIsDefault: false,
+  });
+  assert.doesNotMatch(coachOverride, /Video: CrossFit/);
+  assert.match(coachOverride, /See Back Squat on CrossFit\.com/);
+
+  const clipOverride = renderDemo({ ...blankDemo, name: "Back Squat", clipUrl: "https://storage.example/clip.mp4", crossfitUrl, videoIsDefault: true });
+  assert.doesNotMatch(clipOverride, /Video: CrossFit/);
+  assert.match(clipOverride, /See Back Squat on CrossFit\.com/);
+
+  assert.doesNotMatch(renderDemo({ ...blankDemo, crossfitUrl: "https://crossfit.com/not-official" }), /CrossFit\.com/);
 });
 
 test("workout context prefers visible gym variations and filters IDs outside the library", async () => {
